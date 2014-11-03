@@ -61,7 +61,7 @@ t_end = 300;         % [s] end time (if LRO doesn't happen first)
 LRO_tol = 5e-3;     % [s] tolerance for resolving the LRO point
 non_adaptive_scheme = 1; % [] switch, 1 = 4th order Runge-Kutta, 0 = 1st order Euler
 
-N_dim = 6 + N_dist;
+N_dim = 5 + N_dist;
 
 fsolve_options = optimset('display','off');
 
@@ -166,15 +166,14 @@ T_l = Ti;
 T_tg = Ti;
 
 y(:,1) = [m_tg; Ti; Ti; m_l; Ti; Ti];
-y(7:(N_dist + 6), 1) = zeros(N_dist,1);
+y(6:(N_dist + 5), 1) = zeros(N_dist,1);
 
 % 1 = m_tg
-% 2 = T_tg
-% 3 = T_gw
-% 4 = m_l
-% 5 = T_l
-% 6 = T_lw
-% 7:(N_dist + 6) = N(r)
+% 2 = T_gw
+% 3 = m_l
+% 4 = T_l
+% 5 = T_lw
+% 6:(N_dist + 5) = N(r)
 
 K_b = 1.38e-23;
 N_A = 6.022e23;
@@ -215,7 +214,7 @@ V_bub = 0;
 derivatives = zeros(5,1);
 
 % initialize f
-f = zeros(6 + N_dist,1);
+f = zeros(5 + N_dist,1);
 
 % begin looping
 while running == 1;
@@ -317,11 +316,11 @@ while running == 1;
                 % s = number of stages in the scheme
                 
                 % 1 = m_tg
-                % 2 = T_tg
-                % 3 = T_gw
-                % 4 = m_l
-                % 5 = T_l
-                % 6 = T_lw
+ 
+                % 2 = T_gw
+                % 3 = m_l
+                % 4 = T_l
+                % 5 = T_lw
                 
                 
                 if i == 1
@@ -344,7 +343,7 @@ while running == 1;
                 y_new = (y(:,n) + sum( (ones(N_dim,1)*a(i,1:i)).*k(:,1:i),2 ) );
                 
                 % check for high T
-                if (y_new(2) > T_cr) || (y_new(5) > T_cr)
+                if (y_new(5) > T_cr)
                     disp('problem - temperature went above critical')
                     error_flag = 1;
                     y_new = y(:,n);
@@ -362,11 +361,20 @@ while running == 1;
             %         k = [k1, k2, k3, k4, k5, k6];
             
             
+            
+            % 1 = m_tg
+
+% 2 = T_gw
+% 3 = m_l
+% 4 = T_l
+% 5 = T_lw
+% 6:(N_dist + 5) = N(r)
+            
             y(:,n+1) = y(:,n) + (k*b);
             
-            N_r = y(7:end, n+1);
+            N_r = y(6:end, n+1);
             N_r = (N_r >= 0).*N_r;
-            y(7:end, n+1) = N_r;
+            y(6:end, n+1) = N_r;
             
             if adaptive == 1
                 % using adaptive scheme, need to check error
@@ -407,7 +415,7 @@ while running == 1;
                     isempty(abs_err) +  ...
                     isnan(sum(err)) + ...
                     ~isreal(sum(y(:,n+1))) + ...
-                    (y(2,n+1) > T_cr) + ...
+%                     (y(2,n+1) > T_cr) + ...
                     (y(5,n+1) > T_cr) + ...
                     error_flag;
                 
@@ -492,28 +500,28 @@ while running == 1;
             
         end
         
-        % 1 = m_tg
-        % 2 = T_tg
-        % 3 = T_gw
-        % 4 = m_l
-        % 5 = T_l
-        % 6 = T_lw
+% 1 = m_tg
+% 2 = T_gw
+% 3 = m_l
+% 4 = T_l
+% 5 = T_lw
+% 6:(N_dist + 5) = N(r)
         
         m_tg(n+1) = y(1,n+1);
-        T_tg(n+1) = y(2,n+1);
-        m_l(n+1) = y(4,n+1);
-        T_l(n+1) = y(5,n+1);
+%         T_tg(n+1) = y(2,n+1);
+        m_l(n+1) = y(3,n+1);
+        T_l(n+1) = y(4,n+1);
         
         % removing distribution values <= 0
-        N_r = y(7:end, n+1);
+        N_r = y(6:end, n+1);
         N_r = (N_r >= 0).*N_r;
-        y(7:end, n+1) = N_r;
+        y(6:end, n+1) = N_r;
         
         % net volume of bubbles, per unit volume of liquid
         V_bubi = trapz(r_dist, 4/3*pi*r_dist.^3.*N_r);
         
         % get system pressure
-        P(n+1) = get_P_from_mm_TT(m_tg(n+1), T_tg(n+1), m_l(n+1), T_l(n+1), ...
+        P(n+1) = get_P_from_mm_T(m_tg(n+1), T_tg(n+1), m_l(n+1), T_l(n+1), ...
             V_tank, V_bubi, PDT, guesses);
         
         % saturation temp based on pressure
@@ -528,7 +536,8 @@ while running == 1;
         
         % calculate liquid and vapor density based on T's and P
         rho_l(n+1) = interp2(PDT.T,PDT.P,PDT.D_liq,T_l(n+1),P(n+1)/1e3,'linear');
-        rho_tg(n+1) = interp2(PDT.T,PDT.P,PDT.D_vap,T_tg(n+1),P(n+1)/1e3,'linear');
+%         rho_tg(n+1) = interp2(PDT.T,PDT.P,PDT.D_vap,T_tg(n+1),P(n+1)/1e3,'linear');
+        rho_tg(n+1) = refpropm('D', 'P', P(n+1)/1e3, 'Q', 1, 'N2O');
         
         % get volumes based on mass and density
         V_l(n+1) = m_l(n+1)/rho_l(n+1);
@@ -697,18 +706,19 @@ r_dist = r_dist(:);
 
 % retrieve variables
 % 1 = m_tg
-% 2 = T_tg
-% 3 = T_gw
-% 4 = m_l
-% 5 = T_l
-% 6 = T_lw
+% 2 = T_gw
+% 3 = m_l
+% 4 = T_l
+% 5 = T_lw
+% 6:(N_dist + 5) = N(r)
+
 m_tg = y(1);
-T_tg = y(2);
-T_gw = y(3);
-m_l = y(4);
-T_l = y(5);
-T_lw = y(6);
-N_r = y(7:end);
+% T_tg = y(2);
+T_gw = y(2);
+m_l = y(3);
+T_l = y(4);
+T_lw = y(5);
+N_r = y(6:end);
 %
 % P_guess = guesses(1);
 % rho_tg_guess = guesses(2);
@@ -719,9 +729,9 @@ if isnan(sum(y)) || ~isreal(sum(y))
     disp('problem')
 end
 
-if T_tg > 305
-    disp('problem')
-end
+% if T_tg > 305
+%     disp('problem')
+% end
 
 % remove points where distribution is negative
 N_r = (N_r >= 0).*N_r;
@@ -730,15 +740,16 @@ N_r = (N_r >= 0).*N_r;
 V_bubi = trapz(r_dist, 4/3*pi*r_dist.^3.*N_r);
 
 % get system pressure
-P = get_P_from_mm_TT(m_tg, T_tg, m_l, T_l, V_tank, V_bubi, PDT, guesses);
+P = get_P_from_mm_T(m_tg, m_l, T_l, V_tank, V_bubi, PDT, guesses);
 
 % get density of liquid and ullage based on temperature and pressure
 
 % rho_l = easy_D(P, T_l, PDT, rho_l_guess, fsolve_options);
 % rho_tg = easy_D(P, T_tg, PDT, rho_tg_guess, fsolve_options);
 
-rho_l = interp2(PDT.T, PDT.P, PDT.D_liq, T_l, P/1e3, 'linear');
-rho_tg = interp2(PDT.T, PDT.P, PDT.D_vap, T_tg, P/1e3, 'linear');
+rho_l = interp2(PDT.T, PDT.P, PDT.D_liq, T_l, P, 'linear');
+% rho_tg = interp2(PDT.T, PDT.P, PDT.D_vap, T_tg, P, 'linear');
+rho_tg = refpropm('D', 'P', P/1e3, 'Q', 1, 'N2O');
 
 V_l = m_l/rho_l;
 
