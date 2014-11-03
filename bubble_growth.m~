@@ -54,7 +54,7 @@ running = 1;        % [] switch, 1 = program running, 0 = program stopped
 rel_tol = 1e-5;     % [] max relative error allowed in adaptive scheme
 abs_tol = 1e3;     % [] max absolute error allowed in adaptive scheme
 min_error = 1e-2;   % [] min error (relative to error_tol) before step size is increased
-adaptive = 1;       % [] switch, 1 = use 4/5 Runge-Kutta_Fehlberg, 0 = plain 4th Runge-Kutta
+adaptive = 0;       % [] switch, 1 = use 4/5 Runge-Kutta_Fehlberg, 0 = plain 4th Runge-Kutta
 h_max = 1e-0;       % [s] max allowable time step
 h_min = 1e-16;      % [s] min allowable time step
 t_end = 300;         % [s] end time (if LRO doesn't happen first)
@@ -178,7 +178,6 @@ y(7:(N_dist + 6), 1) = zeros(N_dist,1);
 
 K_b = 1.38e-23;
 N_A = 6.022e23;
-h_planck = 6.626e-34;
 
 [P_cr, T_cr] = refpropm('PT', 'C', 0, '', 0, 'N2O');
 P_cr = P_cr*1e3;
@@ -199,7 +198,6 @@ constants.K_b = K_b;
 constants.P_cr = P_cr;
 constants.T_cr = T_cr;
 constants.N_A = N_A;
-constants.h_planck = h_planck;
 
 constants.N_dist = N_dist;
 constants.r_dist_min = r_dist_min;
@@ -683,7 +681,6 @@ K_b = constants.K_b;
 N_A = constants.N_A;
 P_cr = constants.P_cr;
 T_cr = constants.T_cr;
-h_planck = constants.h_planck;
 
 r_dist = logspace(log10(r_dist_min), log10(r_dist_max), N_dist);
 r_dist = r_dist(:);
@@ -837,15 +834,15 @@ if deltaT_sup > 0
     
     % alamgir and lienhard, 1981:
     
-    B = K_b * T_l / h_planck;
+    B = K_b * T / 
     
-    P_sat = 1e3 * refpropm('P', 'T', T_l, 'Q', 0, 'N2O');
+    P_sat = 1e3 * repfropm('P', 'T', T_l, 'Q', 0, 'N2O');
     
     phi = 1e-3;
     v_g = 1/rho_tg;
     v_f = 1/rho_l;
     
-    J = ( N_A/( 1/rho_l * MW) )^(2/3) * B * exp( -16*pi*sigma^3*phi / ( 3*K_b*T_s*(1 - v_f/v_g)^2 * (P_sat - P)^2 ) );
+    J = (N_A/v_f)^(2/3) * B * exp( -16*pi*sigma^3*phi / ( 3*K_b*T_s*(1 - v_f/v_g)^2 * (P_sat - P)^2 ) );
     
     nuc_rate = J * A_l;
     
