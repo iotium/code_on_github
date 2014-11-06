@@ -3,6 +3,7 @@ function varargout = bubble_growth(varargin)
 N_dist = 50;
 r_dist_min = 1e-9;
 r_dist_max = 0.0254; % 1 inch
+n_save = 1000;
 close all
 
 if nargin == 0
@@ -165,7 +166,7 @@ m_tg = (1 - fill_level)*V_tank*rho_tg;
 T_l = Ti;
 T_tg = Ti;
 
-y(:,1) = [m_tg; Ti; Ti; m_l; Ti; Ti];
+y(:,1) = [m_tg; Ti; m_l; Ti; Ti];
 y(6:(N_dist + 5), 1) = zeros(N_dist,1);
 
 % 1 = m_tg
@@ -219,7 +220,7 @@ f = zeros(5 + N_dist,1);
 % begin looping
 while running == 1;
     
-    if ~stop.requested
+%     if ~stop.requested
         
         starti = max([n-3, 1]);
         
@@ -254,7 +255,7 @@ while running == 1;
             fprintf(['t = %8.6g, dt = %4.4g, P = %6.4g, V_bub = %6.4g, T_l = %6.4g, T_tg = %6.4g, m_l = %6.4g,'...
                 'm_tg = %6.4g, fill_level%% = %6.4g, Vdot_l = %6.4g, Vdot_tg = %6.4g,'...
                 'u_l = %6.4g, rhodot_l = %6.4g, rhodot_tg = %6.4g\n'],...
-                t(n), t(n) - t(max([1, n-1])), P(n)/6894.8, V_bub(n), T_l(n), T_tg(n),...
+                t(n), t(n) - t(max([1, n-1])), P(n)/6894.8, V_bub(n), T_l(n), 0,...
                 m_l(n), m_tg(n), 100*fill_level(n), Vdot_l(n+1),...
                 Vdot_tg(n+1), y(5,end)/y(4,end),rhodot_l, rhodot_tg);
             
@@ -387,7 +388,7 @@ while running == 1;
                 
                 
                 for j = 1:N_dim
-                    if abs(y(j,n)) > eps
+                    if abs(y(j,n)) > 1e-6
                         
                         rel_err(j) = abs(err(j)./( y(j,n) + 1e-6));  % relative error
                     else
@@ -415,7 +416,6 @@ while running == 1;
                     isempty(abs_err) +  ...
                     isnan(sum(err)) + ...
                     ~isreal(sum(y(:,n+1))) + ...
-%                     (y(2,n+1) > T_cr) + ...
                     (y(5,n+1) > T_cr) + ...
                     error_flag;
                 
@@ -521,7 +521,7 @@ while running == 1;
         V_bubi = trapz(r_dist, 4/3*pi*r_dist.^3.*N_r);
         
         % get system pressure
-        P(n+1) = get_P_from_mm_T(m_tg(n+1), T_tg(n+1), m_l(n+1), T_l(n+1), ...
+        P(n+1) = get_P_from_mm_T(m_tg(n+1), m_l(n+1), T_l(n+1), ...
             V_tank, V_bubi, PDT, guesses);
         
         % saturation temp based on pressure
@@ -575,21 +575,25 @@ while running == 1;
             disp('pressure got low')
         end
         
-        figure(1)
-        subplot(1,2,1)
-        hold on
-        plot(t(n), P(n), 'ks')
+        if rem(n,n_save) == 0
+            save('bubble_growth_sim_data')
+        end
         
-        subplot(1,2,2)
-        loglog(r_dist, N_r + 1e-100)
-        set(gca, 'xscale', 'log')
-        set(gca, 'yscale', 'log')
+%         figure(1)
+%         subplot(1,2,1)
+%         hold on
+%         plot(t(n), P(n), 'ks')
+%         
+%         subplot(1,2,2)
+%         loglog(r_dist, N_r + 1e-100)
+%         set(gca, 'xscale', 'log')
+%         set(gca, 'yscale', 'log')
         
-    else
-        stop.close
-        error('you stopped me')
-        
-    end
+%     else
+%         stop.close
+%         error('you stopped me')
+%         
+%     end
     
 end
 
@@ -748,8 +752,9 @@ P = get_P_from_mm_T(m_tg, m_l, T_l, V_tank, V_bubi, PDT, guesses);
 % rho_tg = easy_D(P, T_tg, PDT, rho_tg_guess, fsolve_options);
 
 rho_l = interp2(PDT.T, PDT.P, PDT.D_liq, T_l, P/1e3, 'linear');
-% rho_tg = interp2(PDT.T, PDT.P, PDT.D_vap, T_tg, P/1e3, 'linear');
-rho_tg = refpropm('D', 'P', P/1e3, 'Q', 1, 'N2O');
+% rho_tg = interp2(PDT.T, PDT.P, PDT.D_vap, T_tg, P, 'linear');
+
+[rho_tg, T_tg] = refpropm('DT', 'P', P/1e3, 'Q', 1, 'N2O');
 
 V_l = m_l/rho_l;
 
@@ -980,7 +985,7 @@ rhodot_tg = mdot_tg/V_tg - m_tg/V_tg^2 * Vdot_tg;
 
 rhodot_l = mdot_l/V_l - m_l/V_l^2 * Vdot_l;
 
-Tdot_tg = ( ( Udot_tg - u_tg*mdot_tg )/m_tg - du_drho_tg*rhodot_tg )/Cv_tg;
+% Tdot_tg = ( ( Udot_tg - u_tg*mdot_tg )/m_tg - du_drho_tg*rhodot_tg )/Cv_tg;
 
 Tdot_l = ( ( Udot_l - u_l*mdot_l )/m_l - du_drho_l*rhodot_l )/Cv_l;
 
@@ -1012,13 +1017,12 @@ Tdot_lw = (Qdot_alw - Qdot_lw - Qdot_wc)/(m_lw*cv_w);
 
 % all derivatives
 % 1 = m_tg
-% 2 = T_tg
-% 3 = T_gw
-% 4 = m_l
-% 5 = T_l
-% 6 = T_lw
-% 7:N_dist-6 = N_dist
-dy = [mdot_tg; Tdot_tg; Tdot_gw; mdot_l; Tdot_l; Tdot_lw; dN_dt(:)];
+% 2 = T_gw
+% 3 = m_l
+% 4 = T_l
+% 5 = T_lw
+% 6:(N_dist + 5) = N(r)
+dy = [mdot_tg; Tdot_gw; mdot_l; Tdot_l; Tdot_lw; dN_dt(:)];
 
 
 
