@@ -62,7 +62,7 @@ t_end = 300;         % [s] end time (if LRO doesn't happen first)
 LRO_tol = 5e-3;     % [s] tolerance for resolving the LRO point
 non_adaptive_scheme = 1; % [] switch, 1 = 4th order Runge-Kutta, 0 = 1st order Euler
 
-N_dim = 5 + N_dist;
+N_dim = 6 + N_dist;
 
 fsolve_options = optimset('display','off');
 
@@ -153,6 +153,7 @@ n = 1;              % [] counter
 t = 0;
 
 [rho_l, rho_tg, P] = refpropm('+-P','T',Ti,'Q',0.5,'N2O');
+[u_tg] = refpropm('U', 'T', Ti ,'Q', 1, 'N2O');
 P = P*1e3;
 
 T_sat = Ti;
@@ -163,18 +164,21 @@ V_tg = (1 - fill_level)*V_tank;
 m_l = fill_level*V_tank*rho_l;
 m_tg = (1 - fill_level)*V_tank*rho_tg;
 
+U_tg = m_tg * u_tg;
+
 T_l = Ti;
 T_tg = Ti;
 
-y(:,1) = [m_tg; Ti; m_l; Ti; Ti];
-y(6:(N_dist + 5), 1) = zeros(N_dist,1);
+y(:,1) = [m_tg; U_tg; Ti; m_l; Ti; Ti];
+y((N_dim - N_dist + 1):(N_dim), 1) = zeros(N_dist,1);
 
 % 1 = m_tg
-% 2 = T_gw
-% 3 = m_l
-% 4 = T_l
-% 5 = T_lw
-% 6:(N_dist + 5) = N(r)
+% 2 = U_tg
+% 3 = T_gw
+% 4 = m_l
+% 5 = T_l
+% 6 = T_lw
+% 7:(N_dist + 6) = N(r)
 
 K_b = 1.38e-23;
 N_A = 6.022e23;
@@ -206,8 +210,12 @@ constants.r_dist_min = r_dist_min;
 constants.r_dist_max = r_dist_max;
 r_dist = logspace(log10(r_dist_min), log10(r_dist_max), N_dist)';
 
-guesses = [P; rho_tg; rho_l; 0];
-P_guess = P;
+guesses.P = P;
+guesses.rho_tg = rho_tg;
+guesses.rho_l = rho_l;
+guesses.Vdot_l = 0;
+
+
 
 V_bub = 0;
 
@@ -215,7 +223,7 @@ V_bub = 0;
 derivatives = zeros(5,1);
 
 % initialize f
-f = zeros(5 + N_dist,1);
+f = zeros(N_dim,1);
 
 % begin looping
 while running == 1;
@@ -240,7 +248,7 @@ while running == 1;
             
             derivatives = 0.5*[Pdot; rhodot_l; rhodot_tg; Vdot_l(n+1); Vdot_tg(n+1)] + 0.5*derivatives;
             
-            guesses(4) = 0.5*Vdot_l(n+1) + 0.5*guesses(4);
+            guesses.Vdot_l = 0.5*Vdot_l(n+1) + 0.5*guesses.Vdot_l;
             
         end
         %     derivatives = zeros(5,1);
@@ -249,15 +257,24 @@ while running == 1;
         
         %     Qdot_lw(n) = Qdot('lw',T_l(n), T_lw ,rho_l(n), m_l(n),D);
         
+        
+        % 1 = m_tg
+% 2 = U_tg
+% 3 = T_gw
+% 4 = m_l
+% 5 = T_l
+% 6 = T_lw
+% 7:(N_dist + 6) = N(r)
+        
         % if I'm just playing around, print status at each step
         if nargin == 0
             
             fprintf(['t = %8.6g, dt = %4.4g, P = %6.4g, V_bub = %6.4g, T_l = %6.4g, T_tg = %6.4g, m_l = %6.4g,'...
                 'm_tg = %6.4g, fill_level%% = %6.4g, Vdot_l = %6.4g, Vdot_tg = %6.4g,'...
-                'u_l = %6.4g, rhodot_l = %6.4g, rhodot_tg = %6.4g\n'],...
+                ' rhodot_l = %6.4g, rhodot_tg = %6.4g\n'],...
                 t(n), t(n) - t(max([1, n-1])), P(n)/6894.8, V_bub(n), T_l(n), 0,...
                 m_l(n), m_tg(n), 100*fill_level(n), Vdot_l(n+1),...
-                Vdot_tg(n+1), y(5,end)/y(4,end),rhodot_l, rhodot_tg);
+                Vdot_tg(n+1), rhodot_l, rhodot_tg);
             
         end
         
@@ -316,19 +333,20 @@ while running == 1;
             for i = 1:s
                 % s = number of stages in the scheme
                 
-                % 1 = m_tg
- 
-                % 2 = T_gw
-                % 3 = m_l
-                % 4 = T_l
-                % 5 = T_lw
+% 1 = m_tg
+% 2 = U_tg
+% 3 = T_gw
+% 4 = m_l
+% 5 = T_l
+% 6 = T_lw
+% 7:(N_dist + 6) = N(r)
                 
                 
                 if i == 1
                     
                     % f = f( t(n) , y(n) )
                     
-                    f = diffeqns(y(:,n), constants, derivatives, guesses, PDT);
+                    f = diffeqns(y(:,n), constants, guesses, PDT);
                 else
                     
                     % f for k(2) = f( t(n) + c(2)*h , y(n) + a(2,1)*k(1) )
@@ -336,7 +354,7 @@ while running == 1;
                     % and so on
                     
                     f = diffeqns(y_new, ...
-                        constants, derivatives, guesses, PDT);
+                        constants, guesses, PDT);
                 end
                 
                 k(:,i) = f*h;
@@ -363,19 +381,19 @@ while running == 1;
             
             
             
-            % 1 = m_tg
-
-% 2 = T_gw
-% 3 = m_l
-% 4 = T_l
-% 5 = T_lw
-% 6:(N_dist + 5) = N(r)
+% 1 = m_tg
+% 2 = U_tg
+% 3 = T_gw
+% 4 = m_l
+% 5 = T_l
+% 6 = T_lw
+% 7:(N_dist + 6) = N(r)
             
             y(:,n+1) = y(:,n) + (k*b);
             
-            N_r = y(6:end, n+1);
+            N_r = y((N_dim - N_dist + 1):end, n+1);
             N_r = (N_r >= 0).*N_r;
-            y(6:end, n+1) = N_r;
+            y((N_dim - N_dist + 1):end, n+1) = N_r;
             
             if adaptive == 1
                 % using adaptive scheme, need to check error
@@ -418,6 +436,15 @@ while running == 1;
                     ~isreal(sum(y(:,n+1))) + ...
                     (y(5,n+1) > T_cr) + ...
                     error_flag;
+                
+                
+                % 1 = m_tg
+% 2 = U_tg
+% 3 = T_gw
+% 4 = m_l
+% 5 = T_l
+% 6 = T_lw
+% 7:(N_dist + 6) = N(r)
                 
                 % if any of those fail, set rel_err large so that the step gets
                 % recomuputed
@@ -501,35 +528,34 @@ while running == 1;
         end
         
 % 1 = m_tg
-% 2 = T_gw
-% 3 = m_l
-% 4 = T_l
-% 5 = T_lw
-% 6:(N_dist + 5) = N(r)
+% 2 = U_tg
+% 3 = T_gw
+% 4 = m_l
+% 5 = T_l
+% 6 = T_lw
+% 7:(N_dist + 6) = N(r)
         
         m_tg(n+1) = y(1,n+1);
-%         T_tg(n+1) = y(2,n+1);
-        m_l(n+1) = y(3,n+1);
-        T_l(n+1) = y(4,n+1);
+        U_tg(n+1) = y(2,n+1);
+        m_l(n+1) = y(4,n+1);
+        T_l(n+1) = y(5,n+1);
         
         % removing distribution values <= 0
-        N_r = y(6:end, n+1);
+        N_r = y((N_dim - N_dist + 1):end, n+1);
         N_r = (N_r >= 0).*N_r;
-        y(6:end, n+1) = N_r;
+        y((N_dim - N_dist + 1):end, n+1) = N_r;
         
         % net volume of bubbles, per unit volume of liquid
         V_bubi = trapz(r_dist, 4/3*pi*r_dist.^3.*N_r);
         
         % get system pressure
-        P(n+1) = get_P_from_mm_T(m_tg(n+1), m_l(n+1), T_l(n+1), ...
+        P(n+1) = get_P_from_mU_mT(m_tg(n+1), U_tg(n+1), m_l(n+1), T_l(n+1), ...
             V_tank, V_bubi, PDT, guesses);
+        
         
         % saturation temp based on pressure
         T_sat(n+1) = refpropm('T','P',P(n+1)/1e3,'Q',0.5,'N2O');
         
-        %     P_guess = guesses(1);
-        %     rho_tg_guess = guesses(2);
-        %     rho_l_guess = guesses(3);
         
         %     rho_l(n+1) = easy_D(P(n+1), T_l, PDT, rho_l_guess, fsolve_options);
         %     rho_tg(n+1) = easy_D(P(n+1), T_tg, PDT, rho_tg_guess, fsolve_options);
@@ -549,7 +575,9 @@ while running == 1;
         % actual volume of all the bubbles
         V_bub(n+1) = V_bubi * V_l(n+1);
         
-        guesses(1:3) = [P(n+1); rho_tg(n+1); rho_l(n+1)];
+        guesses.P = P(n+1);
+        guesses.rho_tg = rho_tg(n+1);
+        guesses.rho_l = rho_l(n+1);
         
         t(n+1) = t(n) + h;
         
@@ -674,7 +702,7 @@ else
     
 end
 
-function dy = diffeqns(y, constants, derivatives, guesses, PDT)
+function dy = diffeqns(y, constants, guesses, PDT)
 
 % retrieve constants
 E = constants.E;
@@ -710,24 +738,21 @@ r_dist = r_dist(:);
 
 % retrieve variables
 % 1 = m_tg
-% 2 = T_gw
-% 3 = m_l
-% 4 = T_l
-% 5 = T_lw
-% 6:(N_dist + 5) = N(r)
+% 2 = U_tg
+% 3 = T_gw
+% 4 = m_l
+% 5 = T_l
+% 6 = T_lw
+% 7:(N_dist + 6) = N(r)
 
 m_tg = y(1);
-% T_tg = y(2);
-T_gw = y(2);
-m_l = y(3);
-T_l = y(4);
-T_lw = y(5);
-N_r = y(6:end);
-%
-% P_guess = guesses(1);
-% rho_tg_guess = guesses(2);
-% rho_l_guess = guesses(3);
-Vdot_guess = guesses(4);
+U_tg = y(2);
+T_gw = y(3);
+m_l = y(4);
+T_l = y(5);
+T_lw = y(6);
+N_r = y(7:end);
+
 
 if isnan(sum(y)) || ~isreal(sum(y))
     disp('problem')
@@ -744,7 +769,7 @@ N_r = (N_r >= 0).*N_r;
 V_bubi = trapz(r_dist, 4/3*pi*r_dist.^3.*N_r);
 
 % get system pressure
-P = get_P_from_mm_T(m_tg, m_l, T_l, V_tank, V_bubi, PDT, guesses);
+P = get_P_from_mU_mT(m_tg, U_tg, m_l, T_l, V_tank, V_bubi, PDT, guesses);
 
 % get density of liquid and ullage based on temperature and pressure
 
@@ -769,12 +794,6 @@ V_bub = V_l * V_bubi;
 dP_drho_l = 1e3/drho_dP_l;
 dP_dT_l = dP_dT_l*1e3;
 alpha_l = k_l/(rho_l * Cp_l);
-
-% gas properties
-[h_tg, dh_drho_tg, drho_dP_tg, u_tg, Cv_tg, dP_dT_tg] = ...
-    refpropm('H!RUO#','T',T_tg,'D&',rho_tg,'N2O');
-dP_drho_tg = 1e3/drho_dP_tg;
-dP_dT_tg = dP_dT_tg*1e3;
 
 % temp of saturated surface based on pressure (and h of sat. vapor)
 [T_s, h_tg_sat, rho_tg_sat] = refpropm('THD','P',P/1e3,'Q',1,'N2O');
@@ -964,16 +983,55 @@ Udot_li = - mdot_out*h_l - mdot_bub*(h_lv + (h_l_sat - h_l) ) + Qdot_l;
 
 Udot_tgi = Qdot_tg;
 
-du_drho_tg = dh_drho_tg + P/rho_tg^2  - 1/rho_tg * dP_drho_tg;
+% du_drho_tg = dh_drho_tg + P/rho_tg^2  - 1/rho_tg * dP_drho_tg;
 
 du_drho_l = dh_drho_l + P/rho_l^2  - 1/rho_l * dP_drho_l;
 
 % not sure if this is correct... should it include a rhodot term?
 Vdot_bub = mdot_bub / rho_tg_sat;
 
-Vdot_l = solve_for_Vdot(Udot_tgi, u_tg, mdot_tg, m_tg, du_drho_tg, ...
-    Cv_tg, Udot_li, u_l, mdot_l, m_l, du_drho_l, Cv_l, dP_drho_l, V_l, ...
-    dP_dT_l, dP_dT_tg, dP_drho_tg, V_tg, P, Vdot_guess, Vdot_bub);
+% properties needed for Vdot calculation (liquid)
+[u_tg_l_sat, rho_tg_l, dP_dT_tg_sat, drho_dP_T, drho_dT_P, dh_dT_P, dh_dP_T] = ...
+    refpropm('UDERW(*', 'P', P/1e3, 'Q', 0, 'N2O');
+dP_dT_tg_sat = dP_dT_tg_sat * 1e3;
+drho_dP_T = drho_dP_T * 1e-3;
+dh_dP_T = dh_dP_T * 1e-3;
+
+du_dT_P = dh_dT_P + P/rho_tg_l^2 * drho_dT_P;
+du_dP_T = dh_dP_T + 1/rho_tg_l + P/rho_tg_l^2 * drho_dP_T;
+
+du_dT_sat_tg_l = du_dT_P + du_dP_T * dP_dT_tg_sat;
+drho_dT_l_sat = drho_dT_P + drho_dP_T * dP_dT_tg_sat;
+% drho_dP_sat = drho_dP_T + drho_dT_P / dP_dT_sat;
+
+% properties needed for Vdot calculation (vapor)
+[u_tg_v_sat, rho_tg_v, drho_dP_T, drho_dT_P, dh_dT_P, dh_dP_T] = ...
+    refpropm('UDRW(*', 'P', P/1e3, 'Q', 1, 'N2O');
+drho_dP_T = drho_dP_T * 1e-3;
+dh_dP_T = dh_dP_T * 1e-3;
+
+du_dT_P = dh_dT_P + P/rho_tg_v^2 * drho_dT_P;
+du_dP_T = dh_dP_T + 1/rho_tg_v + P/rho_tg_v^2 * drho_dP_T;
+
+du_dT_sat_tg_v = du_dT_P + du_dP_T * dP_dT_tg_sat;
+drho_dT_v_sat = drho_dT_P + drho_dP_T * dP_dT_tg_sat;
+% drho_dP_sat_tg = drho_dP_T + drho_dT_P / dP_dT_sat;
+
+x = (U_tg/m_tg - u_tg_l_sat) / ( u_tg_v_sat - u_tg_l_sat);
+
+alpha = 1/( 1 + rho_tg_v/rho_tg_l * (1 - x)/x );
+
+rho_tg = alpha*rho_tg_v + (1 - alpha)*rho_tg_l;
+
+drho_dx_P_tg = -rho_tg^2 *(1/rho_tg_v - 1/rho_tg_l);
+drho_dP_x_tg = (1/dP_dT_tg_sat) * rho_tg^2 * ( x/rho_tg_v^2 * drho_dT_v_sat + ...
+    (1-x)/rho_tg_l^2 * drho_dT_l_sat );
+
+Vdot_l = solve_for_Vdot(Udot_tgi, mdot_tg, m_tg, ...
+    Udot_li, u_l, mdot_l, m_l, du_drho_l, Cv_l, dP_drho_l, V_l, ...
+    dP_dT_l, V_tg, P, drho_dx_P_tg, drho_dP_x_tg, u_tg_v_sat, ...
+    u_tg_l_sat, x, ...
+    du_dT_sat_tg_v, du_dT_sat_tg_l, dP_dT_tg_sat, guesses, Vdot_bub);
 
 Vdot_tg = - Vdot_l - Vdot_bub;
 
@@ -981,7 +1039,7 @@ Udot_tg = Udot_tgi - P*Vdot_tg;
 
 Udot_l = Udot_li - P*Vdot_l;
 
-rhodot_tg = mdot_tg/V_tg - m_tg/V_tg^2 * Vdot_tg;
+% rhodot_tg = mdot_tg/V_tg - m_tg/V_tg^2 * Vdot_tg;
 
 rhodot_l = mdot_l/V_l - m_l/V_l^2 * Vdot_l;
 
@@ -1017,12 +1075,14 @@ Tdot_lw = (Qdot_alw - Qdot_lw - Qdot_wc)/(m_lw*cv_w);
 
 % all derivatives
 % 1 = m_tg
-% 2 = T_gw
-% 3 = m_l
-% 4 = T_l
-% 5 = T_lw
-% 6:(N_dist + 5) = N(r)
-dy = [mdot_tg; Tdot_gw; mdot_l; Tdot_l; Tdot_lw; dN_dt(:)];
+% 2 = U_tg
+% 3 = T_gw
+% 4 = m_l
+% 5 = T_l
+% 6 = T_lw
+% 7:(N_dist + 6) = N(r)
+
+dy = [mdot_tg; Udot_tg; Tdot_gw; mdot_l; Tdot_l; Tdot_lw; dN_dt(:)];
 
 
 
