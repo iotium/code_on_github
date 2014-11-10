@@ -215,8 +215,6 @@ guesses.rho_tg = rho_tg;
 guesses.rho_l = rho_l;
 guesses.Vdot_l = 0;
 
-
-
 V_bub = 0;
 
 % I don't seem to be using this term anymore so just leave it
@@ -779,7 +777,7 @@ P = get_P_from_mU_mT(m_tg, U_tg, m_l, T_l, V_tank, V_bubi, PDT, guesses);
 rho_l = interp2(PDT.T, PDT.P, PDT.D_liq, T_l, P/1e3, 'linear');
 % rho_tg = interp2(PDT.T, PDT.P, PDT.D_vap, T_tg, P, 'linear');
 
-[rho_tg, T_tg] = refpropm('DT', 'P', P/1e3, 'Q', 1, 'N2O');
+[rho_tg, T_tg] = refpropm('DT', 'P', P/1e3, 'U', U_tg/m_tg, 'N2O');
 
 V_l = m_l/rho_l;
 
@@ -810,7 +808,7 @@ h_lv = h_tg_sat - h_l_sat;
 deltaT_sup = T_l - T_s;
 
 % if superheated, then calculate bubble stuff
-if deltaT_sup > 0
+if deltaT_sup > 1e-6
     
     % jakob number
     Ja_T = Cp_l * rho_l * deltaT_sup/(rho_tg * h_lv);
@@ -1003,6 +1001,11 @@ du_dP_T = dh_dP_T + 1/rho_tg_l + P/rho_tg_l^2 * drho_dP_T;
 du_dT_sat_tg_l = du_dT_P + du_dP_T * dP_dT_tg_sat;
 drho_dT_l_sat = drho_dT_P + drho_dP_T * dP_dT_tg_sat;
 % drho_dP_sat = drho_dP_T + drho_dT_P / dP_dT_sat;
+
+
+% need to calculate a bunch of partial derivatives for the Vdot function
+% extras are needed for the saturated ullage because the 2 phases adds more
+% terms.
 
 % properties needed for Vdot calculation (vapor)
 [u_tg_v_sat, rho_tg_v, drho_dP_T, drho_dT_P, dh_dT_P, dh_dP_T] = ...

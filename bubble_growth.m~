@@ -220,7 +220,7 @@ guesses.Vdot_l = 0;
 V_bub = 0;
 
 % I don't seem to be using this term anymore so just leave it
-derivatives = zeros((N_dim - N_dist),1);
+derivatives = zeros(5,1);
 
 % initialize f
 f = zeros(N_dim,1);
@@ -537,8 +537,8 @@ while running == 1;
         
         m_tg(n+1) = y(1,n+1);
         U_tg(n+1) = y(2,n+1);
-        m_l(n+1) = y(3,n+1);
-        T_l(n+1) = y(4,n+1);
+        m_l(n+1) = y(4,n+1);
+        T_l(n+1) = y(5,n+1);
         
         % removing distribution values <= 0
         N_r = y((N_dim - N_dist + 1):end, n+1);
@@ -1000,9 +1000,14 @@ dh_dP_T = dh_dP_T * 1e-3;
 du_dT_P = dh_dT_P + P/rho_tg_l^2 * drho_dT_P;
 du_dP_T = dh_dP_T + 1/rho_tg_l + P/rho_tg_l^2 * drho_dP_T;
 
-du_dT_sat_tg_l = du_dT_P + du_dP_T * dP_dT_sat;
+du_dT_sat_tg_l = du_dT_P + du_dP_T * dP_dT_tg_sat;
 drho_dT_l_sat = drho_dT_P + drho_dP_T * dP_dT_tg_sat;
 % drho_dP_sat = drho_dP_T + drho_dT_P / dP_dT_sat;
+
+
+% need to calculate a bunch of partial derivatives for the Vdot function
+% extras are needed for the saturated ullage because the 2 phases adds more
+% terms.
 
 % properties needed for Vdot calculation (vapor)
 [u_tg_v_sat, rho_tg_v, drho_dP_T, drho_dT_P, dh_dT_P, dh_dP_T] = ...
@@ -1013,13 +1018,15 @@ dh_dP_T = dh_dP_T * 1e-3;
 du_dT_P = dh_dT_P + P/rho_tg_v^2 * drho_dT_P;
 du_dP_T = dh_dP_T + 1/rho_tg_v + P/rho_tg_v^2 * drho_dP_T;
 
-du_dT_sat_tg_v = du_dT_P + du_dP_T * dP_dT_sat;
+du_dT_sat_tg_v = du_dT_P + du_dP_T * dP_dT_tg_sat;
 drho_dT_v_sat = drho_dT_P + drho_dP_T * dP_dT_tg_sat;
 % drho_dP_sat_tg = drho_dP_T + drho_dT_P / dP_dT_sat;
 
 x = (U_tg/m_tg - u_tg_l_sat) / ( u_tg_v_sat - u_tg_l_sat);
 
-rho = 
+alpha = 1/( 1 + rho_tg_v/rho_tg_l * (1 - x)/x );
+
+rho_tg = alpha*rho_tg_v + (1 - alpha)*rho_tg_l;
 
 drho_dx_P_tg = -rho_tg^2 *(1/rho_tg_v - 1/rho_tg_l);
 drho_dP_x_tg = (1/dP_dT_tg_sat) * rho_tg^2 * ( x/rho_tg_v^2 * drho_dT_v_sat + ...
