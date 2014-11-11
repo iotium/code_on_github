@@ -15,7 +15,7 @@ end
          
         [rho_tg_l, rho_tg_v, u_tg_l, u_tg_v] = n2o_fits_for_getting_P(P);
         u_tg = U_tg/m_tg;
-        x = (u_tg_v - u_tg_l)/(u_tg_v - u_tg_l);
+        x = (u_tg - u_tg_l)/(u_tg_v - u_tg_l);
         alpha = 1/( 1 + rho_tg_v/rho_tg_l * (1 - x)/x );
         rho_tg = alpha*rho_tg_v + (1 - alpha)*rho_tg_l;
         
