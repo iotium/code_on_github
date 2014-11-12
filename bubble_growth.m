@@ -785,7 +785,14 @@ P = get_P_from_mU_mT(m_tg, U_tg, m_l, T_l, V_tank, V_bubi, PDT, guesses);
 rho_l = qinterp2(PDT.T, PDT.P, PDT.D_liq, T_l, P/1e3);
 % rho_tg = qqinterp2(PDT.T, PDT.P, PDT.D_vap, T_tg, P, 'linear');
 
-[rho_tg, T_tg] = refpropm('DT', 'P', P/1e3, 'U', U_tg/m_tg, 'N2O');
+% [rho_tg, T_tg] = refpropm('DT', 'P', P/1e3, 'U', U_tg/m_tg, 'N2O');
+
+[rho_tg_l, rho_tg_v, u_tg_l, u_tg_v] = n2o_fits_for_getting_P(P);
+u_tg = U_tg/m_tg;
+x = (u_tg - u_tg_l)/(u_tg_v - u_tg_l);
+alpha = 1/( 1 + rho_tg_v/rho_tg_l * (1 - x)/x );
+rho_tg = alpha*rho_tg_v + (1 - alpha)*rho_tg_l;
+
 
 V_l = m_l/rho_l;
 
@@ -803,11 +810,12 @@ alpha_l = k_l/(rho_l * Cp_l);
 
 
 % a lot of these properties aren't needed until later, but by calculating
-% them here I can reduce the number of refprop calls.
+% them here I can reduce the number of refprop calls. Note that the next
+% two refprop calls are for ullage properties (liquid and vapor parts)
 
 % properties needed for Vdot calculation (liquid)
 [u_tg_l_sat, rho_tg_l, dP_dT_tg_sat, drho_dP_T, drho_dT_P, dh_dT_P, dh_dP_T...
-    ,sigma, h_l_sat] = refpropm('UDERW(*IH', 'P', P/1e3, 'Q', 0, 'N2O');
+    ,sigma, h_l_sat, T_tg] = refpropm('UDERW(*IHT', 'P', P/1e3, 'Q', 0, 'N2O');
 dP_dT_tg_sat = dP_dT_tg_sat * 1e3;
 drho_dP_T = drho_dP_T * 1e-3;
 dh_dP_T = dh_dP_T * 1e-3;
