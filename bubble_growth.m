@@ -880,7 +880,8 @@ if deltaT_sup > 1e-6
     
     B = K_b * T_l / h_planck;
     
-    P_sat = 1e3 * refpropm('P', 'T', T_l, 'Q', 0, 'N2O');
+    [P_sat, s_liq_sat, h_liq_sat] = refpropm('PSH', 'T', T_l, 'Q', 0, 'N2O');
+    P_sat = 1e3*P_sat;
     
     phi = 1e-3;
     v_g = 1/rho_tg;
@@ -956,12 +957,13 @@ else
     % no superheat -> no bubble growth or nucleation
     mdot_bub = 0;
     dN_dt = zeros(N_dist,1);
+    [P_sat, s_liq_sat, h_liq_sat] = refpropm('PSH', 'T', T_l, 'Q', 0, 'N2O');
     
 end
 
 % mass flow rate out via injector
 % mdot_out = Cd*A_inj*sqrt(2*rho_l*(P-Po));
-mdot_out = A_inj*Cd*dyer_flow(Po, P, T_l, rho_l);
+mdot_out = A_inj*Cd*dyer_flow(Po, P, T_l, rho_l, P_sat, s_liq_sat, h_liq_sat);
 
 % net rate of change of gas mass
 % mdot_tg = mdot_VLB - mdot_VLC;

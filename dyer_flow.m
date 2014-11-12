@@ -1,7 +1,7 @@
-function G = dyer_flow(Po, P, T_liq, rho_liq)
+function G = dyer_flow(Po, P, T_liq, rho_liq, Psat_liq, s_liq, h_liq);
 
-[Psat_liq, s_liq, h_liq] = refpropm('PSH','T',T_liq,'Q',0,'N2O');
-Psat_liq = 1e3*Psat_liq;
+% [Psat_liq, s_liq, h_liq] = refpropm('PSH','T',T_liq,'Q',0,'N2O');
+% Psat_liq = 1e3*Psat_liq;
 
 [rho_o, h_o] = refpropm('DH','P',Po/1e3,'S',s_liq,'N2O');
 
