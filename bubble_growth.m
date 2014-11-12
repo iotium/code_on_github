@@ -795,17 +795,55 @@ V_tg = m_tg/rho_tg;
 V_bub = V_l * V_bubi;
 
 % liquid properties
-[h_l, dh_drho_l, drho_dP_l, u_l, Cv_l, dP_dT_l, k_l, Cp_l] = ...
-    refpropm('H!RUO#LC','T',T_l,'D&',rho_l,'N2O');
+[h_l, dh_drho_l, drho_dP_l, u_l, Cv_l, dP_dT_l, k_l, Cp_l, MW] = ...
+    refpropm('H!RUO#LCM','T',T_l,'D&',rho_l,'N2O');
 dP_drho_l = 1e3/drho_dP_l;
 dP_dT_l = dP_dT_l*1e3;
 alpha_l = k_l/(rho_l * Cp_l);
 
-% temp of saturated surface based on pressure (and h of sat. vapor)
-[T_s, h_tg_sat, rho_tg_sat] = refpropm('THD','P',P/1e3,'Q',1,'N2O');
 
-% saturated liquid enthalpy at P
-[sigma, h_l_sat, MW] = refpropm('IHM','P',P/1e3,'Q',0,'N2O');
+% a lot of these properties aren't needed until later, but by calculating
+% them here I can reduce the number of refprop calls.
+
+% properties needed for Vdot calculation (liquid)
+[u_tg_l_sat, rho_tg_l, dP_dT_tg_sat, drho_dP_T, drho_dT_P, dh_dT_P, dh_dP_T...
+    ,sigma, h_l_sat] = refpropm('UDERW(*IH', 'P', P/1e3, 'Q', 0, 'N2O');
+dP_dT_tg_sat = dP_dT_tg_sat * 1e3;
+drho_dP_T = drho_dP_T * 1e-3;
+dh_dP_T = dh_dP_T * 1e-3;
+
+du_dT_P = dh_dT_P + P/rho_tg_l^2 * drho_dT_P;
+du_dP_T = dh_dP_T + 1/rho_tg_l + P/rho_tg_l^2 * drho_dP_T;
+
+du_dT_sat_tg_l = du_dT_P + du_dP_T * dP_dT_tg_sat;
+drho_dT_l_sat = drho_dT_P + drho_dP_T * dP_dT_tg_sat;
+% drho_dP_sat = drho_dP_T + drho_dT_P / dP_dT_sat;
+
+
+% need to calculate a bunch of partial derivatives for the Vdot function
+% extras are needed for the saturated ullage because the 2 phases adds more
+% terms.
+
+% properties needed for Vdot calculation (vapor)
+[u_tg_v_sat, rho_tg_v, drho_dP_T, drho_dT_P, dh_dT_P, dh_dP_T,...
+    T_s, h_tg_sat] = ...
+    refpropm('UDRW(*TH', 'P', P/1e3, 'Q', 1, 'N2O');
+drho_dP_T = drho_dP_T * 1e-3;
+dh_dP_T = dh_dP_T * 1e-3;
+
+du_dT_P = dh_dT_P + P/rho_tg_v^2 * drho_dT_P;
+du_dP_T = dh_dP_T + 1/rho_tg_v + P/rho_tg_v^2 * drho_dP_T;
+
+du_dT_sat_tg_v = du_dT_P + du_dP_T * dP_dT_tg_sat;
+drho_dT_v_sat = drho_dT_P + drho_dP_T * dP_dT_tg_sat;
+% drho_dP_sat_tg = drho_dP_T + drho_dT_P / dP_dT_sat;
+
+rho_tg_sat = rho_tg_v;
+% % temp of saturated surface based on pressure (and h of sat. vapor)
+% [T_s, h_tg_sat, rho_tg_sat] = refpropm('THD','P',P/1e3,'Q',1,'N2O');
+% 
+% % saturated liquid enthalpy at P
+% [sigma, h_l_sat] = refpropm('IH','P',P/1e3,'Q',0,'N2O');
 
 % heat of vaporization (at saturation)
 h_lv = h_tg_sat - h_l_sat;
@@ -997,38 +1035,38 @@ du_drho_l = dh_drho_l + P/rho_l^2  - 1/rho_l * dP_drho_l;
 
 % not sure if this is correct... should it include a rhodot term?
 Vdot_bub = mdot_bub / rho_tg_sat;
-
-% properties needed for Vdot calculation (liquid)
-[u_tg_l_sat, rho_tg_l, dP_dT_tg_sat, drho_dP_T, drho_dT_P, dh_dT_P, dh_dP_T] = ...
-    refpropm('UDERW(*', 'P', P/1e3, 'Q', 0, 'N2O');
-dP_dT_tg_sat = dP_dT_tg_sat * 1e3;
-drho_dP_T = drho_dP_T * 1e-3;
-dh_dP_T = dh_dP_T * 1e-3;
-
-du_dT_P = dh_dT_P + P/rho_tg_l^2 * drho_dT_P;
-du_dP_T = dh_dP_T + 1/rho_tg_l + P/rho_tg_l^2 * drho_dP_T;
-
-du_dT_sat_tg_l = du_dT_P + du_dP_T * dP_dT_tg_sat;
-drho_dT_l_sat = drho_dT_P + drho_dP_T * dP_dT_tg_sat;
-% drho_dP_sat = drho_dP_T + drho_dT_P / dP_dT_sat;
-
-
-% need to calculate a bunch of partial derivatives for the Vdot function
-% extras are needed for the saturated ullage because the 2 phases adds more
-% terms.
-
-% properties needed for Vdot calculation (vapor)
-[u_tg_v_sat, rho_tg_v, drho_dP_T, drho_dT_P, dh_dT_P, dh_dP_T] = ...
-    refpropm('UDRW(*', 'P', P/1e3, 'Q', 1, 'N2O');
-drho_dP_T = drho_dP_T * 1e-3;
-dh_dP_T = dh_dP_T * 1e-3;
-
-du_dT_P = dh_dT_P + P/rho_tg_v^2 * drho_dT_P;
-du_dP_T = dh_dP_T + 1/rho_tg_v + P/rho_tg_v^2 * drho_dP_T;
-
-du_dT_sat_tg_v = du_dT_P + du_dP_T * dP_dT_tg_sat;
-drho_dT_v_sat = drho_dT_P + drho_dP_T * dP_dT_tg_sat;
-% drho_dP_sat_tg = drho_dP_T + drho_dT_P / dP_dT_sat;
+% 
+% % properties needed for Vdot calculation (liquid)
+% [u_tg_l_sat, rho_tg_l, dP_dT_tg_sat, drho_dP_T, drho_dT_P, dh_dT_P, dh_dP_T] = ...
+%     refpropm('UDERW(*', 'P', P/1e3, 'Q', 0, 'N2O');
+% dP_dT_tg_sat = dP_dT_tg_sat * 1e3;
+% drho_dP_T = drho_dP_T * 1e-3;
+% dh_dP_T = dh_dP_T * 1e-3;
+% 
+% du_dT_P = dh_dT_P + P/rho_tg_l^2 * drho_dT_P;
+% du_dP_T = dh_dP_T + 1/rho_tg_l + P/rho_tg_l^2 * drho_dP_T;
+% 
+% du_dT_sat_tg_l = du_dT_P + du_dP_T * dP_dT_tg_sat;
+% drho_dT_l_sat = drho_dT_P + drho_dP_T * dP_dT_tg_sat;
+% % drho_dP_sat = drho_dP_T + drho_dT_P / dP_dT_sat;
+% 
+% 
+% % need to calculate a bunch of partial derivatives for the Vdot function
+% % extras are needed for the saturated ullage because the 2 phases adds more
+% % terms.
+% 
+% % properties needed for Vdot calculation (vapor)
+% [u_tg_v_sat, rho_tg_v, drho_dP_T, drho_dT_P, dh_dT_P, dh_dP_T] = ...
+%     refpropm('UDRW(*', 'P', P/1e3, 'Q', 1, 'N2O');
+% drho_dP_T = drho_dP_T * 1e-3;
+% dh_dP_T = dh_dP_T * 1e-3;
+% 
+% du_dT_P = dh_dT_P + P/rho_tg_v^2 * drho_dT_P;
+% du_dP_T = dh_dP_T + 1/rho_tg_v + P/rho_tg_v^2 * drho_dP_T;
+% 
+% du_dT_sat_tg_v = du_dT_P + du_dP_T * dP_dT_tg_sat;
+% drho_dT_v_sat = drho_dT_P + drho_dP_T * dP_dT_tg_sat;
+% % drho_dP_sat_tg = drho_dP_T + drho_dT_P / dP_dT_sat;
 
 x = (U_tg/m_tg - u_tg_l_sat) / ( u_tg_v_sat - u_tg_l_sat);
 
