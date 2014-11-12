@@ -68,6 +68,14 @@ fsolve_options = optimset('display','off');
 
 load PDT_table
 
+% need this code for using qinterp2:
+Tvec_table = PDT.T;
+Pvec_table = PDT.P;
+
+[Tgrid_table, Pgrid_table] = meshgrid(Tvec_table, Pvec_table);
+PDT.T = Tgrid_table;
+PDT.P = Pgrid_table;
+
 % for differential equation solver:
 % y(n+1) = y(n) + sum(i = 1 -> s) of b(i)*k(i)
 % k(i) = h*f(stuff)
@@ -559,8 +567,8 @@ while running == 1;
         %     rho_tg(n+1) = easy_D(P(n+1), T_tg, PDT, rho_tg_guess, fsolve_options);
         
         % calculate liquid and vapor density based on T's and P
-        rho_l(n+1) = interp2(PDT.T,PDT.P,PDT.D_liq,T_l(n+1),P(n+1)/1e3,'linear');
-%         rho_tg(n+1) = interp2(PDT.T,PDT.P,PDT.D_vap,T_tg(n+1),P(n+1)/1e3,'linear');
+        rho_l(n+1) = qinterp2(PDT.T,PDT.P,PDT.D_liq,T_l(n+1),P(n+1)/1e3);
+%         rho_tg(n+1) = qqinterp2(PDT.T,PDT.P,PDT.D_vap,T_tg(n+1),P(n+1)/1e3,'linear');
         rho_tg(n+1) = refpropm('D', 'P', P(n+1)/1e3, 'Q', 1, 'N2O');
         
         % get volumes based on mass and density
@@ -774,8 +782,8 @@ P = get_P_from_mU_mT(m_tg, U_tg, m_l, T_l, V_tank, V_bubi, PDT, guesses);
 % rho_l = easy_D(P, T_l, PDT, rho_l_guess, fsolve_options);
 % rho_tg = easy_D(P, T_tg, PDT, rho_tg_guess, fsolve_options);
 
-rho_l = interp2(PDT.T, PDT.P, PDT.D_liq, T_l, P/1e3, 'linear');
-% rho_tg = interp2(PDT.T, PDT.P, PDT.D_vap, T_tg, P, 'linear');
+rho_l = qinterp2(PDT.T, PDT.P, PDT.D_liq, T_l, P/1e3);
+% rho_tg = qqinterp2(PDT.T, PDT.P, PDT.D_vap, T_tg, P, 'linear');
 
 [rho_tg, T_tg] = refpropm('DT', 'P', P/1e3, 'U', U_tg/m_tg, 'N2O');
 
