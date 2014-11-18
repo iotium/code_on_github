@@ -3,7 +3,11 @@ function varargout = bubble_growth(varargin)
 N_dist = 50;
 r_dist_min = 1e-9;
 r_dist_max = 0.0254; % 1 inch
-n_save = 1000;
+
+t_save = 10; % save interval in minutes
+
+clock_save = clock;
+
 close all
 
 if nargin == 0
@@ -234,400 +238,419 @@ f = zeros(N_dim,1);
 % begin looping
 while running == 1;
     
-%     if ~stop.requested
+    %     if ~stop.requested
+    
+    starti = max([n-3, 1]);
+    
+    Pdot = bdiff(P,starti,n,t,adaptive);
+    rhodot_l = bdiff(rho_l,starti,n,t,adaptive);
+    rhodot_tg = bdiff(rho_tg,starti,n,t,adaptive);
+    Vdot_l(n+1) = V_tank*bdiff(V_l/V_tank,starti,n,t,adaptive);
+    Vdot_tg(n+1) = V_tank*bdiff(V_tg/V_tank,starti,n,t,adaptive);
+    
+    mdot_l = f(4);
+    rhodot_l = mdot_l/V_l(n) - m_l(n)/V_l(n)^2*Vdot_l(n);
+    
+    mdot_tg = f(1);
+    rhodot_tg = mdot_tg/V_tg(n) - m_tg(n)/V_tg(n)^2*Vdot_tg(n);
+    
+    if h > 5*h_min
         
-        starti = max([n-3, 1]);
+        derivatives = 0.5*[Pdot; rhodot_l; rhodot_tg; Vdot_l(n+1); Vdot_tg(n+1)] + 0.5*derivatives;
         
-        Pdot = bdiff(P,starti,n,t,adaptive);
-        rhodot_l = bdiff(rho_l,starti,n,t,adaptive);
-        rhodot_tg = bdiff(rho_tg,starti,n,t,adaptive);
-        Vdot_l(n+1) = V_tank*bdiff(V_l/V_tank,starti,n,t,adaptive);
-        Vdot_tg(n+1) = V_tank*bdiff(V_tg/V_tank,starti,n,t,adaptive);
+        guesses.Vdot_l = 0.5*Vdot_l(n+1) + 0.5*guesses.Vdot_l;
         
-        mdot_l = f(4);
-        rhodot_l = mdot_l/V_l(n) - m_l(n)/V_l(n)^2*Vdot_l(n);
+    end
+    %     derivatives = zeros(5,1);
+    
+    %     T_lw = y(6,n);
+    
+    %     Qdot_lw(n) = Qdot('lw',T_l(n), T_lw ,rho_l(n), m_l(n),D);
+    
+    
+    % 1 = m_tg
+    % 2 = U_tg
+    % 3 = T_gw
+    % 4 = m_l
+    % 5 = T_l
+    % 6 = T_lw
+    % 7:(N_dist + 6) = N(r)
+    
+    % if I'm just playing around, print status at each step
+    if nargin == 0
         
-        mdot_tg = f(1);
-        rhodot_tg = mdot_tg/V_tg(n) - m_tg(n)/V_tg(n)^2*Vdot_tg(n);
+        fprintf(['t = %8.6g, dt = %4.4g, P = %6.4g, V_bub = %6.4g, T_l = %6.4g, T_tg = %6.4g, m_l = %6.4g,'...
+            'm_tg = %6.4g, fill_level%% = %6.4g, Vdot_l = %6.4g, Vdot_tg = %6.4g,'...
+            ' rhodot_l = %6.4g, rhodot_tg = %6.4g\n'],...
+            t(n), t(n) - t(max([1, n-1])), P(n)/6894.8, V_bub(n), T_l(n), 0,...
+            m_l(n), m_tg(n), 100*fill_level(n), Vdot_l(n+1),...
+            Vdot_tg(n+1), rhodot_l, rhodot_tg);
         
-        if h > 5*h_min
+    end
+    
+    % if we're not on the first step and error is plenty small, increase
+    % step size
+    if  n > 1 && adaptive == 1
+        
+        % if error is < min_error
+        if max(abs_err/abs_tol,rel_err/rel_tol) < min_error
             
-            derivatives = 0.5*[Pdot; rhodot_l; rhodot_tg; Vdot_l(n+1); Vdot_tg(n+1)] + 0.5*derivatives;
-            
-            guesses.Vdot_l = 0.5*Vdot_l(n+1) + 0.5*guesses.Vdot_l;
+            % make h bigger
+            h = min(4*h,h_max);
             
         end
-        %     derivatives = zeros(5,1);
         
-        %     T_lw = y(6,n);
+        % slope of fill level curve
+        slope = bdiff(fill_level,starti,n,t,adaptive);
+        %         slope = (fill_level(n) - fill_level(n-1))/(t(n) - t(n-1));
         
-        %     Qdot_lw(n) = Qdot('lw',T_l(n), T_lw ,rho_l(n), m_l(n),D);
+        % projected t_LRO
+        t_LRO = -fill_level(n)/slope + t(n);
+        
+        h_LRO = t_LRO - t(n); % distance to t_LRO
+        
+        % if the step we're about to take is >3/4 the distance to LRO
+        % and the distance te LRO is bigger than the tolerance
+        if (h > 2*h_LRO && h_LRO > LRO_tol) && (h_LRO > 0);
+            
+            % set h to 1/2 the distance to LRO (ie refine)
+            h = 0.5*h_LRO;
+            
+        end
+        
+        if (slope*h < -0.003/100) && (fill_level(n) < 0.1/100)
+            h = h/4;
+            
+        elseif (slope*h < -0.03/100) && (fill_level(n) < 1/100);
+            h = h/2;
+        elseif (slope*h < -0.3/100) && (fill_level(n) < 5/100);
+            h = h/2;
+        end
+        
+    end
+    
+    error_OK = 0;
+    
+    
+    while error_OK == 0
+        % solving differential equations
+        % i = counter for
+        
+        constants.h = h;
+        
+        error_flag = 0;
+        
+        for i = 1:s
+            % s = number of stages in the scheme
+            
+            % 1 = m_tg
+            % 2 = U_tg
+            % 3 = T_gw
+            % 4 = m_l
+            % 5 = T_l
+            % 6 = T_lw
+            % 7:(N_dist + 6) = N(r)
+            
+            
+            if i == 1
+                
+                % f = f( t(n) , y(n) )
+                
+                f = diffeqns(y(:,n), constants, guesses, PDT);
+            else
+                
+                % f for k(2) = f( t(n) + c(2)*h , y(n) + a(2,1)*k(1) )
+                % f for k(3) = f( t(n) + c(3)*h , y(n) + a(3,1)*k(1) + a(3,2)*k(2) )
+                % and so on
+                
+                f = diffeqns(y_new, ...
+                    constants, guesses, PDT);
+            end
+            
+            k(:,i) = f*h;
+            
+            y_new = (y(:,n) + sum( (ones(N_dim,1)*a(i,1:i)).*k(:,1:i),2 ) );
+            
+            % check for high T
+            if (y_new(5) > T_cr)
+                disp('problem - temperature went above critical')
+                error_flag = 1;
+                y_new = y(:,n);
+            end
+            
+        end
+        
+        %         k1 = h*diffeqns(y(:,n));
+        %         k2 = h*diffeqns(y(:,n) + a(2,1)*k1);
+        %         k3 = h*diffeqns(y(:,n) + a(3,1)*k1 + a(3,2)*k2);
+        %         k4 = h*diffeqns(y(:,n) + a(4,1)*k1 + a(4,2)*k2 + a(4,3)*k3);
+        %         k5 = h*diffeqns(y(:,n) + a(5,1)*k1 + a(5,2)*k2 + a(5,3)*k3 + a(5,4)*k4);
+        %         k6 = h*diffeqns(y(:,n) + a(6,1)*k1 + a(6,2)*k2 + a(6,3)*k3 + a(6,4)*k4 + a(6,5)*k5);
+        %
+        %         k = [k1, k2, k3, k4, k5, k6];
+        
         
         
         % 1 = m_tg
-% 2 = U_tg
-% 3 = T_gw
-% 4 = m_l
-% 5 = T_l
-% 6 = T_lw
-% 7:(N_dist + 6) = N(r)
+        % 2 = U_tg
+        % 3 = T_gw
+        % 4 = m_l
+        % 5 = T_l
+        % 6 = T_lw
+        % 7:(N_dist + 6) = N(r)
         
-        % if I'm just playing around, print status at each step
-        if nargin == 0
-            
-            fprintf(['t = %8.6g, dt = %4.4g, P = %6.4g, V_bub = %6.4g, T_l = %6.4g, T_tg = %6.4g, m_l = %6.4g,'...
-                'm_tg = %6.4g, fill_level%% = %6.4g, Vdot_l = %6.4g, Vdot_tg = %6.4g,'...
-                ' rhodot_l = %6.4g, rhodot_tg = %6.4g\n'],...
-                t(n), t(n) - t(max([1, n-1])), P(n)/6894.8, V_bub(n), T_l(n), 0,...
-                m_l(n), m_tg(n), 100*fill_level(n), Vdot_l(n+1),...
-                Vdot_tg(n+1), rhodot_l, rhodot_tg);
-            
-        end
+        y(:,n+1) = y(:,n) + (k*b);
         
-        % if we're not on the first step and error is plenty small, increase
-        % step size
-        if  n > 1 && adaptive == 1
-            
-            % if error is < min_error
-            if max(abs_err/abs_tol,rel_err/rel_tol) < min_error
-                
-                % make h bigger
-                h = min(4*h,h_max);
-                
-            end
-            
-            % slope of fill level curve
-            slope = bdiff(fill_level,starti,n,t,adaptive);
-            %         slope = (fill_level(n) - fill_level(n-1))/(t(n) - t(n-1));
-            
-            % projected t_LRO
-            t_LRO = -fill_level(n)/slope + t(n);
-            
-            h_LRO = t_LRO - t(n); % distance to t_LRO
-            
-            % if the step we're about to take is >3/4 the distance to LRO
-            % and the distance te LRO is bigger than the tolerance
-            if (h > 2*h_LRO && h_LRO > LRO_tol) && (h_LRO > 0);
-                
-                % set h to 1/2 the distance to LRO (ie refine)
-                h = 0.5*h_LRO;
-                
-            end
-            
-            if (slope*h < -0.003/100) && (fill_level(n) < 0.1/100)
-                h = h/4;
-                
-            elseif (slope*h < -0.03/100) && (fill_level(n) < 1/100);
-                h = h/2;
-            elseif (slope*h < -0.3/100) && (fill_level(n) < 5/100);
-                h = h/2;
-            end
-            
-        end
-        
-        error_OK = 0;
-        
-        
-        while error_OK == 0
-            % solving differential equations
-            % i = counter for
-            
-            constants.h = h;
-            
-            error_flag = 0;
-            
-            for i = 1:s
-                % s = number of stages in the scheme
-                
-% 1 = m_tg
-% 2 = U_tg
-% 3 = T_gw
-% 4 = m_l
-% 5 = T_l
-% 6 = T_lw
-% 7:(N_dist + 6) = N(r)
-                
-                
-                if i == 1
-                    
-                    % f = f( t(n) , y(n) )
-                    
-                    f = diffeqns(y(:,n), constants, guesses, PDT);
-                else
-                    
-                    % f for k(2) = f( t(n) + c(2)*h , y(n) + a(2,1)*k(1) )
-                    % f for k(3) = f( t(n) + c(3)*h , y(n) + a(3,1)*k(1) + a(3,2)*k(2) )
-                    % and so on
-                    
-                    f = diffeqns(y_new, ...
-                        constants, guesses, PDT);
-                end
-                
-                k(:,i) = f*h;
-                
-                y_new = (y(:,n) + sum( (ones(N_dim,1)*a(i,1:i)).*k(:,1:i),2 ) );
-                
-                % check for high T
-                if (y_new(5) > T_cr)
-                    disp('problem - temperature went above critical')
-                    error_flag = 1;
-                    y_new = y(:,n);
-                end
-                
-            end
-            
-            %         k1 = h*diffeqns(y(:,n));
-            %         k2 = h*diffeqns(y(:,n) + a(2,1)*k1);
-            %         k3 = h*diffeqns(y(:,n) + a(3,1)*k1 + a(3,2)*k2);
-            %         k4 = h*diffeqns(y(:,n) + a(4,1)*k1 + a(4,2)*k2 + a(4,3)*k3);
-            %         k5 = h*diffeqns(y(:,n) + a(5,1)*k1 + a(5,2)*k2 + a(5,3)*k3 + a(5,4)*k4);
-            %         k6 = h*diffeqns(y(:,n) + a(6,1)*k1 + a(6,2)*k2 + a(6,3)*k3 + a(6,4)*k4 + a(6,5)*k5);
-            %
-            %         k = [k1, k2, k3, k4, k5, k6];
-            
-            
-            
-% 1 = m_tg
-% 2 = U_tg
-% 3 = T_gw
-% 4 = m_l
-% 5 = T_l
-% 6 = T_lw
-% 7:(N_dist + 6) = N(r)
-            
-            y(:,n+1) = y(:,n) + (k*b);
-            
-            N_r = y((N_dim - N_dist + 1):end, n+1);
-            N_r = (N_r >= 0).*N_r;
-            y((N_dim - N_dist + 1):end, n+1) = N_r;
-            
-            if adaptive == 1
-                % using adaptive scheme, need to check error
-                
-                err = k*(b - bs);   % absolute error (diff. between 5th and 4th order estimates of y(n+1) - y(n))
-                
-                %             rel_err = abs(err./( y(:,n) + 1e-6));  % relative error
-                
-                %             rel_err = abs(err./( mean([y(:,n) y(:,n+1)],2) + 1e-6));  % relative error
-                
-                
-                for j = 1:N_dim
-                    if abs(y(j,n)) > 1e-6
-                        
-                        rel_err(j) = abs(err(j))./( abs( mean( y(j,n:n+1))) + 1e-6);  % relative error
-                    else
-                        rel_err(j) = abs(err(j));
-                    end
-                end
-                
-                %             rel_err = rel_err(1:6); % remove the bubble distribution terms
-                
-                [rel_err, ind_max_rel_err] = max(rel_err(isfinite(rel_err)));  % fix rel_err to the maximum finite value of rel_err
-                
-                
-                
-                abs_err = abs(err);
-                
-                %             abs_err = abs_err(1:6); % remove the bubble distribution terms
-                
-                abs_err = max(abs_err(isfinite(abs_err)));  % do the same for abs_err
-                
-                % check for possible problems: isempty statements are in case
-                % abs and rel err are both full of non-finite values
-                % isnan checks for nan's
-                % isreal checks for imaginary numbers
-                error_conditions = isempty(rel_err) + ...
-                    isempty(abs_err) +  ...
-                    isnan(sum(err)) + ...
-                    ~isreal(sum(y(:,n+1))) + ...
-                    (y(5,n+1) > T_cr) + ...
-                    error_flag;
-                
-                
-                % 1 = m_tg
-% 2 = U_tg
-% 3 = T_gw
-% 4 = m_l
-% 5 = T_l
-% 6 = T_lw
-% 7:(N_dist + 6) = N(r)
-                
-                % if any of those fail, set rel_err large so that the step gets
-                % recomuputed
-                if error_conditions > 0
-                    rel_err = 1;
-                end
-                
-                if ( rel_err < rel_tol && abs_err < abs_tol) || (h < 1.25*h_min)
-                    % meeting the error requirement or step size is too
-                    % small already
-                    error_OK = 1;
-                    
-                    if ((n > 1) && ((h_LRO < LRO_tol) && (h_LRO > 0))) && (fill_level(n) < 0.01)
-                        % distance to LRO is less than LRO_tol
-                        running = 0;
-                        %                     disp('reached LRO')
-                    end
-                    
-                    if h < 2*h_min
-                        fprintf('h got too small. exceeded tolerance by %6.4g%%\n',100*rel_err/rel_tol);
-                    end
-                    
-                else
-                    
-                    fprintf(['max rel err = %6.4g, ind of max rel err = %6.4g\n'...
-                        'err(ind_max_rel_err) = %8.6g, y(ind_max_rel_err,n+1) = '...
-                        '%8.6g, y(ind_max_rel_err,n) = %8.6g\n'], ...
-                        rel_err, ind_max_rel_err, err(ind_max_rel_err), ...
-                        y(ind_max_rel_err, (n+1):-1:n))
-                    
-                    % not meeting error requirements
-                    % sh is used to update h, h = sh*h
-                    
-                    if rel_err == 0 || abs_err == 0
-                        % something odd happened, so reduce step size a lot
-                        
-                        sh = 0.1;
-                        
-                    else
-                        
-                        if rel_err/rel_tol > abs_err/abs_tol
-                            % if relative error is a bigger problem than
-                            % absolute, update step size based on relative
-                            % error. Else, use absolute
-                            
-                            sh = 0.84*( rel_tol*h / (2*rel_err) )^(1/4);
-                        else
-                            sh = 0.84*( abs_tol*h / (2*abs_err) )^(1/4);
-                        end
-                    end
-                    
-                    if sh < 0.1
-                        % if it looks like the step size would be reduced too
-                        % much, only reduce it by 1/10
-                        sh = 0.1;
-                    elseif sh > 4.0
-                        % similarly if it's too big, only make it 4x bigger
-                        sh = 4.0;
-                    end
-                    
-                    % update step size
-                    h = h*sh;
-                    
-                    % minimum step size set by computer's precision
-                    h_min = 16*eps(t(n));
-                    
-                    % self explanatory I think
-                    if h > h_max
-                        h = h_max;
-                    elseif h < h_min
-                        h = h_min;
-                    end
-                    
-                end
-                
-            else
-                % not using adaptive scheme, don't need to check error
-                error_OK = 1;
-            end
-            
-        end
-        
-% 1 = m_tg
-% 2 = U_tg
-% 3 = T_gw
-% 4 = m_l
-% 5 = T_l
-% 6 = T_lw
-% 7:(N_dist + 6) = N(r)
-        
-        m_tg(n+1) = y(1,n+1);
-        U_tg(n+1) = y(2,n+1);
-        m_l(n+1) = y(4,n+1);
-        T_l(n+1) = y(5,n+1);
-        
-        % removing distribution values <= 0
         N_r = y((N_dim - N_dist + 1):end, n+1);
         N_r = (N_r >= 0).*N_r;
         y((N_dim - N_dist + 1):end, n+1) = N_r;
         
-        % net volume of bubbles, per unit volume of liquid
-        V_bubi = trapz(r_dist, 4/3*pi*r_dist.^3.*N_r);
-        
-        % get system pressure
-        P(n+1) = get_P_from_mU_mT(m_tg(n+1), U_tg(n+1), m_l(n+1), T_l(n+1), ...
-            V_tank, V_bubi, PDT, guesses);
-        
-        
-        % saturation temp based on pressure
-        T_sat(n+1) = refpropm('T','P',P(n+1)/1e3,'Q',0.5,'N2O');
-        
-        
-        %     rho_l(n+1) = easy_D(P(n+1), T_l, PDT, rho_l_guess, fsolve_options);
-        %     rho_tg(n+1) = easy_D(P(n+1), T_tg, PDT, rho_tg_guess, fsolve_options);
-        
-        % calculate liquid and vapor density based on T's and P
-        rho_l(n+1) = qinterp2(PDT.T,PDT.P,PDT.D_liq,T_l(n+1),P(n+1)/1e3);
-%         rho_tg(n+1) = qqinterp2(PDT.T,PDT.P,PDT.D_vap,T_tg(n+1),P(n+1)/1e3,'linear');
-        rho_tg(n+1) = refpropm('D', 'P', P(n+1)/1e3, 'Q', 1, 'N2O');
-        
-        % get volumes based on mass and density
-        V_l(n+1) = m_l(n+1)/rho_l(n+1);
-        V_tg(n+1) = m_tg(n+1)/rho_tg(n+1);
-        
-        % fill level based on liquid and tank volume
-        fill_level(n+1) = V_l(n+1)/V_tank;
-        
-        % actual volume of all the bubbles
-        V_bub(n+1) = V_bubi * V_l(n+1);
-        
-        guesses.P = P(n+1);
-        guesses.rho_tg = rho_tg(n+1);
-        guesses.rho_l = rho_l(n+1);
-        
-        t(n+1) = t(n) + h;
-        
-        n = n + 1;
-        
-        if (sum(abs(imag(y(:,n)))) > 0) || (sum(isnan(y(:,n))) > 0)
-            running = 0;
-            disp('imaginary or nans')
+        if adaptive == 1
+            % using adaptive scheme, need to check error
+            
+            err = k*(b - bs);   % absolute error (diff. between 5th and 4th order estimates of y(n+1) - y(n))
+            
+            %             rel_err = abs(err./( y(:,n) + 1e-6));  % relative error
+            
+            %             rel_err = abs(err./( mean([y(:,n) y(:,n+1)],2) + 1e-6));  % relative error
+            
+            
+            for j = 1:N_dim
+                if abs(y(j,n)) > 1e-6
+                    
+                    rel_err(j) = abs(err(j))./( abs( mean( y(j,n:n+1))) + 1e-6);  % relative error
+                else
+                    rel_err(j) = abs(err(j));
+                end
+            end
+            
+            %             rel_err = rel_err(1:6); % remove the bubble distribution terms
+            
+            [rel_err, ind_max_rel_err] = max(rel_err(isfinite(rel_err)));  % fix rel_err to the maximum finite value of rel_err
+            
+            
+            
+            abs_err = abs(err);
+            
+            %             abs_err = abs_err(1:6); % remove the bubble distribution terms
+            
+            abs_err = max(abs_err(isfinite(abs_err)));  % do the same for abs_err
+            
+            % check for possible problems: isempty statements are in case
+            % abs and rel err are both full of non-finite values
+            % isnan checks for nan's
+            % isreal checks for imaginary numbers
+            error_conditions = isempty(rel_err) + ...
+                isempty(abs_err) +  ...
+                isnan(sum(err)) + ...
+                ~isreal(sum(y(:,n+1))) + ...
+                (y(5,n+1) > T_cr) + ...
+                error_flag;
+            
+            
+            % 1 = m_tg
+            % 2 = U_tg
+            % 3 = T_gw
+            % 4 = m_l
+            % 5 = T_l
+            % 6 = T_lw
+            % 7:(N_dist + 6) = N(r)
+            
+            % if any of those fail, set rel_err large so that the step gets
+            % recomuputed
+            if error_conditions > 0
+                rel_err = 1;
+            end
+            
+            if ( rel_err < rel_tol && abs_err < abs_tol) || (h < 1.25*h_min)
+                % meeting the error requirement or step size is too
+                % small already
+                error_OK = 1;
+                
+                if ((n > 1) && ((h_LRO < LRO_tol) && (h_LRO > 0))) && (fill_level(n) < 0.01)
+                    % distance to LRO is less than LRO_tol
+                    running = 0;
+                    %                     disp('reached LRO')
+                end
+                
+                if h < 2*h_min
+                    fprintf('h got too small. exceeded tolerance by %6.4g%%\n',100*rel_err/rel_tol);
+                end
+                
+            else
+                
+                fprintf(['max rel err = %6.4g, ind of max rel err = %6.4g\n'...
+                    'err(ind_max_rel_err) = %8.6g, y(ind_max_rel_err,n+1) = '...
+                    '%8.6g, y(ind_max_rel_err,n) = %8.6g\n'], ...
+                    rel_err, ind_max_rel_err, err(ind_max_rel_err), ...
+                    y(ind_max_rel_err, (n+1):-1:n))
+                
+                % not meeting error requirements
+                % sh is used to update h, h = sh*h
+                
+                if rel_err == 0 || abs_err == 0
+                    % something odd happened, so reduce step size a lot
+                    
+                    sh = 0.1;
+                    
+                else
+                    
+                    if rel_err/rel_tol > abs_err/abs_tol
+                        % if relative error is a bigger problem than
+                        % absolute, update step size based on relative
+                        % error. Else, use absolute
+                        
+                        sh = 0.84*( rel_tol*h / (2*rel_err) )^(1/4);
+                    else
+                        sh = 0.84*( abs_tol*h / (2*abs_err) )^(1/4);
+                    end
+                end
+                
+                if sh < 0.1
+                    % if it looks like the step size would be reduced too
+                    % much, only reduce it by 1/10
+                    sh = 0.1;
+                elseif sh > 4.0
+                    % similarly if it's too big, only make it 4x bigger
+                    sh = 4.0;
+                end
+                
+                % update step size
+                h = h*sh;
+                
+                % minimum step size set by computer's precision
+                h_min = 16*eps(t(n));
+                
+                % self explanatory I think
+                if h > h_max
+                    h = h_max;
+                elseif h < h_min
+                    h = h_min;
+                end
+                
+            end
+            
+        else
+            % not using adaptive scheme, don't need to check error
+            error_OK = 1;
         end
         
-        if (t(n) > t_end) || ( fill_level(n) < 1e-6)
-            %         disp('reached end t or ran out of liquid')
-            running = 0;
-        end
-        
-        if t(n) > ti
-            ti = ti + 0.1;
-            %         disp(num2str(t(n)))
-        end
-        
-        if P(end) < 2e5
-            running = 0;
-            disp('pressure got low')
-        end
-        
-        if rem(n,n_save) == 0
-            save('bubble_growth_sim_data')
-        end
-        
-%         figure(1)
-%         subplot(1,2,1)
-%         hold on
-%         plot(t(n), P(n), 'ks')
-%         
-%         subplot(1,2,2)
-%         loglog(r_dist, N_r + 1e-100)
-%         set(gca, 'xscale', 'log')
-%         set(gca, 'yscale', 'log')
-        
-%     else
-%         stop.close
-%         error('you stopped me')
-%         
+    end
+    
+    % 1 = m_tg
+    % 2 = U_tg
+    % 3 = T_gw
+    % 4 = m_l
+    % 5 = T_l
+    % 6 = T_lw
+    % 7:(N_dist + 6) = N(r)
+    
+    m_tg(n+1) = y(1,n+1);
+    U_tg(n+1) = y(2,n+1);
+    m_l(n+1) = y(4,n+1);
+    T_l(n+1) = y(5,n+1);
+    
+    % removing distribution values <= 0
+    N_r = y((N_dim - N_dist + 1):end, n+1);
+    N_r = (N_r >= 0).*N_r;
+    y((N_dim - N_dist + 1):end, n+1) = N_r;
+    
+%     for i = 2:N_dist-1
+%         if N_r(i) ~= 0
+%             if N_r(i+1) == 0 && N_r(i-1) == 0
+%                 disp(['single point spike in the distribution at i = ' num2str(i)])
+%             end
+%         end
 %     end
+                
+        
+    
+    % net volume of bubbles, per unit volume of liquid
+    V_bubi = trapz(r_dist, 4/3*pi*r_dist.^3.*N_r);
+    
+    % get system pressure
+    P(n+1) = get_P_from_mU_mT(m_tg(n+1), U_tg(n+1), m_l(n+1), T_l(n+1), ...
+        V_tank, V_bubi, PDT, guesses);
+    
+    
+    % saturation temp based on pressure
+    T_sat(n+1) = refpropm('T','P',P(n+1)/1e3,'Q',0.5,'N2O');
+    
+    
+    %     rho_l(n+1) = easy_D(P(n+1), T_l, PDT, rho_l_guess, fsolve_options);
+    %     rho_tg(n+1) = easy_D(P(n+1), T_tg, PDT, rho_tg_guess, fsolve_options);
+    
+    % calculate liquid and vapor density based on T's and P
+    rho_l(n+1) = qinterp2(PDT.T,PDT.P,PDT.D_liq,T_l(n+1),P(n+1)/1e3);
+    %         rho_tg(n+1) = qqinterp2(PDT.T,PDT.P,PDT.D_vap,T_tg(n+1),P(n+1)/1e3,'linear');
+    rho_tg(n+1) = refpropm('D', 'P', P(n+1)/1e3, 'Q', 1, 'N2O');
+    
+    % get volumes based on mass and density
+    V_l(n+1) = m_l(n+1)/rho_l(n+1);
+    V_tg(n+1) = m_tg(n+1)/rho_tg(n+1);
+    
+    % fill level based on liquid and tank volume
+    fill_level(n+1) = V_l(n+1)/V_tank;
+    
+    % actual volume of all the bubbles
+    V_bub(n+1) = V_bubi * V_l(n+1);
+    
+    guesses.P = P(n+1);
+    guesses.rho_tg = rho_tg(n+1);
+    guesses.rho_l = rho_l(n+1);
+    
+    t(n+1) = t(n) + h;
+    
+    n = n + 1;
+    
+    if (sum(abs(imag(y(:,n)))) > 0) || (sum(isnan(y(:,n))) > 0)
+        running = 0;
+        disp('imaginary or nans')
+    end
+    
+    if (t(n) > t_end) || ( fill_level(n) < 1e-6)
+        %         disp('reached end t or ran out of liquid')
+        running = 0;
+    end
+    
+    if t(n) > ti
+        ti = ti + 0.1;
+        %         disp(num2str(t(n)))
+    end
+    
+    if P(end) < 2e5
+        running = 0;
+        disp('pressure got low')
+    end
+    
+    clock_now = clock;
+    
+    time_since_save = etime(clock_now, clock_save);
+    
+    if time_since_save >= t_save*60;
+        save('bubble_growth_sim_data')
+        clock_save = clock;
+    end
+    
+    %         if rem(n,n_save) == 0
+    %             save('bubble_growth_sim_data')
+    %         end
+    
+    %         figure(1)
+    %         subplot(1,2,1)
+    %         hold on
+    %         plot(t(n), P(n), 'ks')
+    %
+    %         subplot(1,2,2)
+    %         loglog(r_dist, N_r + 1e-100)
+    %         set(gca, 'xscale', 'log')
+    %         set(gca, 'yscale', 'log')
+    
+    %     else
+    %         stop.close
+    %         error('you stopped me')
+    %
+    %     end
     
 end
 
@@ -846,10 +869,15 @@ du_dT_sat_tg_v = du_dT_P + du_dP_T * dP_dT_tg_sat;
 drho_dT_v_sat = drho_dT_P + drho_dP_T * dP_dT_tg_sat;
 % drho_dP_sat_tg = drho_dP_T + drho_dT_P / dP_dT_sat;
 
+drho_dx_P_tg = -rho_tg^2 *(1/rho_tg_v - 1/rho_tg_l);
+drho_dP_x_tg = (1/dP_dT_tg_sat) * rho_tg^2 * ( x/rho_tg_v^2 * drho_dT_v_sat + ...
+    (1-x)/rho_tg_l^2 * drho_dT_l_sat );
+
+
 rho_tg_sat = rho_tg_v;
 % % temp of saturated surface based on pressure (and h of sat. vapor)
 % [T_s, h_tg_sat, rho_tg_sat] = refpropm('THD','P',P/1e3,'Q',1,'N2O');
-% 
+%
 % % saturated liquid enthalpy at P
 % [sigma, h_l_sat] = refpropm('IH','P',P/1e3,'Q',0,'N2O');
 
@@ -876,9 +904,11 @@ if deltaT_sup > 1e-6
     
     % derivative of the radius distribution w.r.t. r
     % units of [1/m^4]
-    dN_dr = diff(N_r)./diff(r_dist);
-    dN_dr = [dN_dr(:); 0];
-    
+%     dN_dr = diff(N_r)./diff(r_dist);
+%     dN_dr = [dN_dr(:); 0];
+ind_diff = 2:N_dist-1;
+dN_dr = (N_r( ind_diff + 1) - N_r( ind_diff - 1))./( r_dist(ind_diff+1) - r_dist(ind_diff-1));
+    dN_dr = [0; dN_dr(:); 0];
     % rate of change of the distribution as caused by bubble growth (not nuc.)
     % units of [1/m^4.s]
     dN_dt_growth = - rdot.*dN_dr - N_r.*drdot_dr;
@@ -975,7 +1005,7 @@ if deltaT_sup > 1e-6
     
     % units of [m]
     radius_term = (r_nuc2 - r_nuc)/(r_nuc2 - r_nuc1)*( 0.5*( -r_nuc0 + r_nuc2) ) + ...
-        (r_nuc - r_nuc1)/(r_nuc2 - r_nuc1) * ( 0.5*( r_nuc3 - r_nuc1 ) );
+                  (r_nuc - r_nuc1)/(r_nuc2 - r_nuc1)*( 0.5*(  r_nuc3 - r_nuc1 ) );
     
     % units of [1/m^4.s]
     S = nuc_rate/( V_l * radius_term );
@@ -983,6 +1013,10 @@ if deltaT_sup > 1e-6
     % units of [1/m^4.s]
     dN_dt_nuc(ind_nuc1) = S * (r_nuc2 - r_nuc)/(r_nuc2 - r_nuc1);
     dN_dt_nuc(ind_nuc2) = S * (r_nuc - r_nuc1)/(r_nuc2 - r_nuc1);
+    
+%     fprintf([' Ndot_nuc = %6.4g, %6.4g, ind_nuc = %u, %u\n'...
+%         ' Ndot_growth = %6.4g, %6.4g\n'], dN_dt_nuc(ind_nuc1:ind_nuc2), ...
+%         ind_nuc1, ind_nuc2, dN_dt_growth(ind_nuc1:ind_nuc2));
     
     if sum(dN_dt_nuc < 0) > 0
         disp('negative nucleation')
@@ -1043,48 +1077,7 @@ du_drho_l = dh_drho_l + P/rho_l^2  - 1/rho_l * dP_drho_l;
 
 % not sure if this is correct... should it include a rhodot term?
 Vdot_bub = mdot_bub / rho_tg_sat;
-% 
-% % properties needed for Vdot calculation (liquid)
-% [u_tg_l_sat, rho_tg_l, dP_dT_tg_sat, drho_dP_T, drho_dT_P, dh_dT_P, dh_dP_T] = ...
-%     refpropm('UDERW(*', 'P', P/1e3, 'Q', 0, 'N2O');
-% dP_dT_tg_sat = dP_dT_tg_sat * 1e3;
-% drho_dP_T = drho_dP_T * 1e-3;
-% dh_dP_T = dh_dP_T * 1e-3;
-% 
-% du_dT_P = dh_dT_P + P/rho_tg_l^2 * drho_dT_P;
-% du_dP_T = dh_dP_T + 1/rho_tg_l + P/rho_tg_l^2 * drho_dP_T;
-% 
-% du_dT_sat_tg_l = du_dT_P + du_dP_T * dP_dT_tg_sat;
-% drho_dT_l_sat = drho_dT_P + drho_dP_T * dP_dT_tg_sat;
-% % drho_dP_sat = drho_dP_T + drho_dT_P / dP_dT_sat;
-% 
-% 
-% % need to calculate a bunch of partial derivatives for the Vdot function
-% % extras are needed for the saturated ullage because the 2 phases adds more
-% % terms.
-% 
-% % properties needed for Vdot calculation (vapor)
-% [u_tg_v_sat, rho_tg_v, drho_dP_T, drho_dT_P, dh_dT_P, dh_dP_T] = ...
-%     refpropm('UDRW(*', 'P', P/1e3, 'Q', 1, 'N2O');
-% drho_dP_T = drho_dP_T * 1e-3;
-% dh_dP_T = dh_dP_T * 1e-3;
-% 
-% du_dT_P = dh_dT_P + P/rho_tg_v^2 * drho_dT_P;
-% du_dP_T = dh_dP_T + 1/rho_tg_v + P/rho_tg_v^2 * drho_dP_T;
-% 
-% du_dT_sat_tg_v = du_dT_P + du_dP_T * dP_dT_tg_sat;
-% drho_dT_v_sat = drho_dT_P + drho_dP_T * dP_dT_tg_sat;
-% % drho_dP_sat_tg = drho_dP_T + drho_dT_P / dP_dT_sat;
 
-x = (U_tg/m_tg - u_tg_l_sat) / ( u_tg_v_sat - u_tg_l_sat);
-
-alpha = 1/( 1 + rho_tg_v/rho_tg_l * (1 - x)/x );
-
-rho_tg = alpha*rho_tg_v + (1 - alpha)*rho_tg_l;
-
-drho_dx_P_tg = -rho_tg^2 *(1/rho_tg_v - 1/rho_tg_l);
-drho_dP_x_tg = (1/dP_dT_tg_sat) * rho_tg^2 * ( x/rho_tg_v^2 * drho_dT_v_sat + ...
-    (1-x)/rho_tg_l^2 * drho_dT_l_sat );
 
 Vdot_l = solve_for_Vdot(Udot_tgi, mdot_tg, m_tg, ...
     Udot_li, u_l, mdot_l, m_l, du_drho_l, Cv_l, dP_drho_l, V_l, ...
