@@ -1,10 +1,11 @@
 function varargout = bubble_growth(varargin)
 
-N_dist = 50;
-r_dist_min = 1e-9;
-r_dist_max = 0.0254; % 1 inch
 
-t_save = 10; % save interval in minutes
+t_save = 1; % save interval in minutes
+constants.nuc_model = 'SJ';
+load('moments_for_qmom.mat')
+QMOM_IC = 1e-10*moments_of_pdf;
+N_mom = length(QMOM_IC);
 
 clock_save = clock;
 
@@ -13,7 +14,7 @@ close all
 if nargin == 0
     %     E = 3*3.2e2;
     %     A_inj = 0.8*2.217e-5;
-    specified_case = 2;
+    specified_case = 6;
     if ~exist('A_inj','var')
         switch specified_case
             case 1
@@ -54,21 +55,21 @@ end
 % 2 = my tank testing experimental setup
 
 % initialize program parameters
-h = 1e-6;           % [s] initial time step
+h = 1e-12;           % [s] initial time step
 running = 1;        % [] switch, 1 = program running, 0 = program stopped
 rel_tol = 1e-5;     % [] max relative error allowed in adaptive scheme
 abs_tol = 1e3;     % [] max absolute error allowed in adaptive scheme
 min_error = 1e-2;   % [] min error (relative to error_tol) before step size is increased
 adaptive = 1;       % [] switch, 1 = use 4/5 Runge-Kutta_Fehlberg, 0 = plain 4th Runge-Kutta
-h_max = 1e-0;       % [s] max allowable time step
+h_max = 1e-3;       % [s] max allowable time step
 h_min = 1e-16;      % [s] min allowable time step
 t_end = 300;         % [s] end time (if LRO doesn't happen first)
 LRO_tol = 5e-3;     % [s] tolerance for resolving the LRO point
 non_adaptive_scheme = 1; % [] switch, 1 = 4th order Runge-Kutta, 0 = 1st order Euler
 
-N_dim = 6 + N_dist;
+N_dim = 6 + N_mom;
 
-fsolve_options = optimset('display','off');
+% fsolve_options = optimset('display','off');
 
 load PDT_table
 
@@ -182,7 +183,7 @@ T_l = Ti;
 T_tg = Ti;
 
 y(:,1) = [m_tg; U_tg; Ti; m_l; Ti; Ti];
-y((N_dim - N_dist + 1):(N_dim), 1) = zeros(N_dist,1);
+y((N_dim - N_mom + 1):(N_dim), 1) = QMOM_IC(:);
 
 % 1 = m_tg
 % 2 = U_tg
@@ -190,11 +191,9 @@ y((N_dim - N_dist + 1):(N_dim), 1) = zeros(N_dist,1);
 % 4 = m_l
 % 5 = T_l
 % 6 = T_lw
-% 7:(N_dist + 6) = N(r)
+% 7:(N_mom + 6) = moments
 
-K_b = 1.38e-23;
-N_A = 6.022e23;
-h_planck = 6.626e-34;
+[K_b, N_A, h_planck] = universal_constants('boltzmann', 'avagadro', 'planck');
 
 [P_cr, T_cr] = refpropm('PT', 'C', 0, '', 0, 'N2O');
 P_cr = P_cr*1e3;
@@ -216,11 +215,6 @@ constants.P_cr = P_cr;
 constants.T_cr = T_cr;
 constants.N_A = N_A;
 constants.h_planck = h_planck;
-
-constants.N_dist = N_dist;
-constants.r_dist_min = r_dist_min;
-constants.r_dist_max = r_dist_max;
-r_dist = logspace(log10(r_dist_min), log10(r_dist_max), N_dist)';
 
 guesses.P = P;
 guesses.rho_tg = rho_tg;
@@ -274,7 +268,7 @@ while running == 1;
     % 4 = m_l
     % 5 = T_l
     % 6 = T_lw
-    % 7:(N_dist + 6) = N(r)
+    % 7:(N_mom + 6) = moments
     
     % if I'm just playing around, print status at each step
     if nargin == 0
@@ -349,7 +343,7 @@ while running == 1;
             % 4 = m_l
             % 5 = T_l
             % 6 = T_lw
-            % 7:(N_dist + 6) = N(r)
+            % 7:(N_mom + 6) = moments
             
             
             if i == 1
@@ -363,20 +357,30 @@ while running == 1;
                 % f for k(3) = f( t(n) + c(3)*h , y(n) + a(3,1)*k(1) + a(3,2)*k(2) )
                 % and so on
                 
+                a_k_term = sum( (ones(N_dim,1)*a(i,1:i-1)).*k(:,1:i-1) ,2 );
+                
+                y_new = y(:,n) + a_k_term;
+                
+                mom_part = ((N_dim - N_mom + 1):N_dim);
+                
+                if sum( y_new(mom_part) < 0) > 0
+                    disp('negative moments')
+                end
+                
                 f = diffeqns(y_new, ...
                     constants, guesses, PDT);
             end
             
             k(:,i) = f*h;
             
-            y_new = (y(:,n) + sum( (ones(N_dim,1)*a(i,1:i)).*k(:,1:i),2 ) );
+%             y_new = (y(:,n) + sum( (ones(N_dim,1)*a(i,1:i)).*k(:,1:i),2 ) );
             
-            % check for high T
-            if (y_new(5) > T_cr)
-                disp('problem - temperature went above critical')
-                error_flag = 1;
-                y_new = y(:,n);
-            end
+%             % check for high T
+%             if (y_new(5) > T_cr)
+%                 disp('problem - temperature went above critical')
+%                 error_flag = 1;
+%                 y_new = y(:,n);
+%             end
             
         end
         
@@ -389,7 +393,7 @@ while running == 1;
         %
         %         k = [k1, k2, k3, k4, k5, k6];
         
-        
+        y(:,n+1) = y(:,n) + (k*b);
         
         % 1 = m_tg
         % 2 = U_tg
@@ -397,13 +401,8 @@ while running == 1;
         % 4 = m_l
         % 5 = T_l
         % 6 = T_lw
-        % 7:(N_dist + 6) = N(r)
+        % 7:(N_mom + 6) = moments
         
-        y(:,n+1) = y(:,n) + (k*b);
-        
-        N_r = y((N_dim - N_dist + 1):end, n+1);
-        N_r = (N_r >= 0).*N_r;
-        y((N_dim - N_dist + 1):end, n+1) = N_r;
         
         if adaptive == 1
             % using adaptive scheme, need to check error
@@ -454,7 +453,7 @@ while running == 1;
             % 4 = m_l
             % 5 = T_l
             % 6 = T_lw
-            % 7:(N_dist + 6) = N(r)
+            % 7:(N_mom + 6) = moments
             
             % if any of those fail, set rel_err large so that the step gets
             % recomuputed
@@ -543,30 +542,22 @@ while running == 1;
     % 4 = m_l
     % 5 = T_l
     % 6 = T_lw
-    % 7:(N_dist + 6) = N(r)
+    % 7:(N_mom + 6) = moments
     
     m_tg(n+1) = y(1,n+1);
     U_tg(n+1) = y(2,n+1);
     m_l(n+1) = y(4,n+1);
     T_l(n+1) = y(5,n+1);
     
-    % removing distribution values <= 0
-    N_r = y((N_dim - N_dist + 1):end, n+1);
-    N_r = (N_r >= 0).*N_r;
-    y((N_dim - N_dist + 1):end, n+1) = N_r;
+%     disp('outside of loop')
+    mom = y((N_dim - N_mom + 1):end, n+1);
     
-%     for i = 2:N_dist-1
-%         if N_r(i) ~= 0
-%             if N_r(i+1) == 0 && N_r(i-1) == 0
-%                 disp(['single point spike in the distribution at i = ' num2str(i)])
-%             end
-%         end
-%     end
-                
-        
+    if sum(mom<0) > 0
+        disp('negative moments')
+    end
     
     % net volume of bubbles, per unit volume of liquid
-    V_bubi = trapz(r_dist, 4/3*pi*r_dist.^3.*N_r);
+    V_bubi = 4/3*pi*mom(4);
     
     % get system pressure
     P(n+1) = get_P_from_mU_mT(m_tg(n+1), U_tg(n+1), m_l(n+1), T_l(n+1), ...
@@ -746,17 +737,13 @@ T_air = constants.T_air;
 V_tank = constants.V_tank;
 h = constants.h;
 k_w = constants.k_w;
-N_dist = constants.N_dist;
-r_dist_min = constants.r_dist_min;
-r_dist_max = constants.r_dist_max;
 K_b = constants.K_b;
 N_A = constants.N_A;
 P_cr = constants.P_cr;
 T_cr = constants.T_cr;
 h_planck = constants.h_planck;
+nuc_model = constants.nuc_model;
 
-r_dist = logspace(log10(r_dist_min), log10(r_dist_max), N_dist);
-r_dist = r_dist(:);
 
 % retrieve derivatives calculated with backwards differencing
 % Pdot = derivatives(1);
@@ -772,7 +759,7 @@ r_dist = r_dist(:);
 % 4 = m_l
 % 5 = T_l
 % 6 = T_lw
-% 7:(N_dist + 6) = N(r)
+% 7:(N_mom + 6) = moments
 
 m_tg = y(1);
 U_tg = y(2);
@@ -780,22 +767,21 @@ T_gw = y(3);
 m_l = y(4);
 T_l = y(5);
 T_lw = y(6);
-N_r = y(7:end);
-
+mom = y(7:end);
 
 if isnan(sum(y)) || ~isreal(sum(y))
     disp('problem')
 end
 
-% if T_tg > 305
-%     disp('problem')
-% end
+N_mom = length(mom);
 
-% remove points where distribution is negative
-N_r = (N_r >= 0).*N_r;
+[r_q, w_q] = PD_method(mom);
+
+
+
 
 % bubble volume per unit volume of liquid (hence the i)
-V_bubi = trapz(r_dist, 4/3*pi*r_dist.^3.*N_r);
+V_bubi = 4/3*pi*mom(4);
 
 % get system pressure
 P = get_P_from_mU_mT(m_tg, U_tg, m_l, T_l, V_tank, V_bubi, PDT, guesses);
@@ -889,59 +875,26 @@ h_lv = h_tg_sat - h_l_sat;
 % superheat = T - T_sat
 deltaT_sup = T_l - T_s;
 
+[P_sat, s_liq_sat, h_liq_sat] = refpropm('PSH', 'T', T_l, 'Q', 0, 'N2O');
+P_sat = 1e3*P_sat;
+
 % if superheated, then calculate bubble stuff
-if deltaT_sup > 1e-6
+if deltaT_sup > 1e-9
+    
+    if sum(abs(imag([r_q(:); w_q(:)]))) > 0
+    fprintf('imaginary abscissas or weights. moments:')
+    fprintf('%0.6g\t',mom)
+    fprintf('\n')
+end
     
     % jakob number
     Ja_T = Cp_l * rho_l * deltaT_sup/(rho_tg * h_lv);
     
     % bubble radius rate of change
-    rdot = Ja_T^2 * alpha_l./r_dist;
-    
-    % derivative of above with respect to r
-    % units of [1/s]
-    drdot_dr = -Ja_T^2 * alpha_l./r_dist.^2;
-    
-    % derivative of the radius distribution w.r.t. r
-    % units of [1/m^4]
-%     dN_dr = diff(N_r)./diff(r_dist);
-%     dN_dr = [dN_dr(:); 0];
-ind_diff = 2:N_dist-1;
-dN_dr = (N_r( ind_diff + 1) - N_r( ind_diff - 1))./( r_dist(ind_diff+1) - r_dist(ind_diff-1));
-    dN_dr = [0; dN_dr(:); 0];
-    % rate of change of the distribution as caused by bubble growth (not nuc.)
-    % units of [1/m^4.s]
-    dN_dt_growth = - rdot.*dN_dr - N_r.*drdot_dr;
-    % note: it's OK for this to be negative because as bubbles grow they
-    % leave one bin for the next one. But don't want it negative where N_r
-    % is already <= 0, so:
-    %     for i = 1:N_dist
-    %         if (N_r(i) <= 0) && (dN_dt_growth(i) < 0)
-    %             dN_dt_growth(i) = 0;
-    %         end
-    %     end
+    rdot = Ja_T^2 * alpha_l ./ r_q;
     
     % radius of new bubbles
     r_nuc = 2*sigma*T_s/(rho_tg * h_lv * deltaT_sup);
-    
-    % rate of nucleation (mostly from shin & jones, 1993)
-    
-    % departure diameter [m]
-    r_dep = 2.97e4 * (P/P_cr)^-1.09 * ( P_cr * MW / (K_b * T_cr) )^(1/3);
-    % correlation from Jensen & Memmel, 1986
-    % gives values on the order of 10-20 microns
-    
-    % non-dimensional cavity size (ie bubble nucleation size)
-    r_c_star = r_nuc / r_dep;
-    
-    % non-dimensional nucleation rate
-    N_ns_star = 1e-7 * r_c_star;
-    
-    % nucleation site density [1/m^2]
-    nuc_density = N_ns_star * ( 0.5 / r_dep )^2;
-    
-    % nucleation frequency [Hz]
-    nuc_freq = 1e4 * deltaT_sup^3;
     
     % length of liquid volume [m]
     L_l = V_l / (pi * 0.25 * D^2);
@@ -949,96 +902,83 @@ dN_dr = (N_r( ind_diff + 1) - N_r( ind_diff - 1))./( r_dist(ind_diff+1) - r_dist
     % surface area [m^2]
     A_l = pi * D * L_l + pi * 0.25 * D^2;
     
-    % nucleation rate [Hz]
-    nuc_rate = nuc_density * nuc_freq * A_l;
-    
-    % alamgir and lienhard, 1981:
-    
-    B = K_b * T_l / h_planck;
-    
-    [P_sat, s_liq_sat, h_liq_sat] = refpropm('PSH', 'T', T_l, 'Q', 0, 'N2O');
-    P_sat = 1e3*P_sat;
-    
-    phi = 1e-3;
-    v_g = 1/rho_tg;
-    v_f = 1/rho_l;
-    
-    J = ( N_A/( 1/rho_l * MW) )^(2/3) * B * exp( -16*pi*sigma^3*phi / ( 3*K_b*T_s*(1 - v_f/v_g)^2 * (P_sat - P)^2 ) );
-    
-    nuc_rate = J * A_l;
-    
-    % find closest term in the distribution
-    [~, ind_dist_nuc] = min(abs(r_dist - r_nuc));
-    
-    % distribute the nucleation in the distribution appropriately
-    % space it linearly between the two closest points
-    dN_dt_nuc = zeros( size(N_r) );
-    
-    if r_nuc > r_dist(N_dist-2) || r_nuc < r_dist(3)
-        disp(['distribution not big enough, r_nuc = ' num2str(r_nuc)])
+    switch constants.nuc_model
+        
+        case 'SJ'
+            
+            % rate of nucleation (mostly from shin & jones, 1993)
+            
+            % departure diameter [m]
+            r_dep = 0.5 * 2.97e4 * (P/P_cr)^-1.09 * ( K_b * T_cr / (P_cr * MW) )^(1/3);
+            % correlation from Jensen & Memmel, 1986
+            % gives values on the order of 10-20 microns
+            
+            % non-dimensional cavity size (ie bubble nucleation size)
+            r_c_star = r_nuc / r_dep;
+            
+            % non-dimensional nucleation rate
+            N_ns_star = 1e-7 * r_c_star;
+            
+            % nucleation site density [1/m^2]
+            nuc_density = N_ns_star * ( 0.5 / r_dep )^2;
+            
+            % nucleation frequency [Hz]
+            nuc_freq = 1e4 * deltaT_sup^3;
+            
+            % nucleation rate [Hz]
+            nuc_rate = nuc_density * nuc_freq * A_l;
+            
+        case 'AL'
+     
+            % alamgir and lienhard, 1981:
+            
+            B = K_b * T_l / h_planck;
+            
+            phi = 1e-2;
+            v_g = 1/rho_tg;
+            v_f = 1/rho_l;
+            
+            J = ( N_A/( 1/rho_l * MW) )^(2/3) * B * ...
+                exp( -16*pi*sigma^3*phi / ( 3*K_b*T_s*(1 - v_f/v_g)^2 * (P_sat - P)^2 ) );
+            
+            nuc_rate = J * A_l;
+            
     end
     
-    % points 1 and 2 are the locations in the distribution where
-    % I put in the nucleation. 0 and 3 are the points around them
     
-    if r_nuc > r_dist(ind_dist_nuc)
-        % r_nuc is between ind_dist_nuc and ind_dist_nuc + 1
-        
-        ind_nuc1 = ind_dist_nuc;
-        ind_nuc2 = ind_nuc1 + 1;
-        
-    else
-        % r_nuc is between ind_dist_nuc and ind_dist_nuc - 1
-        
-        ind_nuc1 = ind_dist_nuc - 1;
-        ind_nuc2 = ind_nuc1 + 1;
-        
-    end
-    
-    ind_nuc0 = ind_nuc1 - 1;
-    ind_nuc3 = ind_nuc2 + 1;
-    
-    r_nuc0 = r_dist(ind_nuc0);
-    r_nuc1 = r_dist(ind_nuc1);
-    r_nuc2 = r_dist(ind_nuc2);
-    r_nuc3 = r_dist(ind_nuc3);
-    
-    % units of [m]
-    radius_term = (r_nuc2 - r_nuc)/(r_nuc2 - r_nuc1)*( 0.5*( -r_nuc0 + r_nuc2) ) + ...
-                  (r_nuc - r_nuc1)/(r_nuc2 - r_nuc1)*( 0.5*(  r_nuc3 - r_nuc1 ) );
-    
-    % units of [1/m^4.s]
-    S = nuc_rate/( V_l * radius_term );
-    
-    % units of [1/m^4.s]
-    dN_dt_nuc(ind_nuc1) = S * (r_nuc2 - r_nuc)/(r_nuc2 - r_nuc1);
-    dN_dt_nuc(ind_nuc2) = S * (r_nuc - r_nuc1)/(r_nuc2 - r_nuc1);
-    
-%     fprintf([' Ndot_nuc = %6.4g, %6.4g, ind_nuc = %u, %u\n'...
-%         ' Ndot_growth = %6.4g, %6.4g\n'], dN_dt_nuc(ind_nuc1:ind_nuc2), ...
-%         ind_nuc1, ind_nuc2, dN_dt_growth(ind_nuc1:ind_nuc2));
-    
-    if sum(dN_dt_nuc < 0) > 0
-        disp('negative nucleation')
-    end
-    
-    % units of [1/m^4.s]
-    dN_dt = dN_dt_nuc + dN_dt_growth;
-    
-    mdot_bub = V_l * trapz(r_dist, 4/3 * pi * rho_tg_sat * r_dist.^3 .* dN_dt_growth ) + ...
-        nuc_rate * 4/3 * pi * r_nuc^3 * rho_tg_sat;
-    
-    if isinf(mdot_bub)
-        disp('inf problem')
-    end
-    
+
 else
     
     % no superheat -> no bubble growth or nucleation
-    mdot_bub = 0;
-    dN_dt = zeros(N_dist,1);
-    [P_sat, s_liq_sat, h_liq_sat] = refpropm('PSH', 'T', T_l, 'Q', 0, 'N2O');
+    r_nuc = 0;
+    rdot = 0;
+    nuc_rate = 0;
     
+end
+
+
+for i = 1:(N_mom - 1)
+    growth_int(i) = i*sum( r_q.^(i-1) .* w_q .* rdot );
+end
+
+spec_nuc_rate = nuc_rate / V_l;
+% nucleation rate per volume
+
+for i = 1:N_mom
+    birth_death_int(i) = r_nuc.^(i-1) * spec_nuc_rate;
+end
+
+dmom_dt = birth_death_int(:) + [0; growth_int(:)] ;
+% mom(:) 
+
+if sum(dmom_dt < 0) > 0
+    disp('moments decreasing')
+end
+
+mdot_bub = V_l * 4/3*pi * rho_tg_sat * dmom_dt(4);
+
+if isinf(mdot_bub)
+    disp('inf problem')
 end
 
 % mass flow rate out via injector
@@ -1067,7 +1007,7 @@ Qdot_tg = Qdot_gw;
 
 % this isn't actually Udot, but Udot without the P*Vdot term (hence the i)
 
-Udot_li = - mdot_out*h_l - mdot_bub*(h_lv + (h_l_sat - h_l) ) + Qdot_l;
+Udot_li = - mdot_out*h_l - mdot_bub*(h_lv + (h_l_sat - h_l) + h_l) + Qdot_l;
 
 Udot_tgi = Qdot_tg;
 
@@ -1132,9 +1072,15 @@ Tdot_lw = (Qdot_alw - Qdot_lw - Qdot_wc)/(m_lw*cv_w);
 % 4 = m_l
 % 5 = T_l
 % 6 = T_lw
-% 7:(N_dist + 6) = N(r)
+% 7:(N_mom + 6) = moments
 
-dy = [mdot_tg; Udot_tg; Tdot_gw; mdot_l; Tdot_l; Tdot_lw; dN_dt(:)];
+dy = [mdot_tg; 
+    Udot_tg; 
+    Tdot_gw; 
+    mdot_l; 
+    Tdot_l; 
+    Tdot_lw; 
+    dmom_dt(:)];
 
 
 
