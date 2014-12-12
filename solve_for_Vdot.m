@@ -7,8 +7,18 @@ function Vdot_l = solve_for_Vdot(Udot_tgi, mdot_tg, m_tg, ...
 % this one assumes that the ullage is a saturated two phase mixture
 % see page 42 of notebook #5
 
+test_val = Vdot_eqns(guesses.Vdot_l);
+
+if isnan(test_val) || (isinf(test_val) || ~isreal(test_val))
+    
+    Vdot_l = pi;
+    
+else
+    
+
 Vdot_l = fzero(@(Vdot_l) Vdot_eqns(Vdot_l), guesses.Vdot_l, Vdot_bub);
 
+end
 
     function F = Vdot_eqns(Vdot_l)
         % equation that fzero tries to solve

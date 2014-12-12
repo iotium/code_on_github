@@ -59,10 +59,10 @@ if ~strcmp(dist,'random') && ~strcmp(dist, 'mcgraw')
     end
     
     moments_of_pdf = double(moment);
-    
-    hold on
-    plot(x,pdf)
-    set(gca,'xscale','log')
+%     
+%     hold on
+%     plot(x,pdf)
+%     set(gca,'xscale','log')
     
 else
     

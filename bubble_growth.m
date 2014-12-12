@@ -1,17 +1,41 @@
 function varargout = bubble_growth(varargin)
+%% define input parameters
+
+switch computer 
+    case {'GLNXA64'}
+        % on server
+        addpath('~/refprop/refprop');
+        t_save = 60; % save interval in minutes
+        plot_stuff = 0;
+
+    case {'MACI64'}
+        % on laptop
+        t_save = 10; % save interval in minutes
+        plot_stuff = 1; 
+end
 
 
-t_save = 1; % save interval in minutes
+save_stuff = 0;
+    
 constants.nuc_model = 'SJ';
 load('moments_for_qmom.mat')
-QMOM_IC = 1e-10*moments_of_pdf;
+QMOM_IC = 1e-15*moments_of_pdf;
 N_mom = length(QMOM_IC);
 
 clock_save = clock;
 
-close all
+% close all
 
 if nargin == 0
+constants.C_rdot = 1;
+constants.C_nuc_rate = 1;
+constants.n_nuc_freq = 3;
+constants.checking_gauss_error = 0;
+constants.C_death_rate = 0;
+constants.n_death_rate = 2;
+constants.alpha_lim = 0.05;
+constants.r_death = 0.25 * 0.0254;
+    
     %     E = 3*3.2e2;
     %     A_inj = 0.8*2.217e-5;
     specified_case = 6;
@@ -40,32 +64,58 @@ if nargin == 0
 else
     A_inj = varargin{1};
     specified_case = varargin{2};
-    E = varargin{3};
+    E = 1;
+    constants.C_rdot = varargin{3};
+    constants.C_nuc_rate = varargin{4};
+    constants.n_nuc_freq = varargin{5};
+    constants.checking_gauss_error = 0;
+    constants.C_death_rate = varargin{6};
+    constants.n_death_rate = varargin{7};
+    constants.alpha_lim = varargin{8};
 end
 
-% A_inj
-% tic
-% problem parameter
-% specified_case = 6;
-% A_inj = 3.2e-6;
-% plotting_LRO = 1;
+constants.phi = 1e-3;
 
-% specified_case = 4; % [] 0 = no specified case, use following
-% 1 = greg's setup from his JPC paper on modeling
-% 2 = my tank testing experimental setup
+if specified_case == 0
+        % N2O test 11 from my data
+        Ti = 280.4;           % [K] initial temperature
+        fill_level = 0.87;        % [] initial fill_level ratio (by volume)
+        E = 2.1e4;          % [] heat transfer multiplier
+        V_tank = 1.80e-4;   % [m^3] tank volume
+        L_tank = 0.356;     % [m] tank length
+        Cd = 1;         % [] injector Cd
+        A_inj = 7e-7;       % [m^2] injector area
+        Po = 1e5;           % [Pa] external pressure
+        T_air = 293;        % [K] air temperature
+        rho_w = 1360;       % [kg/m^3] density of wall material (polycarb)
+        cv_w = 1250;        % [J/kg.K] specific heat of wall (polycarb)
+        t_w = 0.0254*1/4;   % [m] wall thickness
+        D = sqrt(4/pi*V_tank/L_tank);
+        % [m] tank diameter
+        k_w = 0.195;          % [W/m.K] thermal conductivity of wall
+else
+    
+    [Ti, fill_level, V_tank, L_tank, ...
+        Cd, Po, T_air, rho_w, cv_w, t_w, D, k_w] = initial_conditions(specified_case);
+    
+end
 
 % initialize program parameters
 h = 1e-12;           % [s] initial time step
 running = 1;        % [] switch, 1 = program running, 0 = program stopped
 rel_tol = 1e-5;     % [] max relative error allowed in adaptive scheme
 abs_tol = 1e3;     % [] max absolute error allowed in adaptive scheme
-min_error = 1e-2;   % [] min error (relative to error_tol) before step size is increased
-adaptive = 1;       % [] switch, 1 = use 4/5 Runge-Kutta_Fehlberg, 0 = plain 4th Runge-Kutta
+min_error = 1e-3;   % [] min error (relative to error_tol) before step size is increased
 h_max = 1e-3;       % [s] max allowable time step
 h_min = 1e-16;      % [s] min allowable time step
 t_end = 300;         % [s] end time (if LRO doesn't happen first)
 LRO_tol = 5e-3;     % [s] tolerance for resolving the LRO point
-non_adaptive_scheme = 1; % [] switch, 1 = 4th order Runge-Kutta, 0 = 1st order Euler
+
+ode_solver = 'DP'; % [] options: 'RKF' for runge-kutta-fehlberg
+                    % 'euler' for 1st order euler
+                    % 'RK4' for 4th order runge-kutta
+                    % 'CK' for cash-karp
+                    % 'DP' for dormand-prince
 
 N_dim = 6 + N_mom;
 
@@ -92,33 +142,14 @@ PDT.P = Pgrid_table;
 % ...
 % the bs denotes b_star, and is used for error estimation
 
-if specified_case == 0
-    % can play with this one
-    Ti = 292.5;           % [K] initial temperature
-    fill_level = 0.9;        % [] initial fill_level ratio (by volume)
-    %         E = 2e2;          % [] heat transfer multiplier
-    V_tank = 0.011276;   % [m^3] tank volume
-    L_tank = 62.3*0.0254;     % [m] tank length
-    Cd = 0.5;         % [] injector Cd
-    %         A_inj = 3.15e-7;       % [m^2] injector area
-    Po = 1e5;           % [Pa] external pressure
-    T_air = 293;        % [K] air temperature
-    rho_w = 2700;       % [kg/m^3] density of wall material (aluminum)
-    cv_w = 904;         % [J/kg.K] specific heat of wall (aluminum)
-    t_w = 0.0254*1/8;   % [m] wall thickness
-    D = sqrt(4/pi*V_tank/L_tank);
-    % [m] tank diameter
-    k_w = 167;          % [W/m.K] thermal conductivity of wall
-else
-    
-    [Ti, fill_level, V_tank, L_tank, ...
-        Cd, Po, T_air, rho_w, cv_w, t_w, D, k_w] = initial_conditions(specified_case);
-    
-end
-if adaptive == 0
-    
-    if non_adaptive_scheme
-        % 4th order RK:
+
+%% initialize things
+
+switch ode_solver
+    case 'RK4'
+        % 4th order runge-kutta
+        adaptive = 0;
+        
         a = [0  0   0   0;
             .5  0   0   0;
             0   .5  0   0;
@@ -127,35 +158,80 @@ if adaptive == 0
         c = [0; .5; .5; 1];
         
         b = [1/6; 1/3; 1/3; 1/6];
-    else
         
-        % 1st order Euler
+    case 'euler'
+        % 1st order euler
+        adaptive = 0;
         
         a = [0];
         
         b = 1;
         
         c = [0];
-    end
-    
-else
-    % 4th/5th order runge kutta fehlberg
-    % a, b, bs (ie b star), and c comprise the butcher tableau
-    % c is what's usually shown on the vertical axis
-    a = [0          0           0           0           0       0;
-        .25         0           0           0           0       0;
-        3/32        9/32        0           0           0       0;
-        1932/2197   -7200/2197  7296/2197   0           0       0;
-        439/216     -8          3680/513    -845/4104   0       0;
-        -8/27       2           -3544/2565  1859/4104   -11/40  0];
-    
-    c = [0;         .25;        3/8;        12/13;      1;      .5];
-    
-    b = [16/135;    0;          6656/12825; 28561/56430;-9/50;  2/55];
-    
-    bs = [25/216;   0;          1408/2565;  2197/4104;  -1/5;   0];
-    
+        
+    case 'RKF'
+        adaptive = 1;
+        
+        % 4th/5th order runge kutta fehlberg
+        % a, b, bs (ie b star), and c comprise the butcher tableau
+        % c is what's usually shown on the vertical axis
+        % b is for the 5th order solution, bs for the 4th
+        a = [0          0           0           0           0       0;
+            .25         0           0           0           0       0;
+            3/32        9/32        0           0           0       0;
+            1932/2197   -7200/2197  7296/2197   0           0       0;
+            439/216     -8          3680/513    -845/4104   0       0;
+            -8/27       2           -3544/2565  1859/4104   -11/40  0];
+        
+        c = [0;         .25;        3/8;        12/13;      1;      .5];
+        
+        b = [16/135;    0;          6656/12825; 28561/56430;-9/50;  2/55];
+        
+        bs = [25/216;   0;          1408/2565;  2197/4104;  -1/5;   0];
+        
+    case 'CK'
+        adaptive = 1;
+        
+        % cash-karp
+        c = [0; 1/5; 3/10; 3/5; 1; 7/8];
+        
+        b = [37/378      0           250/621     125/594     0               512/1771]';
+
+        bs = [2825/27648	0           18575/48384	13525/55296	277/14336       1/4]';
+        
+        a = [0          0       0           0               0           0;
+             1/5        0       0           0               0           0;
+             3/40       9/40    0           0               0           0;
+             3/10       -9/10   6/5         0               0           0;
+            -11/54      5/2     -70/27      35/27           0           0;
+             1631/55296	175/512 575/13824	44275/110592	253/4096	0];
+         
+    case 'DP'
+        adaptive = 1;
+        
+        % dormand-prince
+        
+        c = [0              1/5     3/10        4/5         8/9         1           1]';
+        
+        b = [35/384         0       500/1113	125/192	-2187/6784      11/84       0]';
+        
+        bs = [5179/57600	0       7571/16695	393/640	-92097/339200	187/2100	1/40]';
+
+         
+        a =[0           0           0           0           0       0       0;
+            1/5         0           0           0           0       0       0;
+            3/40        9/40        0           0           0       0       0;
+            44/45       -56/15      32/9        0           0       0       0;
+            19372/6561	-25360/2187	64448/6561	-212/729    0       0       0;
+            9017/3168	-355/33     46732/5247	49/176	-5103/18656 0       0;
+            35/384      0           500/1113	125/192	-2187/6784	11/84   0];	
+
+
+        
+        
 end
+
+constants.error_detected = 0;
 
 s = length(c); % number of stages in the scheme
 
@@ -223,15 +299,24 @@ guesses.Vdot_l = 0;
 
 V_bub = 0;
 
+dT_superheat = 0;
+
 % I don't seem to be using this term anymore so just leave it
 derivatives = zeros(5,1);
 
 % initialize f
 f = zeros(N_dim,1);
 
+min_flag = 0;
+peak_flag = 0;
+
+%% ODE solver
+
 % begin looping
 while running == 1;
-    
+%     figure(1)
+%     hold on
+%     plot(t,P,'bo')
     %     if ~stop.requested
     
     starti = max([n-3, 1]);
@@ -241,6 +326,37 @@ while running == 1;
     rhodot_tg = bdiff(rho_tg,starti,n,t,adaptive);
     Vdot_l(n+1) = V_tank*bdiff(V_l/V_tank,starti,n,t,adaptive);
     Vdot_tg(n+1) = V_tank*bdiff(V_tg/V_tank,starti,n,t,adaptive);
+    
+    
+    % check for min
+    if (t(n) > 0.05) && (Pdot) > 0
+        if min_flag == 0;
+            min_flag = 1;
+            t_min = t(n);
+            n_min = n;
+        end
+    end
+    
+    % check for peak
+    if min_flag == 1
+        if (abs(Pdot) < 5e3) && (t(n) > 1.25*t_min)
+            peak_flag = 1;
+%             running = 0;
+            n_peak = n;
+            t_peak = t(n);
+        end
+    end
+    
+    if peak_flag == 1
+        if t(n) > t_peak*1.5
+%             running = 0;
+        end
+    end
+    
+    if t(n) > 2
+        running = 0;
+    end
+    
     
     mdot_l = f(4);
     rhodot_l = mdot_l/V_l(n) - m_l(n)/V_l(n)^2*Vdot_l(n);
@@ -257,10 +373,12 @@ while running == 1;
     end
     %     derivatives = zeros(5,1);
     
-    %     T_lw = y(6,n);
+    T_lw = y(6,n);
     
-    %     Qdot_lw(n) = Qdot('lw',T_l(n), T_lw ,rho_l(n), m_l(n),D);
+    Qdot_lw(n) = Qdot('lw',T_l(n), T_lw ,rho_l(n), m_l(n),D);
     
+    V_bubi = 4/3*pi*y(7+3,n); % bubble volume per volume of liquid
+    alpha = V_bubi;
     
     % 1 = m_tg
     % 2 = U_tg
@@ -273,10 +391,11 @@ while running == 1;
     % if I'm just playing around, print status at each step
     if nargin == 0
         
-        fprintf(['t = %8.6g, dt = %4.4g, P = %6.4g, V_bub = %6.4g, T_l = %6.4g, T_tg = %6.4g, m_l = %6.4g,'...
-            'm_tg = %6.4g, fill_level%% = %6.4g, Vdot_l = %6.4g, Vdot_tg = %6.4g,'...
-            ' rhodot_l = %6.4g, rhodot_tg = %6.4g\n'],...
-            t(n), t(n) - t(max([1, n-1])), P(n)/6894.8, V_bub(n), T_l(n), 0,...
+        fprintf(['t = %#6.6g, dt = %#4.4g, P = %#4.4g, V_bub = %#4.4g, dT_sup = %#4.4g,' ...
+            'alpha = %#4.4g, T_l = %#4.4g, T_tg = %#4.4g, m_l = %#4.4g,'...
+            'm_tg = %#4.4g, fill_level%% = %#4.4g, Vdot_l = %#4.4g, Vdot_tg = %#4.4g,'...
+            ' rhodot_l = %#4.4g, rhodot_tg = %#4.4g\n'],...
+            t(n), t(n) - t(max([1, n-1])), P(n)/6894.8, V_bub(n), dT_superheat(n), alpha, T_l(n), 0,...
             m_l(n), m_tg(n), 100*fill_level(n), Vdot_l(n+1),...
             Vdot_tg(n+1), rhodot_l, rhodot_tg);
         
@@ -364,7 +483,7 @@ while running == 1;
                 mom_part = ((N_dim - N_mom + 1):N_dim);
                 
                 if sum( y_new(mom_part) < 0) > 0
-                    disp('negative moments')
+%                     disp('negative moments')
                 end
                 
                 f = diffeqns(y_new, ...
@@ -373,14 +492,14 @@ while running == 1;
             
             k(:,i) = f*h;
             
-%             y_new = (y(:,n) + sum( (ones(N_dim,1)*a(i,1:i)).*k(:,1:i),2 ) );
+            %             y_new = (y(:,n) + sum( (ones(N_dim,1)*a(i,1:i)).*k(:,1:i),2 ) );
             
-%             % check for high T
-%             if (y_new(5) > T_cr)
-%                 disp('problem - temperature went above critical')
-%                 error_flag = 1;
-%                 y_new = y(:,n);
-%             end
+            %             % check for high T
+            %             if (y_new(5) > T_cr)
+            %                 disp('problem - temperature went above critical')
+            %                 error_flag = 1;
+            %                 y_new = y(:,n);
+            %             end
             
         end
         
@@ -549,7 +668,7 @@ while running == 1;
     m_l(n+1) = y(4,n+1);
     T_l(n+1) = y(5,n+1);
     
-%     disp('outside of loop')
+    %     disp('outside of loop')
     mom = y((N_dim - N_mom + 1):end, n+1);
     
     if sum(mom<0) > 0
@@ -566,6 +685,9 @@ while running == 1;
     
     % saturation temp based on pressure
     T_sat(n+1) = refpropm('T','P',P(n+1)/1e3,'Q',0.5,'N2O');
+    
+    % liquid superheat
+    dT_superheat(n+1) = T_l(n+1) - T_sat(n+1);
     
     
     %     rho_l(n+1) = easy_D(P(n+1), T_l, PDT, rho_l_guess, fsolve_options);
@@ -619,8 +741,15 @@ while running == 1;
     time_since_save = etime(clock_now, clock_save);
     
     if time_since_save >= t_save*60;
-        save('bubble_growth_sim_data')
+        if save_stuff == 1
+        save('bubble_growth_sim_data','-v7.3')
+        end
         clock_save = clock;
+    end
+    
+    
+    if constants.error_detected
+        runnung = 0;
     end
     
     %         if rem(n,n_save) == 0
@@ -645,36 +774,84 @@ while running == 1;
     
 end
 
-% toc
-%
+%% plotting and output
 if nargout > 0
-    P_LRO = P(end);
-    T_LRO = T_l(end);
-    t_LRO = t(end);
-    varargout{1} = P_LRO/P(1);
-    varargout{2} = T_LRO/T_l(1);
-    varargout{3} = t_LRO;
-    
-    if nargout > 3
-        varargout{4} = P;
-        varargout{5} = T_l;
-        varargout{6} = t;
-    end
+%     P_LRO = P(end);
+%     T_LRO = T_l(end);
+%     t_LRO = t(end);
+%     varargout{1} = P_LRO/P(1);
+%     varargout{2} = T_LRO/T_l(1);
+%     varargout{3} = t_LRO;
+%     
+%     if nargout > 3
+%         varargout{4} = P;
+%         varargout{5} = T_l;
+%         varargout{6} = t;
+%     end
+
+% if exist('n_min','var')
+%     varargout{1} = t(n_min);
+% varargout{3} = P(n_min);
+% 
+% else
+%     
+%     varargout{1} = NaN;
+%     varargout{3} = NaN;
+% end
+% 
+% if exist('n_peak','var')
+%     
+% varargout{2} = t(n_peak);
+% varargout{4} = P(n_peak);
+% else
+%     
+% varargout{2} = NaN;
+% varargout{4} = NaN;
+% end
+
+varargout{1} = t;
+varargout{2} = P;
+
 else
     
+    if save_stuff == 1
+    
+    save('bubble_growth_sim_data','-v7.3')
+    
+    end
+    
+    % 1 = m_tg
+    % 2 = U_tg
+    % 3 = T_gw
+    % 4 = m_l
+    % 5 = T_l
+    % 6 = T_lw
+    % 7:(N_mom + 6) = moments
+    
+    if plot_stuff == 1
+%     
     figure(1)
     hold on
     plot(t,P/1e6,'k-')
     xlabel('Time [s]')
-    ylabel('Pressure [s]')
+    ylabel('Pressure [MPa]')
+    hold on
+    plot(t_min, P(n_min)/1e6, 'ko')
+    plot(t_peak, P(n_peak)/1e6, 'ks')
     
     figure(2)
+    subplot(1,2,1)
+        hold on
+
+    plot(t,y(5,:),'k-',t,T_sat,'r:')
+    legend('Liquid','T_{sat}(P)')
+    subplot(1,2,2)
     hold on
-    plot(t,y(5,:),'k-',t,y(2,:),'b--',t,T_sat,'r:')
+    plot(t,y(2,:),'b--',t,T_sat,'r:')
     ylabel('Temperature')
     xlabel('Time [s]')
     
-    legend('Liquid','Vapor','T_{sat}(P)')
+    legend('Vapor','T_{sat}(P)')
     
     figure(3)
     hold on
@@ -718,11 +895,15 @@ else
     plot(t(1:end-1),Qdot_lw./m_l(1:end-1),'k-')
     xlabel('Time [s]')
     ylabel('Qdot/m')
+
+    end
     
     
 end
 
+%% differential equations
 function dy = diffeqns(y, constants, guesses, PDT)
+
 
 % retrieve constants
 E = constants.E;
@@ -743,6 +924,17 @@ P_cr = constants.P_cr;
 T_cr = constants.T_cr;
 h_planck = constants.h_planck;
 nuc_model = constants.nuc_model;
+
+n_nuc_freq = constants.n_nuc_freq;
+% n_death_rate = constants.n_death_rate;
+C_death_rate = constants.C_death_rate;
+% alpha_lim = constants.alpha_lim;
+
+phi = constants.phi;
+C_rdot = constants.C_rdot;
+C_nuc_rate = constants.C_nuc_rate;
+
+r_death = constants.r_death;
 
 
 % retrieve derivatives calculated with backwards differencing
@@ -777,8 +969,13 @@ N_mom = length(mom);
 
 [r_q, w_q] = PD_method(mom);
 
+% fprintf('abscissas = ')
+% fprintf('%6.6g, ', r_q)
+% fprintf('\n')
 
-
+if constants.checking_gauss_error
+    [r_q4, w_q4] = PD_method(mom(1:4));
+end
 
 % bubble volume per unit volume of liquid (hence the i)
 V_bubi = 4/3*pi*mom(4);
@@ -882,16 +1079,20 @@ P_sat = 1e3*P_sat;
 if deltaT_sup > 1e-9
     
     if sum(abs(imag([r_q(:); w_q(:)]))) > 0
-    fprintf('imaginary abscissas or weights. moments:')
-    fprintf('%0.6g\t',mom)
-    fprintf('\n')
-end
+        fprintf('imaginary abscissas or weights. moments:')
+        fprintf('%0.6g\t',mom)
+        fprintf('\n')
+    end
     
     % jakob number
     Ja_T = Cp_l * rho_l * deltaT_sup/(rho_tg * h_lv);
     
     % bubble radius rate of change
-    rdot = Ja_T^2 * alpha_l ./ r_q;
+    rdot = C_rdot * Ja_T^2 * alpha_l ./ r_q;
+    
+    if constants.checking_gauss_error == 1
+        rdot4 = C_rdot * Ja_T^2 * alpha_l ./ r_q4;
+    end
     
     % radius of new bubbles
     r_nuc = 2*sigma*T_s/(rho_tg * h_lv * deltaT_sup);
@@ -923,18 +1124,18 @@ end
             nuc_density = N_ns_star * ( 0.5 / r_dep )^2;
             
             % nucleation frequency [Hz]
-            nuc_freq = 1e4 * deltaT_sup^3;
+            nuc_freq = 1e4 * deltaT_sup^n_nuc_freq;
             
             % nucleation rate [Hz]
-            nuc_rate = nuc_density * nuc_freq * A_l;
+            nuc_rate = C_nuc_rate * nuc_density * nuc_freq * A_l;
             
         case 'AL'
-     
+            
             % alamgir and lienhard, 1981:
             
             B = K_b * T_l / h_planck;
             
-            phi = 1e-2;
+%             phi = 1e-2;
             v_g = 1/rho_tg;
             v_f = 1/rho_l;
             
@@ -946,7 +1147,7 @@ end
     end
     
     
-
+    
 else
     
     % no superheat -> no bubble growth or nucleation
@@ -957,25 +1158,51 @@ else
 end
 
 
+
 for i = 1:(N_mom - 1)
     growth_int(i) = i*sum( r_q.^(i-1) .* w_q .* rdot );
+end
+
+if (constants.checking_gauss_error == 1) && (length(rdot) > 1)
+    for i = 1:4
+        growth_int4(i) = i*sum( r_q4.^(i-1) .* w_q4 .* rdot4 );
+    end
+    
+    max_gauss_error = max( abs( (growth_int4 - growth_int(1:4))./growth_int(1:4)) ); 
+    fprintf('max gauss error = %0.6g\n', max_gauss_error);
+    
 end
 
 spec_nuc_rate = nuc_rate / V_l;
 % nucleation rate per volume
 
+% alpha = V_bub/(V_bub + m_l);
+% spec_death_rate = C_death_rate * (alpha/alpha_lim)^n_death_rate;
+r_death = 0.25 * 0.0254;
+
 for i = 1:N_mom
-    birth_death_int(i) = r_nuc.^(i-1) * spec_nuc_rate;
+    birth_int(i) = r_nuc.^(i-1) * spec_nuc_rate;
+%     death_int(i) = r_death.^(i-1) * spec_death_rate;
+    death_int(i) = sum( r_q.^(i-1) .* C_death_rate .* exp( r_q/r_death) .* w_q );
+%     fprintf('nuc rate = %6.6g, death rate = %6.6g\n',spec_nuc_rate, spec_death_rate);
+% disp(num2str(r_death.^(i-1) * spec_death_rate/birth_death_int(i)))
 end
 
-dmom_dt = birth_death_int(:) + [0; growth_int(:)] ;
-% mom(:) 
+
+dmom_dt = birth_int(:) - death_int(:) + [0; growth_int(:)] ;
+% mom(:)
 
 if sum(dmom_dt < 0) > 0
-    disp('moments decreasing')
+%     disp('moments decreasing')
 end
 
-mdot_bub = V_l * 4/3*pi * rho_tg_sat * dmom_dt(4);
+% mdot into bubbles from liquid
+mdot_bub_l = V_l * 4/3*pi * rho_tg_sat * (birth_int(4) + growth_int(3));
+
+% mdot into bubbles from tg
+mdot_bub_tg = - V_l * 4/3*pi * rho_tg_sat * (death_int(4));
+
+mdot_bub = mdot_bub_l + mdot_bub_tg;
 
 if isinf(mdot_bub)
     disp('inf problem')
@@ -983,15 +1210,20 @@ end
 
 % mass flow rate out via injector
 % mdot_out = Cd*A_inj*sqrt(2*rho_l*(P-Po));
+
+% A_inj = A_inj*(t > t_valve) + (t < t_valve) * t/t_valve * A_inj;
+
+
+x_liq = 1/( 1/V_bubi - rho_tg_sat/rho_l );
 mdot_out = A_inj*Cd*dyer_flow(Po, P, T_l, rho_l, P_sat, s_liq_sat, h_liq_sat);
 
 % net rate of change of gas mass
 % mdot_tg = mdot_VLB - mdot_VLC;
-mdot_tg = 0;
+mdot_tg = -mdot_bub_tg;
 
 % net rate of change of liquid mass
 % mdot_l = - mdot_VLB - mdot_out + mdot_VLC;
-mdot_l = - mdot_bub - mdot_out;
+mdot_l = - mdot_bub_l - mdot_out;
 
 % HT from wall to liquid
 Qdot_lw = Qdot('lw',T_l,T_lw,rho_l,m_l,D);
@@ -1007,7 +1239,7 @@ Qdot_tg = Qdot_gw;
 
 % this isn't actually Udot, but Udot without the P*Vdot term (hence the i)
 
-Udot_li = - mdot_out*h_l - mdot_bub*(h_lv + (h_l_sat - h_l) + h_l) + Qdot_l;
+Udot_li = - mdot_out*h_l - mdot_bub_l*(h_lv + (h_l_sat - h_l) + h_l) + Qdot_l;
 
 Udot_tgi = Qdot_tg;
 
@@ -1024,6 +1256,12 @@ Vdot_l = solve_for_Vdot(Udot_tgi, mdot_tg, m_tg, ...
     dP_dT_l, V_tg, P, drho_dx_P_tg, drho_dP_x_tg, u_tg_v_sat, ...
     u_tg_l_sat, x, ...
     du_dT_sat_tg_v, du_dT_sat_tg_l, dP_dT_tg_sat, guesses, Vdot_bub);
+
+if Vdot_l == pi
+    constants.error_detected = 1;
+    Vdot_l = 0;
+end
+
 
 Vdot_tg = - Vdot_l - Vdot_bub;
 
@@ -1074,12 +1312,12 @@ Tdot_lw = (Qdot_alw - Qdot_lw - Qdot_wc)/(m_lw*cv_w);
 % 6 = T_lw
 % 7:(N_mom + 6) = moments
 
-dy = [mdot_tg; 
-    Udot_tg; 
-    Tdot_gw; 
-    mdot_l; 
-    Tdot_l; 
-    Tdot_lw; 
+dy = [mdot_tg;
+    Udot_tg;
+    Tdot_gw;
+    mdot_l;
+    Tdot_l;
+    Tdot_lw;
     dmom_dt(:)];
 
 
