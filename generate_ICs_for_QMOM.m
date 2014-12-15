@@ -41,7 +41,7 @@ if ~strcmp(dist,'random') && ~strcmp(dist, 'mcgraw')
         moment(i) = subs(deriv, [alpha beta t], [alpha_val beta_val 0]);
     end
     
-    x = logspace(-10,1,1000);
+    x = logspace(-10,3,1000);
     
     switch dist
         case 'gamma'
@@ -60,9 +60,9 @@ if ~strcmp(dist,'random') && ~strcmp(dist, 'mcgraw')
     
     moments_of_pdf = double(moment);
 %     
-%     hold on
-%     plot(x,pdf)
-%     set(gca,'xscale','log')
+    hold on
+    plot(x,pdf)
+    set(gca,'xscale','log')
     
 else
     

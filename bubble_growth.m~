@@ -107,7 +107,7 @@ running = 1;        % [] switch, 1 = program running, 0 = program stopped
 rel_tol = 1e-5;     % [] max relative error allowed in adaptive scheme
 abs_tol = 1e3;     % [] max absolute error allowed in adaptive scheme
 min_error = 1e-3;   % [] min error (relative to error_tol) before step size is increased
-h_max = 1e-3;       % [s] max allowable time step
+h_max = 1e-2;       % [s] max allowable time step
 h_min = 1e-16;      % [s] min allowable time step
 t_end = 300;         % [s] end time (if LRO doesn't happen first)
 LRO_tol = 5e-3;     % [s] tolerance for resolving the LRO point

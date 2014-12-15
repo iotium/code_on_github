@@ -1,6 +1,6 @@
 function [r,w] = PD_method(moments)
 
-recover_moments = 0;
+recover_moments = 1;
 
 moments = moments(:)';
 
@@ -62,14 +62,14 @@ else
     [eigvec, eigval] = eig(J);
     
     for i = 1:Nq
-        w(i) = m(1) * eigvec(1,i)^2;
+        w(i) = m(1) * eigvec(i,1)^2;
         r(i) = eigval(i,i);
     end
     
     % w are the weights,
     % r are the abscissas
     w = m_0 * fliplr(w);
-    r = fliplr(r);
+    r = m_0 * fliplr(r);
     
 %     if sum(abs(imag([r(:); w(:)]))) > 0
 %         disp('imaginary abscissas or weights')
