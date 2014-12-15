@@ -19,8 +19,10 @@ save_stuff = 0;
     
 constants.nuc_model = 'SJ';
 load('moments_for_qmom.mat')
-QMOM_IC = 1e-15*moments_of_pdf;
+QMOM_IC = 1e-20*moments_of_pdf;
 N_mom = length(QMOM_IC);
+
+constants.phi = 1e-3;
 
 clock_save = clock;
 
@@ -31,9 +33,9 @@ constants.C_rdot = 1;
 constants.C_nuc_rate = 1;
 constants.n_nuc_freq = 3;
 constants.checking_gauss_error = 0;
-constants.C_death_rate = 0;
-constants.n_death_rate = 2;
-constants.alpha_lim = 0.05;
+constants.C_death_rate = 1e-30;
+% constants.n_death_rate = 2;
+% constants.alpha_lim = 0.05;
 constants.r_death = 0.25 * 0.0254;
     
     %     E = 3*3.2e2;
@@ -74,7 +76,6 @@ else
     constants.alpha_lim = varargin{8};
 end
 
-constants.phi = 1e-3;
 
 if specified_case == 0
         % N2O test 11 from my data
@@ -349,7 +350,7 @@ while running == 1;
     
     if peak_flag == 1
         if t(n) > t_peak*1.5
-%             running = 0;
+            running = 0;
         end
     end
     
@@ -702,6 +703,7 @@ while running == 1;
     V_l(n+1) = m_l(n+1)/rho_l(n+1);
     V_tg(n+1) = m_tg(n+1)/rho_tg(n+1);
     
+    
     % fill level based on liquid and tank volume
     fill_level(n+1) = V_l(n+1)/V_tank;
     
@@ -816,7 +818,7 @@ else
     
     if save_stuff == 1
     
-    save('bubble_growth_sim_data','-v7.3')
+        save('bubble_growth_sim_data','-v7.3')
     
     end
     
@@ -827,6 +829,12 @@ else
     % 5 = T_l
     % 6 = T_lw
     % 7:(N_mom + 6) = moments
+    
+    
+    V_bub = y(10,:);
+    A_bub = y(8,:);
+    V_bub = 4/3 * pi *V_bub;
+    A_bub = 4*pi*A_bub;
     
     if plot_stuff == 1
 %     
@@ -840,17 +848,11 @@ else
     plot(t_peak, P(n_peak)/1e6, 'ks')
     
     figure(2)
-    subplot(1,2,1)
-        hold on
-
+    hold on
     plot(t,y(5,:),'k-',t,T_sat,'r:')
     legend('Liquid','T_{sat}(P)')
-    subplot(1,2,2)
-    hold on
-    plot(t,y(2,:),'b--',t,T_sat,'r:')
     ylabel('Temperature')
-    xlabel('Time [s]')
-    
+    xlabel('Time [s]')    
     legend('Vapor','T_{sat}(P)')
     
     figure(3)
@@ -858,43 +860,71 @@ else
     plot(t,y(6,:),'k-',t,y(3,:),'b--')
     title('wall temp')
     xlabel('Time [s]')
-    
     legend('liquid','vapor')
+    title('wall temp')
     
     figure(4)
     hold on
     plot(t,y(4,:),'k-',t,y(1,:),'b--')
     title('Mass')
     xlabel('Time [s]')
-    
     legend('Liquid','Vapor')
+    title('masses')
     
-    figure(5)
-    subplot(1,3,1)
-    hold on
-    plot(t,P/1e6,'k-')
-    xlabel('Time [s]')
-    ylabel('Pressure [MPa]')
+%     figure(5)
+%     subplot(1,3,1)
+%     hold on
+%     plot(t,P/1e6,'k-')
+%     xlabel('Time [s]')
+%     ylabel('Pressure [MPa]')
+%     
+%     subplot(1,3,2)
+%     hold on
+%     plot(t,T_l,'k',t,T_tg,'b--')
+%     xlabel('Time [s]')
+%     ylabel('Temperature [K]')
+%     legend('Liquid','Vapor')
+%     
+%     subplot(1,3,3)
+%     hold on
+%     plot(t,m_l,'k-',t,m_tg,'b--')
+%     xlabel('Time [s]')
+%     ylabel('Mass [kg]')
+%     legend('Liquid','Vapor')
+%     
+%     figure(6)
+%     hold on
+%     plot(t(1:end-1),Qdot_lw./m_l(1:end-1),'k-')
+%     xlabel('Time [s]')
+%     ylabel('Qdot/m')
     
-    subplot(1,3,2)
+    figure(7)
     hold on
-    plot(t,T_l,'k',t,T_tg,'b--')
+    plot(t, A_bub,'k')
     xlabel('Time [s]')
-    ylabel('Temperature [K]')
-    legend('Liquid','Vapor')
+    ylabel('A/V [1/m]')
+    title('interfacial area per volume')
     
-    subplot(1,3,3)
+    figure(8)
     hold on
-    plot(t,m_l,'k-',t,m_tg,'b--')
+    plot(t, V_bub,'k')
     xlabel('Time [s]')
-    ylabel('Mass [kg]')
-    legend('Liquid','Vapor')
+    ylabel('gas holdup')
+
+    figure(9)
+    hold on
+    plot(t, 6*V_bub./A_bub, 'k')
+    xlabel('Time [s]')
+    ylabel(' sauter diameter [m]')
+    set(gca,'yscale','log')
     
-    figure(6)
+    figure(10)
     hold on
-    plot(t(1:end-1),Qdot_lw./m_l(1:end-1),'k-')
+    plot(t, y(7:end,:))
     xlabel('Time [s]')
-    ylabel('Qdot/m')
+    ylabel('Moment [various]')
+    set(gca,'yscale','log')
+    title('moments')
 
     end
     
@@ -971,6 +1001,12 @@ N_mom = length(mom);
 
 % fprintf('abscissas = ')
 % fprintf('%6.6g, ', r_q)
+% fprintf('\n')
+% fprintf('weights = ')
+% fprintf('%6.6g, ', w_q)
+% fprintf('\n')
+% fprintf('L*w = ')
+% fprintf('%6.6g, ', w_q.*r_q)
 % fprintf('\n')
 
 if constants.checking_gauss_error
@@ -1158,14 +1194,16 @@ else
 end
 
 
+growth_int(1) = 0;
 
-for i = 1:(N_mom - 1)
-    growth_int(i) = i*sum( r_q.^(i-1) .* w_q .* rdot );
+for i = 2:N_mom
+    growth_int(i) = (i-1)*sum( r_q.^(i-2) .* w_q .* rdot );
 end
 
 if (constants.checking_gauss_error == 1) && (length(rdot) > 1)
-    for i = 1:4
-        growth_int4(i) = i*sum( r_q4.^(i-1) .* w_q4 .* rdot4 );
+    growth_int4(1) = 0;
+    for i = 2:4
+        growth_int4(i) = (i-1)*sum( r_q4.^(i-2) .* w_q4 .* rdot4 );
     end
     
     max_gauss_error = max( abs( (growth_int4 - growth_int(1:4))./growth_int(1:4)) ); 
@@ -1178,18 +1216,28 @@ spec_nuc_rate = nuc_rate / V_l;
 
 % alpha = V_bub/(V_bub + m_l);
 % spec_death_rate = C_death_rate * (alpha/alpha_lim)^n_death_rate;
-r_death = 0.25 * 0.0254;
 
 for i = 1:N_mom
     birth_int(i) = r_nuc.^(i-1) * spec_nuc_rate;
+        death_int(i) = sum( r_q.^(i-1) .* w_q .* C_death_rate .* 0.5.*(1 + erf( 10 * (r_q/r_death - 1) ) ) );
+
+%     death_int(i) = sum( r_q.^(i-1) .* w_q .* C_death_rate .* 0.5.*(1 + tanh( 10 * (r_q/r_death - 1) ) ) );
+    
 %     death_int(i) = r_death.^(i-1) * spec_death_rate;
-    death_int(i) = sum( r_q.^(i-1) .* C_death_rate .* exp( r_q/r_death) .* w_q );
+% ln_death_int = (i-1)*log( abs(r_q) ) + log(C_death_rate)  -r_death./abs(r_q) + log(abs(w_q));
+% death_int(i) = sum( exp(ln_death_int) );
+%     death_int(i) = sum( r_q.^(i-1) .* C_death_rate.*exp( abs(r_q/r_death)) .* w_q );
 %     fprintf('nuc rate = %6.6g, death rate = %6.6g\n',spec_nuc_rate, spec_death_rate);
 % disp(num2str(r_death.^(i-1) * spec_death_rate/birth_death_int(i)))
 end
 
+% death_int
 
-dmom_dt = birth_int(:) - death_int(:) + [0; growth_int(:)] ;
+if C_death_rate == 0
+    death_int = zeros(size(death_int));
+end
+
+dmom_dt = birth_int(:) - death_int(:) + growth_int(:) ;
 % mom(:)
 
 if sum(dmom_dt < 0) > 0
@@ -1197,7 +1245,7 @@ if sum(dmom_dt < 0) > 0
 end
 
 % mdot into bubbles from liquid
-mdot_bub_l = V_l * 4/3*pi * rho_tg_sat * (birth_int(4) + growth_int(3));
+mdot_bub_l = V_l * 4/3*pi * rho_tg_sat * (birth_int(4) + growth_int(4));
 
 % mdot into bubbles from tg
 mdot_bub_tg = - V_l * 4/3*pi * rho_tg_sat * (death_int(4));
@@ -1258,6 +1306,7 @@ Vdot_l = solve_for_Vdot(Udot_tgi, mdot_tg, m_tg, ...
     du_dT_sat_tg_v, du_dT_sat_tg_l, dP_dT_tg_sat, guesses, Vdot_bub);
 
 if Vdot_l == pi
+    disp('vdot error')
     constants.error_detected = 1;
     Vdot_l = 0;
 end
