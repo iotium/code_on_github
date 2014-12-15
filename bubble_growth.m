@@ -19,7 +19,7 @@ end
     
 constants.nuc_model = 'SJ';
 load('moments_for_qmom.mat')
-QMOM_IC = 1e-20*moments_of_pdf;
+QMOM_IC = 1e-10*moments_of_pdf;
 N_mom = length(QMOM_IC);
 
 constants.phi = 1e-3;
@@ -29,14 +29,14 @@ clock_save = clock;
 % close all
 
 if nargin == 0
-constants.C_rdot = 1;
-constants.C_nuc_rate = 1;
+constants.C_rdot = 3;
+constants.C_nuc_rate = 30;
 constants.n_nuc_freq = 3;
 constants.checking_gauss_error = 0;
-constants.C_death_rate = 1e-32;
+constants.C_death_rate = 16;
 % constants.n_death_rate = 2;
 % constants.alpha_lim = 0.05;
-constants.r_death = 0.25 * 0.0254;
+constants.r_death = 0.5 * 0.0254;
     
     %     E = 3*3.2e2;
     %     A_inj = 0.8*2.217e-5;
@@ -107,7 +107,7 @@ running = 1;        % [] switch, 1 = program running, 0 = program stopped
 rel_tol = 1e-5;     % [] max relative error allowed in adaptive scheme
 abs_tol = 1e3;     % [] max absolute error allowed in adaptive scheme
 min_error = 1e-3;   % [] min error (relative to error_tol) before step size is increased
-h_max = 1e-3;       % [s] max allowable time step
+h_max = 1e-2;       % [s] max allowable time step
 h_min = 1e-16;      % [s] min allowable time step
 t_end = 300;         % [s] end time (if LRO doesn't happen first)
 LRO_tol = 5e-3;     % [s] tolerance for resolving the LRO point
@@ -340,7 +340,7 @@ while running == 1;
     
     % check for peak
     if min_flag == 1
-        if (abs(Pdot) < 5e3) && (t(n) > 1.25*t_min)
+        if (abs(Pdot) < 5e4) && (t(n) > 1.25*t_min)
             peak_flag = 1;
 %             running = 0;
             n_peak = n;
@@ -844,8 +844,10 @@ else
     xlabel('Time [s]')
     ylabel('Pressure [MPa]')
     hold on
+    if min_flag
     plot(t_min, P(n_min)/1e6, 'ko')
     plot(t_peak, P(n_peak)/1e6, 'ks')
+    end
     
     figure(2)
     hold on
@@ -992,10 +994,16 @@ T_lw = y(6);
 mom = y(7:end);
 
 if isnan(sum(y)) || ~isreal(sum(y))
-    disp('problem')
+    disp('problem: nans or imaginary y')
 end
 
 N_mom = length(mom);
+
+
+if sum(mom<0) > 0
+    disp('negative moments in diff eqns.')
+    mom = abs(mom);
+end
 
 [r_q, w_q] = PD_method(mom);
 
@@ -1018,6 +1026,13 @@ V_bubi = 4/3*pi*mom(4);
 
 % get system pressure
 P = get_P_from_mU_mT(m_tg, U_tg, m_l, T_l, V_tank, V_bubi, PDT, guesses);
+
+if P == pi
+    disp('P error')
+    constants.error_detected = 1;
+    P = guesses.P;
+end
+
 
 % get density of liquid and ullage based on temperature and pressure
 
@@ -1118,6 +1133,7 @@ if deltaT_sup > 1e-9
         fprintf('imaginary abscissas or weights. moments:')
         fprintf('%0.6g\t',mom)
         fprintf('\n')
+        
     end
     
     % jakob number
@@ -1219,7 +1235,7 @@ spec_nuc_rate = nuc_rate / V_l;
 
 for i = 1:N_mom
     birth_int(i) = r_nuc.^(i-1) * spec_nuc_rate;
-        death_int(i) = sum( r_q.^(i-1) .* w_q .* C_death_rate .* 0.5.*(1 + erf( 10 * (r_q/r_death - 1) ) ) );
+        death_int(i) = sum( r_q.^(i-1) .* w_q .* C_death_rate .* 0.5.*(1 + erf( 1 * (abs(r_q)/r_death - 1) ) ) );
 
 %     death_int(i) = sum( r_q.^(i-1) .* w_q .* C_death_rate .* 0.5.*(1 + tanh( 10 * (r_q/r_death - 1) ) ) );
     
@@ -1308,7 +1324,7 @@ Vdot_l = solve_for_Vdot(Udot_tgi, mdot_tg, m_tg, ...
 if Vdot_l == pi
     disp('vdot error')
     constants.error_detected = 1;
-    Vdot_l = 0;
+    Vdot_l = guesses.Vdot_l;
 end
 
 

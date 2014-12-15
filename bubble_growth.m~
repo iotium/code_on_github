@@ -29,11 +29,11 @@ clock_save = clock;
 % close all
 
 if nargin == 0
-constants.C_rdot = 1;
+constants.C_rdot = 100;
 constants.C_nuc_rate = 1;
 constants.n_nuc_freq = 3;
 constants.checking_gauss_error = 0;
-constants.C_death_rate = 1e-32;
+constants.C_death_rate = ;
 % constants.n_death_rate = 2;
 % constants.alpha_lim = 0.05;
 constants.r_death = 0.25 * 0.0254;
@@ -340,7 +340,7 @@ while running == 1;
     
     % check for peak
     if min_flag == 1
-        if (abs(Pdot) < 5e3) && (t(n) > 1.25*t_min)
+        if (abs(Pdot) < 5e4) && (t(n) > 1.25*t_min)
             peak_flag = 1;
 %             running = 0;
             n_peak = n;

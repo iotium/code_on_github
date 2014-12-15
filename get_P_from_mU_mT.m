@@ -3,16 +3,26 @@
 function P = get_P_from_mU_mT(m_tg, U_tg, m_l, T_l, V_tank, V_bubi, PDT, guesses)
 
 
-[P, ~, exitflag] = fzero(@(P) eqns_to_solve(P), guesses.P);
+test_val = eqns_to_solve(guesses.P);
 
-if (exitflag ~= 1)
-    disp('something wrong in solving for P')
+if isnan(test_val) || (isinf(test_val) || ~isreal(test_val))
+    
+    P = pi;
+    
+else
+    
+    [P, ~, exitflag] = fzero(@(P) eqns_to_solve(P), guesses.P);
+    
+    if (exitflag ~= 1)
+        disp('something wrong in solving for P')
+    end
+    
 end
 
     function F = eqns_to_solve(P)
         
-%          rho_tg = refpropm('D', 'P', P/1e3, 'U', U_tg/m_tg, 'N2O');
-         
+        %          rho_tg = refpropm('D', 'P', P/1e3, 'U', U_tg/m_tg, 'N2O');
+        
         [rho_tg_l, rho_tg_v, u_tg_l, u_tg_v] = n2o_fits_for_getting_P(P);
         u_tg = U_tg/m_tg;
         x = (u_tg - u_tg_l)/(u_tg_v - u_tg_l);

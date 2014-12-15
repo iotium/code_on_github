@@ -62,9 +62,9 @@ end
        
         F = (Pdot_l - Pdot_tg)/(abs(Pdot_l_guess) + 1e-6);
         
-        if isnan(F) || ~isreal(F)
-            disp(['problem in vdot solution'])
-        end
+%         if isnan(F) || ~isreal(F)
+%             disp(['problem in vdot solution'])
+%         end
         
     end
 

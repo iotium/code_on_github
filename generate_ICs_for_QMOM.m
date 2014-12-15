@@ -3,7 +3,7 @@
 
 clear all
 
-N_mom = 6;
+N_mom = 8;
 
 dist = 'gamma';
 
@@ -16,25 +16,17 @@ if ~strcmp(dist,'random') && ~strcmp(dist, 'mcgraw')
     
     switch dist
         case 'gamma'
-            
             % gamma dist
             m = (1 - beta*t)^-alpha;
         case 'weibull'
             % weibull dist
             m = beta^(t/alpha) * gamma( 1 + t/alpha);
-            
         case 'normal'
             % normal dist
             % here mu = alpha
             % sigma = beta
-            m = exp(alpha*t + (t^2*beta^2/2) );
-            
-            
-            
+            m = exp(alpha*t + (t^2*beta^2/2) );     
     end
-    
-    
-    
     
     for i = 1:N_mom
         deriv = diff(m, t, i);
@@ -60,22 +52,35 @@ if ~strcmp(dist,'random') && ~strcmp(dist, 'mcgraw')
     
     moments_of_pdf = double(moment);
 %     
-    hold on
-    plot(x,pdf)
-    set(gca,'xscale','log')
+%     hold on
+%     plot(x,pdf)
+%     set(gca,'xscale','log')
     
 else
     
     switch dist
         case 'random'
     
-            moments_of_pdf = 1e-10*rand(N_mom,1);
+            moments_of_pdf = rand(N_mom,1);
     
         case 'mcgraw'
-            moments_of_pdf = 1e-50 * [1 5 33.3333 277.778 2777.78 32407.4];
+            moments_of_pdf = [1 5 33.3333 277.778 2777.78 32407.4];
     end
 end
 
+[r,w] = PD_method(moments_of_pdf);
+
+if sum(isnan([r(:); w(:)])) > 0
+    disp('nans result from PD method')
+end
+
+if sum([r(:); w(:)] < 0 ) > 0
+    disp('negative abscissas or weights from PD method')
+end
+
+if sum(imag([r(:); w(:)])) > 0
+    disp('complex abscissas or weights from PD method')
+end
 save('moments_for_qmom.mat','moments_of_pdf')
 
 
