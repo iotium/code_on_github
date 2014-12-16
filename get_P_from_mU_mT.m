@@ -29,6 +29,8 @@ end
         alpha = 1/( 1 + rho_tg_v/rho_tg_l * (1 - x)/x );
         rho_tg = alpha*rho_tg_v + (1 - alpha)*rho_tg_l;
         
+%         rho_l = get_D_from_TP(T_l, P, guesses);
+        
         rho_l = qinterp2(PDT.T, PDT.P, PDT.D_liq, T_l, P/1e3);
         
         V_tg = m_tg/rho_tg;

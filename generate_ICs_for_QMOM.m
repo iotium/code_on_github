@@ -3,7 +3,7 @@
 
 clear all
 
-N_mom = 6;
+N_mom = 12;
 
 dist = 'gamma';
 
@@ -30,6 +30,8 @@ if ~strcmp(dist,'random') && ~strcmp(dist, 'mcgraw')
     
     for i = 1:N_mom
         deriv = diff(m, t, i);
+%         pretty(simplify(subs(deriv,t,0)))
+%         pause
         moment(i) = subs(deriv, [alpha beta t], [alpha_val beta_val 0]);
     end
     
