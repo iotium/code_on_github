@@ -3,14 +3,14 @@
 
 clear all
 
-N_mom = 6;
+N_mom = 8;
 
 dist = 'gamma';
 
 if ~strcmp(dist,'random') && ~strcmp(dist, 'mcgraw')
     
-    alpha_val = 5e-10;
-    beta_val = 1e-3;
+    alpha_val = 5;
+    beta_val = 1;
     
     syms alpha beta t
     
@@ -52,9 +52,9 @@ if ~strcmp(dist,'random') && ~strcmp(dist, 'mcgraw')
     
     moments_of_pdf = double(moment);
 %     
-    hold on
-    plot(x,pdf)
-    set(gca,'xscale','log')
+%     hold on
+%     plot(x,pdf)
+%     set(gca,'xscale','log')
     
 else
     
