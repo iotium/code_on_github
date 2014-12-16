@@ -26,11 +26,11 @@ N_mom = length(QMOM_IC);
 
 N_mom = 6;
 
-% r_ic = [3e-6 2e-3 7e-4];
-% w_ic = [1 0.01  1e-3];
-
-r_ic = [3e-8 2e-8 7e-8];
+r_ic = [3e-6 2e-3 7e-4];
 w_ic = [1 0.01  1e-3];
+
+% r_ic = [3e-8 2e-8 7e-8];
+% w_ic = [1 0.01  1e-3];
 
 DQMOM_IC = [w_ic(:); r_ic(:).*w_ic(:)];
 
@@ -266,12 +266,9 @@ P = P*1e3;
 
 T_sat = Ti;
 
-
 for i = 1:2*N_ab
     mom(i) = sum( r_ic.^(i-1) .* w_ic );
 end
-
-
 
 % net volume of bubbles, per unit volume of liquid
 V_bubi = 4/3*pi*mom(4);
@@ -746,11 +743,11 @@ while running == 1;
     V_l(n+1) = m_l(n+1)/rho_l(n+1);
     V_tg(n+1) = m_tg(n+1)/rho_tg(n+1);
     
-    V_l_star = V_l(n+1)/(1 - V_bubi);
+    V_l_star(n+1) = V_l(n+1)/(1 - V_bubi);
     
     
     % fill level based on liquid and tank volume
-    fill_level(n+1) = V_l_star/V_tank;
+    fill_level(n+1) = V_l_star(n+1)/V_tank;
     
     % actual volume of all the bubbles
     V_bub(n+1) = V_bubi * V_l(n+1)/(1 - V_bubi);
@@ -898,6 +895,9 @@ else
     
     V_bubi = 4/3*pi*mom(4,:);
     A_bubi = 4*pi*mom(3,:);
+    
+    V_bub = V_bubi.*V_l_star;
+    A_bub = A_bubi.*V_l_star;
     
     if plot_stuff == 1
         %
@@ -1246,28 +1246,36 @@ else
 end
 
 
+r_m = max(abs(r_q));
+
+r_s = r_q/r_m;
+
 growth_int(1) = 0;
 
 for i = 2:N*2
-    growth_int(i) = (i-1)*sum( r_q.^(i-2) .* w_q .* rdot );
+%     growth_int(i) = (i-1)*sum( r_q.^(i-2) .* w_q .* rdot );
+    growth_int_s(i) = (i-1)*sum( (1/r_m) * r_s.^(i-2) .* w_q .* rdot );
 end
 
 spec_nuc_rate = nuc_rate / V_l_star;
 % nucleation rate per volume
 
 for i = 1:N*2
-    birth_int(i) = r_nuc.^(i-1) * spec_nuc_rate;
-    death_int(i) = sum( r_q.^(i-1) .* w_q .* C_death_rate ...
+%     birth_int(i) = r_nuc.^(i-1) * spec_nuc_rate;
+%     death_int(i) = sum( r_q.^(i-1) .* w_q .* C_death_rate ...
+%         .* 0.5.*(1 + erf( 10 * (abs(r_q)/r_death - 1) ) ) );
+    birth_int_s(i) = (r_nuc/r_m).^(i-1) * spec_nuc_rate;
+    death_int_s(i) = sum( r_s.^(i-1) .* w_q .* C_death_rate ...
         .* 0.5.*(1 + erf( 10 * (abs(r_q)/r_death - 1) ) ) );
 end
 
 % death_int
 
-if C_death_rate == 0
-    death_int = zeros(size(death_int));
-end
+% if C_death_rate == 0
+%     death_int = zeros(size(death_int));
+% end
 
-dmom_dt = birth_int(:) - death_int(:) + growth_int(:);
+dmom_dt_s = birth_int_s(:) - death_int_s(:) + growth_int_s(:);
 
 
 ill_conditioned = 1;
@@ -1277,10 +1285,10 @@ while ill_conditioned
     
     if n > 1
     
-    r_qp = r_q + (0.5 - rand(size(r_q))).*abs(r_q)*1e-3;
+    r_sp = r_s + (0.5 - rand(size(r_s))).*abs(r_s)*1e-3;
     
     else
-        r_qp = r_q;
+        r_sp = r_s;
     end
 
     for j = 0:(2*N - 1)
@@ -1291,8 +1299,9 @@ while ill_conditioned
             A1(2,:) = zeros(1,N);
             A2(2,:) = ones(1,N);
         else
-            A1(j+1,:) = (1 - j)*r_qp.^j;
-            A2(j+1,:) = j*r_qp.^(j - 1);
+            A1(j+1,:) = (1 - j)*r_sp.^j;
+%             A2(j+1,:) = j*r_sp.^(j - 1);
+            A2(j+1,:) = j*r_sp.^(j);
         end
     end
 
@@ -1317,25 +1326,30 @@ while ill_conditioned
     n = n + 1;
 end
 
-beta_q = dmom_dt;
+beta_q = dmom_dt_s;
 
 alpha_q = A\beta_q;
 
 a_q = alpha_q(1:N);
-b_q = alpha_q(N+1:end);
+b_q_s = alpha_q(N+1:end);
+b_q = b_q_s.*r_q;
 
 dw_dt = a_q;
 dg_dt = b_q;
 
-if (sum(dmom_dt < 0) > 0 ) && (max(abs(dmom_dt)) > 1e-10)
-    disp('moments going negative')
-end
+% if (sum(dmom_dt < 0) > 0 ) && (max(abs(dmom_dt)) > 1e-10)
+%     disp('moments going negative')
+% end
+
+birth_term = birth_int_s(4)*r_m^3;
+growth_term = growth_int_s(4)*r_m;
+death_term = death_int_s(4)*r_m^3;
 
 % mdot into bubbles from liquid
-mdot_bub_l = V_l_star * 4/3*pi * rho_tg_sat * (birth_int(4) + growth_int(4));
+mdot_bub_l = V_l_star * 4/3*pi * rho_tg_sat * (birth_term + growth_term);
 
 % mdot into bubbles from tg
-mdot_bub_tg = - V_l_star * 4/3*pi * rho_tg_sat * (death_int(4));
+mdot_bub_tg = - V_l_star * 4/3*pi * rho_tg_sat * death_term;
 
 mdot_bub = mdot_bub_l + mdot_bub_tg;
 
@@ -1442,9 +1456,9 @@ Tdot_lw = (Qdot_alw - Qdot_lw - Qdot_wc)/(m_lw*cv_w);
 % 6 = T_lw
 % 7:(N + 6) = weights
 % N+7 : 2N+6 = weighted abscissas
-
-figure(1)
-bar(r_q,w_q,0.1)
+% 
+% figure(1)
+% bar(r_q,w_q,0.1)
 
 dy = [mdot_tg;
     Udot_tg;
