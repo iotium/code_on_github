@@ -3,7 +3,7 @@
 
 clear all
 
-N_mom = 8;
+N_mom = 6;
 
 dist = 'gamma';
 

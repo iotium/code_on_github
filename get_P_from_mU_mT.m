@@ -36,9 +36,9 @@ end
         
         F = (V_tg + V_l + V_bubi*V_l - V_tank)/V_tank;
         
-        if isnan(F) || ~isreal(F)
-            disp('problem')
-        end
+%         if isnan(F) || ~isreal(F)
+%             disp('problem in sol')
+%         end
     end
 
 end

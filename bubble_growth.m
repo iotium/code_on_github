@@ -19,8 +19,20 @@ end
     
 constants.nuc_model = 'SJ';
 load('moments_for_qmom.mat')
-QMOM_IC = 1e-10*moments_of_pdf;
+QMOM_IC = 1e-8*moments_of_pdf;
 N_mom = length(QMOM_IC);
+
+[r_ic, w_ic] = PD_method(QMOM_IC);
+
+DQMOM_IC = [w_ic(:); r_ic(:).*w_ic(:)];
+
+
+
+% DQMOM_IC = [1-6; 1e-6; 1e-6; 2e-1; 1e-4; 3e-9];
+
+N_ab = N_mom/2;
+constants.N_ab = N_ab; % number of abscissas 
+% (2*N = number of moments, going from 0 to 2N-1)
 
 constants.phi = 1e-3;
 
@@ -33,7 +45,7 @@ constants.C_rdot = 3;
 constants.C_nuc_rate = 30;
 constants.n_nuc_freq = 3;
 constants.checking_gauss_error = 0;
-constants.C_death_rate = 16;
+constants.C_death_rate = 0;
 % constants.n_death_rate = 2;
 % constants.alpha_lim = 0.05;
 constants.r_death = 0.5 * 0.0254;
@@ -260,7 +272,7 @@ T_l = Ti;
 T_tg = Ti;
 
 y(:,1) = [m_tg; U_tg; Ti; m_l; Ti; Ti];
-y((N_dim - N_mom + 1):(N_dim), 1) = QMOM_IC(:);
+y((N_dim - N_mom + 1):(N_dim), 1) = DQMOM_IC(:);
 
 % 1 = m_tg
 % 2 = U_tg
@@ -268,7 +280,8 @@ y((N_dim - N_mom + 1):(N_dim), 1) = QMOM_IC(:);
 % 4 = m_l
 % 5 = T_l
 % 6 = T_lw
-% 7:(N_mom + 6) = moments
+% 7:(N + 6) = weights
+% N+7 : 2N+6 = weighted abscissas
 
 [K_b, N_A, h_planck] = universal_constants('boltzmann', 'avagadro', 'planck');
 
@@ -299,6 +312,7 @@ guesses.rho_l = rho_l;
 guesses.Vdot_l = 0;
 
 V_bub = 0;
+alpha = 0;
 
 dT_superheat = 0;
 
@@ -374,20 +388,15 @@ while running == 1;
     end
     %     derivatives = zeros(5,1);
     
-    T_lw = y(6,n);
-    
-    Qdot_lw(n) = Qdot('lw',T_l(n), T_lw ,rho_l(n), m_l(n),D);
-    
-    V_bubi = 4/3*pi*y(7+3,n); % bubble volume per volume of liquid
-    alpha = V_bubi;
-    
-    % 1 = m_tg
-    % 2 = U_tg
-    % 3 = T_gw
-    % 4 = m_l
-    % 5 = T_l
-    % 6 = T_lw
-    % 7:(N_mom + 6) = moments
+
+% 1 = m_tg
+% 2 = U_tg
+% 3 = T_gw
+% 4 = m_l
+% 5 = T_l
+% 6 = T_lw
+% 7:(N + 6) = weights
+% N+7 : 2N+6 = weighted abscissas
     
     % if I'm just playing around, print status at each step
     if nargin == 0
@@ -396,7 +405,7 @@ while running == 1;
             'alpha = %#4.4g, T_l = %#4.4g, T_tg = %#4.4g, m_l = %#4.4g,'...
             'm_tg = %#4.4g, fill_level%% = %#4.4g, Vdot_l = %#4.4g, Vdot_tg = %#4.4g,'...
             ' rhodot_l = %#4.4g, rhodot_tg = %#4.4g\n'],...
-            t(n), t(n) - t(max([1, n-1])), P(n)/6894.8, V_bub(n), dT_superheat(n), alpha, T_l(n), 0,...
+            t(n), t(n) - t(max([1, n-1])), P(n)/6894.8, V_bub(n), dT_superheat(n), alpha(n), T_l(n), 0,...
             m_l(n), m_tg(n), 100*fill_level(n), Vdot_l(n+1),...
             Vdot_tg(n+1), rhodot_l, rhodot_tg);
         
@@ -457,13 +466,14 @@ while running == 1;
         for i = 1:s
             % s = number of stages in the scheme
             
-            % 1 = m_tg
-            % 2 = U_tg
-            % 3 = T_gw
-            % 4 = m_l
-            % 5 = T_l
-            % 6 = T_lw
-            % 7:(N_mom + 6) = moments
+% 1 = m_tg
+% 2 = U_tg
+% 3 = T_gw
+% 4 = m_l
+% 5 = T_l
+% 6 = T_lw
+% 7:(N + 6) = weights
+% N+7 : 2N+6 = weighted abscissas
             
             
             if i == 1
@@ -515,13 +525,14 @@ while running == 1;
         
         y(:,n+1) = y(:,n) + (k*b);
         
-        % 1 = m_tg
-        % 2 = U_tg
-        % 3 = T_gw
-        % 4 = m_l
-        % 5 = T_l
-        % 6 = T_lw
-        % 7:(N_mom + 6) = moments
+% 1 = m_tg
+% 2 = U_tg
+% 3 = T_gw
+% 4 = m_l
+% 5 = T_l
+% 6 = T_lw
+% 7:(N + 6) = weights
+% N+7 : 2N+6 = weighted abscissas
         
         
         if adaptive == 1
@@ -567,13 +578,14 @@ while running == 1;
                 error_flag;
             
             
-            % 1 = m_tg
-            % 2 = U_tg
-            % 3 = T_gw
-            % 4 = m_l
-            % 5 = T_l
-            % 6 = T_lw
-            % 7:(N_mom + 6) = moments
+% 1 = m_tg
+% 2 = U_tg
+% 3 = T_gw
+% 4 = m_l
+% 5 = T_l
+% 6 = T_lw
+% 7:(N + 6) = weights
+% N+7 : 2N+6 = weighted abscissas
             
             % if any of those fail, set rel_err large so that the step gets
             % recomuputed
@@ -656,13 +668,14 @@ while running == 1;
         
     end
     
-    % 1 = m_tg
-    % 2 = U_tg
-    % 3 = T_gw
-    % 4 = m_l
-    % 5 = T_l
-    % 6 = T_lw
-    % 7:(N_mom + 6) = moments
+% 1 = m_tg
+% 2 = U_tg
+% 3 = T_gw
+% 4 = m_l
+% 5 = T_l
+% 6 = T_lw
+% 7:(N + 6) = weights
+% N+7 : 2N+6 = weighted abscissas
     
     m_tg(n+1) = y(1,n+1);
     U_tg(n+1) = y(2,n+1);
@@ -670,7 +683,16 @@ while running == 1;
     T_l(n+1) = y(5,n+1);
     
     %     disp('outside of loop')
-    mom = y((N_dim - N_mom + 1):end, n+1);
+    
+    w_q = y(7:(N_ab+6));
+    g_q = y(N_ab+7:(2*N_ab+6));
+    
+    r_q = g_q./w_q;
+
+for i = 1:2*N_ab
+    mom(i) = sum( r_q.^(i-1) .* w_q );
+end
+   
     
     if sum(mom<0) > 0
         disp('negative moments')
@@ -709,6 +731,15 @@ while running == 1;
     
     % actual volume of all the bubbles
     V_bub(n+1) = V_bubi * V_l(n+1);
+    
+    
+    T_lw = y(6,n+1);
+    
+    Qdot_lw(n+1) = Qdot('lw',T_l(n+1), T_lw ,rho_l(n+1), m_l(n+1),D);
+       
+%     V_bubi = 4/3*pi*y(7+3,n); % bubble volume per volume of liquid
+    alpha(n+1) = V_bubi;
+    
     
     guesses.P = P(n+1);
     guesses.rho_tg = rho_tg(n+1);
@@ -822,13 +853,14 @@ else
     
     end
     
-    % 1 = m_tg
-    % 2 = U_tg
-    % 3 = T_gw
-    % 4 = m_l
-    % 5 = T_l
-    % 6 = T_lw
-    % 7:(N_mom + 6) = moments
+% 1 = m_tg
+% 2 = U_tg
+% 3 = T_gw
+% 4 = m_l
+% 5 = T_l
+% 6 = T_lw
+% 7:(N + 6) = weights
+% N+7 : 2N+6 = weighted abscissas
     
     
     V_bub = y(10,:);
@@ -968,6 +1000,8 @@ C_nuc_rate = constants.C_nuc_rate;
 
 r_death = constants.r_death;
 
+N = constants.N_ab; % number of abscissas 
+% (2*N = number of moments, going from 0 to 2N-1)
 
 % retrieve derivatives calculated with backwards differencing
 % Pdot = derivatives(1);
@@ -983,7 +1017,8 @@ r_death = constants.r_death;
 % 4 = m_l
 % 5 = T_l
 % 6 = T_lw
-% 7:(N_mom + 6) = moments
+% 7:(N + 6) = weights
+% N+7 : 2N+6 = weighted abscissas
 
 m_tg = y(1);
 U_tg = y(2);
@@ -991,21 +1026,19 @@ T_gw = y(3);
 m_l = y(4);
 T_l = y(5);
 T_lw = y(6);
-mom = y(7:end);
+w_q = y(7:6+N);
+g_q = y(7+N:6+2*N);
 
 if isnan(sum(y)) || ~isreal(sum(y))
     disp('problem: nans or imaginary y')
 end
 
-N_mom = length(mom);
+r_q = g_q./w_q;
 
-
-if sum(mom<0) > 0
-    disp('negative moments in diff eqns.')
-    mom = abs(mom);
+for i = 1:2*N
+    mom(i) = sum( r_q.^(i-1) .* w_q )
 end
 
-[r_q, w_q] = PD_method(mom);
 
 % fprintf('abscissas = ')
 % fprintf('%6.6g, ', r_q)
@@ -1016,10 +1049,6 @@ end
 % fprintf('L*w = ')
 % fprintf('%6.6g, ', w_q.*r_q)
 % fprintf('\n')
-
-if constants.checking_gauss_error
-    [r_q4, w_q4] = PD_method(mom(1:4));
-end
 
 % bubble volume per unit volume of liquid (hence the i)
 V_bubi = 4/3*pi*mom(4);
@@ -1142,10 +1171,6 @@ if deltaT_sup > 1e-9
     % bubble radius rate of change
     rdot = C_rdot * Ja_T^2 * alpha_l ./ r_q;
     
-    if constants.checking_gauss_error == 1
-        rdot4 = C_rdot * Ja_T^2 * alpha_l ./ r_q4;
-    end
-    
     % radius of new bubbles
     r_nuc = 2*sigma*T_s/(rho_tg * h_lv * deltaT_sup);
     
@@ -1212,20 +1237,10 @@ end
 
 growth_int(1) = 0;
 
-for i = 2:N_mom
+for i = 2:N*2
     growth_int(i) = (i-1)*sum( r_q.^(i-2) .* w_q .* rdot );
 end
 
-if (constants.checking_gauss_error == 1) && (length(rdot) > 1)
-    growth_int4(1) = 0;
-    for i = 2:4
-        growth_int4(i) = (i-1)*sum( r_q4.^(i-2) .* w_q4 .* rdot4 );
-    end
-    
-    max_gauss_error = max( abs( (growth_int4 - growth_int(1:4))./growth_int(1:4)) ); 
-    fprintf('max gauss error = %0.6g\n', max_gauss_error);
-    
-end
 
 spec_nuc_rate = nuc_rate / V_l;
 % nucleation rate per volume
@@ -1233,18 +1248,10 @@ spec_nuc_rate = nuc_rate / V_l;
 % alpha = V_bub/(V_bub + m_l);
 % spec_death_rate = C_death_rate * (alpha/alpha_lim)^n_death_rate;
 
-for i = 1:N_mom
+for i = 1:N*2
     birth_int(i) = r_nuc.^(i-1) * spec_nuc_rate;
-        death_int(i) = sum( r_q.^(i-1) .* w_q .* C_death_rate .* 0.5.*(1 + erf( 1 * (abs(r_q)/r_death - 1) ) ) );
+    death_int(i) = sum( r_q.^(i-1) .* w_q .* C_death_rate .* 0.5.*(1 + erf( 1 * (abs(r_q)/r_death - 1) ) ) );
 
-%     death_int(i) = sum( r_q.^(i-1) .* w_q .* C_death_rate .* 0.5.*(1 + tanh( 10 * (r_q/r_death - 1) ) ) );
-    
-%     death_int(i) = r_death.^(i-1) * spec_death_rate;
-% ln_death_int = (i-1)*log( abs(r_q) ) + log(C_death_rate)  -r_death./abs(r_q) + log(abs(w_q));
-% death_int(i) = sum( exp(ln_death_int) );
-%     death_int(i) = sum( r_q.^(i-1) .* C_death_rate.*exp( abs(r_q/r_death)) .* w_q );
-%     fprintf('nuc rate = %6.6g, death rate = %6.6g\n',spec_nuc_rate, spec_death_rate);
-% disp(num2str(r_death.^(i-1) * spec_death_rate/birth_death_int(i)))
 end
 
 % death_int
@@ -1253,11 +1260,41 @@ if C_death_rate == 0
     death_int = zeros(size(death_int));
 end
 
-dmom_dt = birth_int(:) - death_int(:) + growth_int(:) ;
-% mom(:)
+dmom_dt = birth_int(:) - death_int(:) - growth_int(:);
 
-if sum(dmom_dt < 0) > 0
-%     disp('moments decreasing')
+for j = 0:(2*N - 1)
+    if j == 0
+        A1(1,:) = ones(1,N);
+        A2(1,:) = zeros(1,N);
+    elseif j == 1
+        A1(2,:) = zeros(1,N);
+        A2(2,:) = ones(1,N);
+    else
+        A1(j+1,:) = (1-j)*r_q.^j;
+        A2(j+1,:) = j*r_q.^(j-1);
+    end
+end
+
+beta_q = dmom_dt;
+
+A = [A1 A2];
+
+cond_num = rcond(A);
+
+if isnan(cond_num)
+    disp('matrix is singular')
+end
+
+alpha_q = A\beta_q;
+
+a_q = alpha_q(1:N);
+b_q = alpha_q(N+1:end);
+
+dw_dt = a_q;
+dg_dt = b_q;
+
+if (sum(dmom_dt < 0) > 0 ) && (max(abs(dmom_dt)) > 1e-10)
+    disp('moments going negative')
 end
 
 % mdot into bubbles from liquid
@@ -1278,7 +1315,7 @@ end
 % A_inj = A_inj*(t > t_valve) + (t < t_valve) * t/t_valve * A_inj;
 
 
-x_liq = 1/( 1/V_bubi - rho_tg_sat/rho_l );
+% x_liq = 1/( 1/V_bubi - rho_tg_sat/rho_l );
 mdot_out = A_inj*Cd*dyer_flow(Po, P, T_l, rho_l, P_sat, s_liq_sat, h_liq_sat);
 
 % net rate of change of gas mass
@@ -1375,7 +1412,8 @@ Tdot_lw = (Qdot_alw - Qdot_lw - Qdot_wc)/(m_lw*cv_w);
 % 4 = m_l
 % 5 = T_l
 % 6 = T_lw
-% 7:(N_mom + 6) = moments
+% 7:(N + 6) = weights
+% N+7 : 2N+6 = weighted abscissas
 
 dy = [mdot_tg;
     Udot_tg;
@@ -1383,7 +1421,8 @@ dy = [mdot_tg;
     mdot_l;
     Tdot_l;
     Tdot_lw;
-    dmom_dt(:)];
+    dw_dt(:);
+    dg_dt(:)];
 
 
 
