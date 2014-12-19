@@ -13,7 +13,7 @@ switch computer
         % on laptop
         t_save = 10; % save interval in minutes
         plot_stuff = 1;
-        save_stuff = 0;
+        save_stuff = 1;
 end
 
 
@@ -21,6 +21,11 @@ constants.nuc_model = 'SJ';
 
 N_mom = 6;
 IC_moments = gamma_dist_moments( 5e-10, 1e-3, N_mom);
+
+alpha_ic = 1e-9;
+alpha_mom = 4/3 * pi * IC_moments(4);
+
+IC_moments = IC_moments * alpha_ic/alpha_mom;
 
 [r_ic, w_ic] = PD_method(IC_moments);
 
@@ -51,13 +56,14 @@ clock_save = clock;
 
 if nargin == 0
     constants.C_rdot = 1;
-    constants.C_nuc_rate = 1;
+    constants.C_nuc_rate = 1000;
     constants.n_nuc_freq = 3;
     constants.checking_gauss_error = 0;
-    constants.C_death_rate = 0;
+    constants.C_death_rate = 5;
+    constants.C_erf_death_rate = 0.2;
     % constants.n_death_rate = 2;
     % constants.alpha_lim = 0.05;
-    constants.r_death = 0.25 * 0.0254;
+    constants.r_death = 0.5 * 0.0254;
     
     %     E = 3*3.2e2;
     %     A_inj = 0.8*2.217e-5;
@@ -128,10 +134,11 @@ running = 1;        % [] switch, 1 = program running, 0 = program stopped
 rel_tol = 1e-5;     % [] max relative error allowed in adaptive scheme
 abs_tol = 1e3;     % [] max absolute error allowed in adaptive scheme
 min_error = 1e-3;   % [] min error (relative to error_tol) before step size is increased
-h_max = 1e-1;       % [s] max allowable time step
+h_max = 1;       % [s] max allowable time step
 h_min = 1e-16;      % [s] min allowable time step
 t_end = 300;         % [s] end time (if LRO doesn't happen first)
 LRO_tol = 5e-3;     % [s] tolerance for resolving the LRO point
+dT_sup_tol = 1e-14;
 
 ode_solver = 'DP'; % [] options: 'RKF' for runge-kutta-fehlberg
 % 'euler' for 1st order euler
@@ -387,8 +394,8 @@ while running == 1;
     end
     
     % check for peak
-    if min_flag == 1
-        if (abs(Pdot) < 5e4) && (t(n) > 1.25*t_min)
+    if (min_flag == 1) && (peak_flag == 0)
+        if (abs(Pdot) < 5e3) && (t(n) > 1.25*t_min)
             peak_flag = 1;
             %             running = 0;
             n_peak = n;
@@ -398,12 +405,12 @@ while running == 1;
     
     if peak_flag == 1
         if t(n) > t_peak*1.5
-            running = 0;
+%             running = 0;
         end
     end
     
     if t(n) > 2
-        running = 0;
+%         running = 0;
     end
     
     
@@ -435,7 +442,7 @@ while running == 1;
     % if I'm just playing around, print status at each step
     if nargin == 0
         
-        fprintf(['t = %#6.6g, dt = %#4.4g, P = %#4.4g, V_bub = %#4.4g, dT_sup = %#4.4g,' ...
+        fprintf(['t = %#4.4g, dt = %#4.4g, P = %#4.4g, V_bub = %#4.4g, dT_sup = %#6.6g,' ...
             'alpha = %#4.4g, T_l = %#4.4g, T_tg = %#4.4g, m_l = %#4.4g,'...
             'm_tg = %#4.4g, fill_level%% = %#4.4g, Vdot_l = %#4.4g, Vdot_tg = %#4.4g,'...
             ' rhodot_l = %#4.4g, rhodot_tg = %#4.4g\n'],...
@@ -457,12 +464,13 @@ while running == 1;
             
         end
         
+        % also check if we're close to LRO
+        
         % slope of fill level curve
-        slope = bdiff(fill_level,starti,n,t,adaptive);
-        %         slope = (fill_level(n) - fill_level(n-1))/(t(n) - t(n-1));
+        LRO_slope = bdiff(fill_level,starti,n,t,adaptive);
         
         % projected t_LRO
-        t_LRO = -fill_level(n)/slope + t(n);
+        t_LRO = -fill_level(n)/LRO_slope + t(n);
         
         h_LRO = t_LRO - t(n); % distance to t_LRO
         
@@ -475,13 +483,47 @@ while running == 1;
             
         end
         
-        if (slope*h < -0.003/100) && (fill_level(n) < 0.1/100)
+        if (LRO_slope*h < -0.003/100) && (fill_level(n) < 0.1/100)
             h = h/4;
             
-        elseif (slope*h < -0.03/100) && (fill_level(n) < 1/100);
+        elseif (LRO_slope*h < -0.03/100) && (fill_level(n) < 1/100);
             h = h/2;
-        elseif (slope*h < -0.3/100) && (fill_level(n) < 5/100);
+        elseif (LRO_slope*h < -0.3/100) && (fill_level(n) < 5/100);
             h = h/2;
+        end
+        
+        
+        
+        % also check if we're close to going subcooled -> superheated
+        
+        if dT_superheat(n) < 0
+        
+            % slope of dT_superheat curve
+            dTs_slope = bdiff(dT_superheat,starti,n,t,adaptive);
+
+            % projected t_sup (t when dT_sup = 0)
+            t_sup = -dT_superheat(n)/dTs_slope + t(n);
+
+            h_sup = t_sup - t(n); % distance to t_sup
+
+            % if the step we're about to take is >3/4 the distance to LRO
+            % and the distance te LRO is bigger than the tolerance
+            if (h > 2*h_sup && h_sup > dT_sup_tol) && (h_sup > 0);
+
+                % set h to 1/2 the distance to LRO (ie refine)
+                h = 0.5*h_sup;
+
+            end
+
+            if (dTs_slope*h < -0.003/100) && (dT_superheat(n) > -0.1/100)
+                h = h/4;
+
+            elseif (dTs_slope*h < -0.03/100) && (dT_superheat(n) > -1/100);
+                h = h/2;
+            elseif (dTs_slope*h < -0.3/100) && (dT_superheat(n) > -5/100);
+                h = h/2;
+            end
+        
         end
         
     end
@@ -807,6 +849,13 @@ while running == 1;
         disp('pressure got low')
     end
     
+    alpha_next = alpha(end) + (alpha(end) - alpha(end-1));
+    
+    if alpha_next > 0.95
+        running = 0;
+        disp('alpha -> 1')
+    end
+    
     clock_now = clock;
     
     time_since_save = etime(clock_now, clock_save);
@@ -925,7 +974,7 @@ else
         xlabel('Time [s]')
         ylabel('Pressure [MPa]')
         hold on
-        if min_flag
+        if exist('t_peak','var')
             plot(t_min, P(n_min)/1e6, 'ko')
             plot(t_peak, P(n_peak)/1e6, 'ks')
         end
@@ -970,7 +1019,7 @@ else
         
         figure(8)
         hold on
-        plot(t, V_bub,'k')
+        plot(t, V_bubi,'k')
         xlabel('Time [s]')
         ylabel('gas holdup')
         
@@ -1033,6 +1082,8 @@ C_death_rate = constants.C_death_rate;
 phi = constants.phi;
 C_rdot = constants.C_rdot;
 C_nuc_rate = constants.C_nuc_rate;
+
+C_erf_death_rate = constants.C_erf_death_rate;
 
 r_death = constants.r_death;
 
@@ -1194,7 +1245,7 @@ deltaT_sup = T_l - T_s;
 P_sat = 1e3*P_sat;
 
 % if superheated, then calculate bubble stuff
-if deltaT_sup > 0
+if deltaT_sup > 1e-6
     
     if sum(abs(imag([r_q(:); w_q(:)]))) > 0
         fprintf('imaginary abscissas or weights. moments:')
@@ -1293,7 +1344,7 @@ for i = 1:N*2
     %         .* 0.5.*(1 + erf( 10 * (abs(r_q)/r_death - 1) ) ) );
     birth_int_s(i) = (r_nuc/r_m).^(i-1) * spec_nuc_rate;
     death_int_s(i) = sum( r_s.^(i-1) .* w_q .* C_death_rate ...
-        .* 0.5.*(1 + erf( (abs(r_q)/r_death - 1) ) ) );
+        .* 0.5.*(1 + erf( C_erf_death_rate * (abs(r_q)/r_death - 1) ) ) );
 end
 
 % death_int
@@ -1312,7 +1363,7 @@ while ill_conditioned
     
     if n > 1
         
-        r_sp = r_s + (0.5 - rand(size(r_s))).*abs(r_s)*1e-3;
+        r_sp = r_s + (0.5 - rand(size(r_s))).*abs(r_s)*1e-6;
         
     else
         r_sp = r_s;
