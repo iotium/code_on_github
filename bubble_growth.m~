@@ -55,12 +55,13 @@ clock_save = clock;
 % close all
 
 if nargin == 0
-    constants.C_rdot = 1;
-    constants.C_nuc_rate = 300;
+    constants.C_rdot = 3;
+    constants.C_nuc_rate = 3;
     constants.n_nuc_freq = 3;
     constants.checking_gauss_error = 0;
-    constants.C_death_rate = 5;
-    constants.C_erf_death_rate = 0.2;
+    constants.C_death_rate = 1;
+    constants.C_erf_death_rate = 10;
+    constants.coalescence_switch = 'on';
     % constants.n_death_rate = 2;
     % constants.alpha_lim = 0.05;
     constants.r_death = 0.5 * 0.0254;
@@ -138,6 +139,7 @@ h_max = 1;       % [s] max allowable time step
 h_min = 1e-16;      % [s] min allowable time step
 t_end = 300;         % [s] end time (if LRO doesn't happen first)
 LRO_tol = 5e-3;     % [s] tolerance for resolving the LRO point
+dT_sup_tol = 1e-14;
 
 ode_solver = 'DP'; % [] options: 'RKF' for runge-kutta-fehlberg
 % 'euler' for 1st order euler
@@ -346,6 +348,10 @@ constants.T_cr = T_cr;
 constants.N_A = N_A;
 constants.h_planck = h_planck;
 
+constants.g = 9.81;
+
+constants.C_hamaker = 1e-20;
+
 guesses.P = P;
 guesses.rho_tg = rho_tg;
 guesses.rho_l = rho_l;
@@ -404,12 +410,12 @@ while running == 1;
     
     if peak_flag == 1
         if t(n) > t_peak*1.5
-%             running = 0;
+            %             running = 0;
         end
     end
     
     if t(n) > 2
-%         running = 0;
+        %         running = 0;
     end
     
     
@@ -441,7 +447,7 @@ while running == 1;
     % if I'm just playing around, print status at each step
     if nargin == 0
         
-        fprintf(['t = %#4.4g, dt = %#4.4g, P = %#4.4g, V_bub = %#4.4g, dT_sup = %#4.4g,' ...
+        fprintf(['t = %#4.4g, dt = %#4.4g, P = %#4.4g, V_bub = %#4.4g, dT_sup = %#6.6g,' ...
             'alpha = %#4.4g, T_l = %#4.4g, T_tg = %#4.4g, m_l = %#4.4g,'...
             'm_tg = %#4.4g, fill_level%% = %#4.4g, Vdot_l = %#4.4g, Vdot_tg = %#4.4g,'...
             ' rhodot_l = %#4.4g, rhodot_tg = %#4.4g\n'],...
@@ -467,7 +473,6 @@ while running == 1;
         
         % slope of fill level curve
         LRO_slope = bdiff(fill_level,starti,n,t,adaptive);
-        %         slope = (fill_level(n) - fill_level(n-1))/(t(n) - t(n-1));
         
         % projected t_LRO
         t_LRO = -fill_level(n)/LRO_slope + t(n);
@@ -483,44 +488,47 @@ while running == 1;
             
         end
         
-        if (slope*h < -0.003/100) && (fill_level(n) < 0.1/100)
+        if (LRO_slope*h < -0.003/100) && (fill_level(n) < 0.1/100)
             h = h/4;
             
-        elseif (slope*h < -0.03/100) && (fill_level(n) < 1/100);
+        elseif (LRO_slope*h < -0.03/100) && (fill_level(n) < 1/100);
             h = h/2;
-        elseif (slope*h < -0.3/100) && (fill_level(n) < 5/100);
+        elseif (LRO_slope*h < -0.3/100) && (fill_level(n) < 5/100);
             h = h/2;
         end
         
         
         
-        % also check if we're close to going subcooled -> supe
+        % also check if we're close to going subcooled -> superheated
         
-        % slope of fill level curve
-        LRO_slope = bdiff(fill_level,starti,n,t,adaptive);
-        %         slope = (fill_level(n) - fill_level(n-1))/(t(n) - t(n-1));
-        
-        % projected t_LRO
-        t_LRO = -fill_level(n)/LRO_slope + t(n);
-        
-        h_LRO = t_LRO - t(n); % distance to t_LRO
-        
-        % if the step we're about to take is >3/4 the distance to LRO
-        % and the distance te LRO is bigger than the tolerance
-        if (h > 2*h_LRO && h_LRO > LRO_tol) && (h_LRO > 0);
+        if dT_superheat(n) < 0
             
-            % set h to 1/2 the distance to LRO (ie refine)
-            h = 0.5*h_LRO;
+            % slope of dT_superheat curve
+            dTs_slope = bdiff(dT_superheat,starti,n,t,adaptive);
             
-        end
-        
-        if (slope*h < -0.003/100) && (fill_level(n) < 0.1/100)
-            h = h/4;
+            % projected t_sup (t when dT_sup = 0)
+            t_sup = -dT_superheat(n)/dTs_slope + t(n);
             
-        elseif (slope*h < -0.03/100) && (fill_level(n) < 1/100);
-            h = h/2;
-        elseif (slope*h < -0.3/100) && (fill_level(n) < 5/100);
-            h = h/2;
+            h_sup = t_sup - t(n); % distance to t_sup
+            
+            % if the step we're about to take is >3/4 the distance to LRO
+            % and the distance te LRO is bigger than the tolerance
+            if (h > 2*h_sup && h_sup > dT_sup_tol) && (h_sup > 0);
+                
+                % set h to 1/2 the distance to LRO (ie refine)
+                h = 0.5*h_sup;
+                
+            end
+            
+            if (dTs_slope*h < -0.003/100) && (dT_superheat(n) > -0.1/100)
+                h = h/4;
+                
+            elseif (dTs_slope*h < -0.03/100) && (dT_superheat(n) > -1/100);
+                h = h/2;
+            elseif (dTs_slope*h < -0.3/100) && (dT_superheat(n) > -5/100);
+                h = h/2;
+            end
+            
         end
         
     end
@@ -1070,6 +1078,8 @@ P_cr = constants.P_cr;
 T_cr = constants.T_cr;
 h_planck = constants.h_planck;
 nuc_model = constants.nuc_model;
+g = constants.g;
+C_hamaker = constants.C_hamaker;
 
 n_nuc_freq = constants.n_nuc_freq;
 % n_death_rate = constants.n_death_rate;
@@ -1133,7 +1143,7 @@ end
 % fprintf('%6.6g, ', w_q.*r_q)
 % fprintf('\n')
 
-% bubble volume per unit volume of liquid (hence the i)
+% bubble volume per unit volume of liquid/bubble mixture (hence the i)
 V_bubi = 4/3*pi*mom(4);
 
 % get system pressure
@@ -1156,8 +1166,6 @@ rho_l = qinterp2(PDT.T, PDT.P, PDT.D_liq, T_l, P/1e3);
 
 [rho_tg_l, rho_tg_v, u_tg_l, u_tg_v] = n2o_fits_for_getting_P(P);
 
-
-
 u_tg = U_tg/m_tg;
 x = (u_tg - u_tg_l)/(u_tg_v - u_tg_l);
 alpha = 1/( 1 + rho_tg_v/rho_tg_l * (1 - x)/x );
@@ -1166,7 +1174,6 @@ rho_tg = alpha*rho_tg_v + (1 - alpha)*rho_tg_l;
 V_l = m_l/rho_l;
 
 V_l_star = V_l/(1 - V_bubi);
-
 
 V_tg = m_tg/rho_tg;
 
@@ -1242,7 +1249,7 @@ deltaT_sup = T_l - T_s;
 P_sat = 1e3*P_sat;
 
 % if superheated, then calculate bubble stuff
-if deltaT_sup > 0
+if deltaT_sup > 1e-6
     
     if sum(abs(imag([r_q(:); w_q(:)]))) > 0
         fprintf('imaginary abscissas or weights. moments:')
@@ -1320,38 +1327,102 @@ else
     
 end
 
+% generat scaled abscissas for more accurate calculations
+r_m = max(abs(r_q));    % value to scale by
 
-r_m = max(abs(r_q));
-
-r_s = r_q/r_m;
+r_s = r_q/r_m;  % scaled abscissas
 
 growth_int_s(1) = 0;
 
 for i = 2:N*2
-    %     growth_int(i) = (i-1)*sum( r_q.^(i-2) .* w_q .* rdot );
     growth_int_s(i) = (i-1)*sum( (1/r_m) * r_s.^(i-2) .* w_q .* rdot );
 end
 
 spec_nuc_rate = nuc_rate / V_l_star;
 % nucleation rate per volume
 
+% birth due to nucleation
+% death due to bubbles getting too large
 for i = 1:N*2
-    %     birth_int(i) = r_nuc.^(i-1) * spec_nuc_rate;
-    %     death_int(i) = sum( r_q.^(i-1) .* w_q .* C_death_rate ...
-    %         .* 0.5.*(1 + erf( 10 * (abs(r_q)/r_death - 1) ) ) );
     birth_int_s(i) = (r_nuc/r_m).^(i-1) * spec_nuc_rate;
     death_int_s(i) = sum( r_s.^(i-1) .* w_q .* C_death_rate ...
         .* 0.5.*(1 + erf( C_erf_death_rate * (abs(r_q)/r_death - 1) ) ) );
 end
 
-% death_int
+% birth and death due to coalescence
 
-% if C_death_rate == 0
-%     death_int = zeros(size(death_int));
+coal_birth_s = zeros(2*N,1);
+coal_death_s = zeros(2*N,1);
+
+if strcmp(constants.coalescence_switch,'on')
+
+nu_t = 0.0536*D^1.77/rho_l;
+U_max = ( (1 - 0.75*V_bubi)/(1 - V_bubi) )*V_bubi * D^2/(48*nu_t);
+mean_shear = 0.53*U_max/(0.5*D);
+
+P2 = P;
+
+liquid_height = V_l/(pi*D^2/4);
+
+P1 = P2 + rho_l*g*liquid_height;
+
+L = V_tank/(pi*D^2/4);
+
+Q = L/8;
+
+turb_diss = Q*g * P2*log(P1/P2) / ( pi * (0.5*D)^2 * (P1 - P2) );
+
+
+
+for k = 1:N*2
+    for i = 1:N
+        for j = 1:N
+            rbi = r_q(i);
+            rbj = r_q(j);
+            dbi = 2*rbi;
+            dbj = 2*rbj;
+            
+            qLS = 4/3*(rbi + rbj)^3*mean_shear;
+            
+            u_ri = sqrt( (2.14*sigma/(rho_l*dbi)) + 0.505*g*dbi);
+            u_rj = sqrt( (2.14*sigma/(rho_l*dbj)) + 0.505*g*dbj);
+            Sij = pi/4*(rbi + rbj)^2;
+            qB = Sij*abs(u_ri - u_rj);
+            
+            qT = 0.089*pi*(dbi + dbj)^2 * turb_diss^(1/3) * sqrt(dbi^(2/3) + dbj^(2/3));
+            
+            % coalescence kernel
+            
+            rb_eq = ( (1/rbi + 1/rbj)/2 )^-1;
+            
+            t_cont = rb_eq^(2/3) / turb_diss^(1/3);
+            
+            film_i = 1e-4;
+            film_f = (C_hamaker * rb_eq/(8*pi*sigma))^(1/3);
+            t_coal = sqrt( rb_eq^3 * rho_l/(16 * sigma) ) * log( film_i / film_f);
+            
+            beta = (qT + qB + qLS)*exp( - t_coal / t_cont);
+            
+            coal_birth_s(k) = coal_birth_s(k) + 0.5 * w_q(i) * w_q(j) * ( r_s(i)^3 + r_s(j)^3 )^((k-1)/3) * beta;
+            coal_death_s(k) = coal_death_s(k) + r_s(i)^(k-1) * w_q(i) * w_q(j) * beta;
+        end
+    end
+end
+
+
+end
+    
+    
+dmom_dt_s = birth_int_s(:) - death_int_s(:) + growth_int_s(:) + coal_birth_s(:) - coal_death_s(:);
+
+
+% if deltaT_sup > 0
+%     fprintf('coalescence birth:\n')
+%     fprintf('%6.6g\t', coal_birth_s./dmom_dt_s)
+%         fprintf('\ncoalescence death:\n')
+%     fprintf('%6.6g\t', coal_death_s./dmom_dt_s)
+%     fprintf('\n')
 % end
-
-dmom_dt_s = birth_int_s(:) - death_int_s(:) + growth_int_s(:);
-
 
 ill_conditioned = 1;
 
@@ -1375,7 +1446,6 @@ while ill_conditioned
             A2(2,:) = ones(1,N);
         else
             A1(j+1,:) = (1 - j)*r_sp.^j;
-            %             A2(j+1,:) = j*r_sp.^(j - 1);
             A2(j+1,:) = j*r_sp.^(j);
         end
     end
@@ -1412,10 +1482,6 @@ b_q = b_q_s.*r_q;
 dw_dt = a_q;
 dg_dt = b_q;
 
-% if (sum(dmom_dt < 0) > 0 ) && (max(abs(dmom_dt)) > 1e-10)
-%     disp('moments going negative')
-% end
-
 birth_term = birth_int_s(4)*r_m^3;
 growth_term = growth_int_s(4)*r_m^3;
 death_term = death_int_s(4)*r_m^3;
@@ -1436,11 +1502,9 @@ end
 mdot_out = A_inj*Cd*dyer_flow(Po, P, T_l, rho_l, P_sat, s_liq_sat, h_liq_sat);
 
 % net rate of change of gas mass
-% mdot_tg = mdot_VLB - mdot_VLC;
 mdot_tg = -mdot_bub_tg;
 
 % net rate of change of liquid mass
-% mdot_l = - mdot_VLB - mdot_out + mdot_VLC;
 mdot_l = - mdot_bub_l - mdot_out;
 
 % HT from wall to liquid
@@ -1467,7 +1531,6 @@ du_drho_l = dh_drho_l + P/rho_l^2  - 1/rho_l * dP_drho_l;
 
 % not sure if this is correct... should it include a rhodot term?
 Vdot_bub = mdot_bub / rho_tg_sat;
-
 
 Vdot_l = solve_for_Vdot(Udot_tgi, mdot_tg, m_tg, ...
     Udot_li, u_l, mdot_l, m_l, du_drho_l, Cv_l, dP_drho_l, V_l, ...
