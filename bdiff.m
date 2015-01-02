@@ -5,7 +5,11 @@ function out = bdiff(in,j,n,t,adaptive)
 % in = vector of whatever to diff
 % h = time step
 
+max_order = 3;
+
 k = n - j + 1; % number of points to work with
+
+k = min([(max_order + 1) k]);
 
 if adaptive == 0
     
@@ -42,6 +46,7 @@ if adaptive == 0
 else
     switch k
         case 1
+            
             out = 0;
             
         case 2

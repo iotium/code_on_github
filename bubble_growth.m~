@@ -1,19 +1,31 @@
 function varargout = bubble_growth(varargin)
+
+
 %% define input parameters
 
 switch computer
     case {'GLNXA64'}
         % on server
         addpath('~/refprop/refprop');
-        t_save = 60; % save interval in minutes
+        t_save = 60*60; % save interval in seconds
         plot_stuff = 0;
         save_stuff = 1;
+        save_periodically = 0;
+        save_parameters_only = 1;
+        time_out = 1;
+        max_comp_time = 20*60;
+        
         
     case {'MACI64'}
         % on laptop
-        t_save = 10; % save interval in minutes
+        t_save = 10*60; % save interval in seconds
         plot_stuff = 1;
         save_stuff = 1;
+        save_periodically = 0;
+        save_parameters_only = 1;
+        time_out = 0;
+        
+        
 end
 
 
@@ -22,7 +34,7 @@ constants.nuc_model = 'SJ';
 N_mom = 6;
 IC_moments = gamma_dist_moments( 5e-10, 1e-3, N_mom);
 
-alpha_ic = 1e-9;
+alpha_ic = 1e-8;
 alpha_mom = 4/3 * pi * IC_moments(4);
 
 IC_moments = IC_moments * alpha_ic/alpha_mom;
@@ -51,20 +63,22 @@ constants.N_ab = N_ab; % number of abscissas
 constants.phi = 1e-3;
 
 clock_save = clock;
+clock_start = clock;
 
 % close all
 
 if nargin == 0
-    constants.C_rdot = 3;
-    constants.C_nuc_rate = 3;
+    constants.C_rdot = 5;
+    constants.C_nuc_rate = 1e3;
     constants.n_nuc_freq = 3;
     constants.checking_gauss_error = 0;
     constants.C_death_rate = 1;
-    constants.C_erf_death_rate = 10;
+    constants.C_erf_death_rate = 1;
     constants.coalescence_switch = 'on';
     % constants.n_death_rate = 2;
     % constants.alpha_lim = 0.05;
-    constants.r_death = 0.5 * 0.0254;
+    constants.r_death = 0.5 * 0.25 * 0.0254;
+    save_filename = 'bubble_sim_data.mat';
     
     %     E = 3*3.2e2;
     %     A_inj = 0.8*2.217e-5;
@@ -92,16 +106,29 @@ if nargin == 0
         end
     end
 else
-    A_inj = varargin{1};
-    specified_case = varargin{2};
-    E = 1;
-    constants.C_rdot = varargin{3};
-    constants.C_nuc_rate = varargin{4};
-    constants.n_nuc_freq = varargin{5};
+    
+    if isa(varargin{1}, 'char')
+        constants.C_rdot = str2num( varargin{1} );
+        constants.C_nuc_rate = str2num( varargin{2} );
+        constants.C_death_rate = str2num( varargin{3} );
+        constants.C_erf_death_rate = str2num( varargin{4} );
+    else
+        constants.C_rdot = varargin{1} ;
+        constants.C_nuc_rate =  varargin{2} ;
+        constants.C_death_rate =  varargin{3} ;
+        constants.C_erf_death_rate =  varargin{4} ;
+    end
+    
+    
+    constants.n_nuc_freq = 3;
     constants.checking_gauss_error = 0;
-    constants.C_death_rate = varargin{6};
-    constants.n_death_rate = varargin{7};
-    constants.alpha_lim = varargin{8};
+    
+    constants.coalescence_switch = 'on';
+    constants.r_death = 0.5 * varargin{5} * 0.0254;
+    specified_case = 6;
+    save_filename = varargin{6};
+    A_inj = 6.977e-7;
+    E = 7.5e2;
 end
 
 
@@ -132,14 +159,14 @@ end
 % initialize program parameters
 h = 1e-12;           % [s] initial time step
 running = 1;        % [] switch, 1 = program running, 0 = program stopped
-rel_tol = 1e-5;     % [] max relative error allowed in adaptive scheme
+rel_tol = 1e-4;     % [] max relative error allowed in adaptive scheme
 abs_tol = 1e3;     % [] max absolute error allowed in adaptive scheme
 min_error = 1e-3;   % [] min error (relative to error_tol) before step size is increased
 h_max = 1;       % [s] max allowable time step
 h_min = 1e-16;      % [s] min allowable time step
 t_end = 300;         % [s] end time (if LRO doesn't happen first)
 LRO_tol = 5e-3;     % [s] tolerance for resolving the LRO point
-dT_sup_tol = 1e-14;
+dT_sup_tol = 1e-16;
 
 ode_solver = 'DP'; % [] options: 'RKF' for runge-kutta-fehlberg
 % 'euler' for 1st order euler
@@ -358,9 +385,12 @@ guesses.rho_l = rho_l;
 guesses.Vdot_l = 0;
 
 V_bub = 0;
-alpha = 0;
+gas_holdup = 0;
 
 dT_superheat = 0;
+Pdot = 0;
+rhodot_l = 0;
+rhodot_tg = 0;
 
 % I don't seem to be using this term anymore so just leave it
 derivatives = zeros(5,1);
@@ -368,8 +398,8 @@ derivatives = zeros(5,1);
 % initialize f
 f = zeros(N_dim,1);
 
-min_flag = 0;
-peak_flag = 0;
+constants.min_flag = 0;
+constants.peak_flag = 0;
 
 %% ODE solver
 
@@ -382,42 +412,47 @@ while running == 1;
     
     starti = max([n-3, 1]);
     
-    Pdot = bdiff(P,starti,n,t,adaptive);
-    rhodot_l = bdiff(rho_l,starti,n,t,adaptive);
-    rhodot_tg = bdiff(rho_tg,starti,n,t,adaptive);
+    Pdot = 0.5*Pdot + 0.5*bdiff(P,starti,n,t,adaptive);
+    rhodot_l = 0.5*rhodot_l + 0.5*bdiff(rho_l,starti,n,t,adaptive);
+    rhodot_tg = 0.5*rhodot_tg + 0.5*bdiff(rho_tg,starti,n,t,adaptive);
     Vdot_l(n+1) = V_tank*bdiff(V_l/V_tank,starti,n,t,adaptive);
     Vdot_tg(n+1) = V_tank*bdiff(V_tg/V_tank,starti,n,t,adaptive);
     
     
     % check for min
     if (t(n) > 0.05) && (Pdot) > 0
-        if min_flag == 0;
-            min_flag = 1;
+        if constants.min_flag == 0;
+            constants.min_flag = 1;
             t_min = t(n);
             n_min = n;
         end
     end
     
     % check for peak
-    if (min_flag == 1) && (peak_flag == 0)
-        if (abs(Pdot) < 5e3) && (t(n) > 1.25*t_min)
-            peak_flag = 1;
+    if (constants.min_flag == 1) && (constants.peak_flag == 0)
+        if ((Pdot) < 0) && (t(n) > 1.25*t_min)
+            constants.peak_flag = 1;
             %             running = 0;
             n_peak = n;
             t_peak = t(n);
         end
     end
     
-    if peak_flag == 1
-        if t(n) > t_peak*1.5
-            %             running = 0;
-        end
-    end
+    %     if peak_flag == 1
+    %         if t(n) > t_peak*1.5
+    %             %             running = 0;
+    %         end
+    %     end
+    %
+%         if t(n) > 0.05
+%             running = 0;
+%         end
     
-    if t(n) > 2
-        %         running = 0;
-    end
-    
+
+if P(end) < 2.5e6
+    running = 0;
+end
+
     
     mdot_l = f(4);
     rhodot_l = mdot_l/V_l(n) - m_l(n)/V_l(n)^2*Vdot_l(n);
@@ -451,7 +486,7 @@ while running == 1;
             'alpha = %#4.4g, T_l = %#4.4g, T_tg = %#4.4g, m_l = %#4.4g,'...
             'm_tg = %#4.4g, fill_level%% = %#4.4g, Vdot_l = %#4.4g, Vdot_tg = %#4.4g,'...
             ' rhodot_l = %#4.4g, rhodot_tg = %#4.4g\n'],...
-            t(n), t(n) - t(max([1, n-1])), P(n)/6894.8, V_bub(n), dT_superheat(n), alpha(n), T_l(n), 0,...
+            t(n), t(n) - t(max([1, n-1])), P(n)/1e6, V_bub(n), dT_superheat(n), gas_holdup(n), T_l(n), 0,...
             m_l(n), m_tg(n), 100*fill_level(n), Vdot_l(n+1),...
             Vdot_tg(n+1), rhodot_l, rhodot_tg);
         
@@ -687,6 +722,7 @@ while running == 1;
                 
                 if h < 2*h_min
                     fprintf('h got too small. exceeded tolerance by %6.4g%%\n',100*rel_err/rel_tol);
+                    running = 0;
                 end
                 
             else
@@ -774,6 +810,12 @@ while running == 1;
         mom(i,n+1) = sum( r_q.^(i-1) .* w_q );
     end
     
+    death_rate = 0.5.*(1 + erf( constants.C_erf_death_rate * (abs(r_q)/constants.r_death - 1) ));
+    
+    if max(death_rate) == 0
+%         disp('no death')
+    end
+    
     
     if sum(mom<0) > 0
         disp('negative moments')
@@ -799,7 +841,16 @@ while running == 1;
     
     
     rho_l(n+1) = qinterp2(PDT.T,PDT.P,PDT.D_liq,T_l(n+1),P(n+1)/1e3);
-    rho_tg(n+1) = refpropm('D', 'P', P(n+1)/1e3, 'Q', 1, 'N2O');
+    
+    [rho_tg_l, rho_tg_v, u_tg_l, u_tg_v] = n2o_fits_for_getting_P(P(n+1));
+    
+    u_tg = U_tg(n+1)/m_tg(n+1);
+    x = (u_tg - u_tg_l)/(u_tg_v - u_tg_l);
+    alpha = 1/( 1 + rho_tg_v/rho_tg_l * (1 - x)/x );
+    rho_tg(n+1) = alpha*rho_tg_v + (1 - alpha)*rho_tg_l;
+    
+    
+    %     rho_tg(n+1) = refpropm('D', 'P', P(n+1)/1e3, 'Q', 1, 'N2O');
     
     guesses.rho_l = rho_l(n+1);
     
@@ -815,15 +866,13 @@ while running == 1;
     fill_level(n+1) = V_l_star(n+1)/V_tank;
     
     % actual volume of all the bubbles
-    V_bub(n+1) = V_bubi * V_l(n+1)/(1 - V_bubi);
-    
+    V_bub(n+1) = V_bubi * V_l_star(n+1);
     
     T_lw = y(6,n+1);
     
     Qdot_lw(n+1) = Qdot('lw',T_l(n+1), T_lw ,rho_l(n+1), m_l(n+1),D);
     
-    %     V_bubi = 4/3*pi*y(7+3,n); % bubble volume per volume of liquid
-    alpha(n+1) = V_bubi;
+    gas_holdup(n+1) = V_bubi;
     
     
     guesses.P = P(n+1);
@@ -854,24 +903,36 @@ while running == 1;
         disp('pressure got low')
     end
     
-    alpha_next = alpha(end) + (alpha(end) - alpha(end-1));
+    gas_holdup_next = gas_holdup(end) + (gas_holdup(end) - gas_holdup(end-1));
     
-    if alpha_next > 0.95
+    if gas_holdup_next > 0.80
         running = 0;
-        disp('alpha -> 1')
+        disp('alpha -> 0.8')
     end
     
-    clock_now = clock;
     
-    time_since_save = etime(clock_now, clock_save);
     
-    if time_since_save >= t_save*60;
-        if save_stuff == 1
-            save('bubble_growth_sim_data','-v7.3')
+    
+    if save_periodically
+        
+        clock_now = clock;
+        
+        time_since_save = etime(clock_now, clock_save);
+        if time_since_save >= t_save;
+            if save_stuff == 1
+                save(save_filename,'-v7.3')
+            end
+            clock_save = clock;
         end
-        clock_save = clock;
     end
     
+    if time_out
+        clock_now = clock;
+        time_since_start = etime(clock_now, clock_start);
+        if time_since_start > max_comp_time
+            running = 0;
+        end
+    end
     
     if constants.error_detected
         runnung = 0;
@@ -881,15 +942,6 @@ while running == 1;
     %             save('bubble_growth_sim_data')
     %         end
     
-    %         figure(1)
-    %         subplot(1,2,1)
-    %         hold on
-    %         plot(t(n), P(n), 'ks')
-    %
-    %         subplot(1,2,2)
-    %         loglog(r_dist, N_r + 1e-100)
-    %         set(gca, 'xscale', 'log')
-    %         set(gca, 'yscale', 'log')
     
     %     else
     %         stop.close
@@ -936,14 +988,11 @@ if nargout > 0
     
     varargout{1} = t;
     varargout{2} = P;
+                fill_level_f = fill_level(end);
+
+    varargout{3} = fill_level_f;
     
 else
-    
-    if save_stuff == 1
-        
-        save('bubble_growth_sim_data','-v7.3')
-        
-    end
     
     % 1 = m_tg
     % 2 = U_tg
@@ -971,11 +1020,54 @@ else
     V_bub = V_bubi.*V_l_star;
     A_bub = A_bubi.*V_l_star;
     
+    if save_stuff == 1
+        
+        if save_parameters_only == 1
+            
+            if ~exist('n_min','var')
+                n_min = 1;
+            end
+            
+            if ~exist('n_peak','var')
+                n_peak = 1;
+            end
+            t_min = t(n_min);
+            t_peak = t(n_peak);
+            t_LRO = t(end);
+            P_min = P(n_min);
+            P_peak = P(n_peak);
+            P_LRO = P(end);
+            alpha_f = V_bubi(end);
+            fill_level_f = fill_level(end);
+            P_lin = (P_LRO - P_peak)/(t_LRO - t_peak)*(t - t_peak) + P_peak;
+            P_dev = mean( abs(P(n_peak:end) - P_lin(n_peak:end)) );
+            
+            save(save_filename,'t_min','t_peak','t_LRO'...
+                ,'P_min','P_peak','P_LRO'...
+                ,'alpha_f','fill_level_f','P_dev','-v7.3')
+            
+        else
+            
+            save(save_filename,'-v7.3')
+            
+        end
+        
+    end
+    
+    
+    
     if plot_stuff == 1
+        
+        
+        P_exp = load_experimental_data(t);
+
+        
         %
         figure(1)
         hold on
         plot(t,P/1e6,'k-')
+        plot(t,P_exp/1e6,'k--')
+        legend('model','experiment')
         xlabel('Time [s]')
         ylabel('Pressure [MPa]')
         hold on
@@ -984,13 +1076,15 @@ else
             plot(t_peak, P(n_peak)/1e6, 'ks')
         end
         
+        title('pressure')
+        
         figure(2)
         hold on
         plot(t,y(5,:),'k-',t,T_sat,'r:')
         legend('Liquid','T_{sat}(P)')
         ylabel('Temperature')
         xlabel('Time [s]')
-        legend('Vapor','T_{sat}(P)')
+        title('temperatures')
         
         figure(3)
         hold on
@@ -1014,6 +1108,15 @@ else
         xlabel('Time [s]')
         ylabel('Moments [various]')
         set(gca,'yscale','log')
+        title('moments')
+        
+        figure(6)
+        hold on
+        plot(t, fill_level)
+        xlabel('Time [s]')
+        ylabel('fill level [%]')
+        title('fill level')
+        
         
         figure(7)
         hold on
@@ -1027,13 +1130,15 @@ else
         plot(t, V_bubi,'k')
         xlabel('Time [s]')
         ylabel('gas holdup')
+        title('gas holdup')
         
         figure(9)
         hold on
         plot(t, 6*V_bub./A_bub, 'k')
         xlabel('Time [s]')
-        ylabel(' sauter diameter [m]')
+        ylabel('sauter mean diameter [m]')
         set(gca,'yscale','log')
+        title('sauter mean diameter')
         
         figure(10)
         hold on
@@ -1041,6 +1146,7 @@ else
         xlabel('Time [s]')
         ylabel('abscissas [m]')
         set(gca,'yscale','log')
+        title('abscissas')
         
         figure(11)
         hold on
@@ -1048,9 +1154,23 @@ else
         xlabel('Time [s]')
         ylabel('weights [?]')
         set(gca,'yscale','log')
+        title('weights')
+        
+        figure(12)
+        hold on
+        plot(t, V_l, 'k', t, V_tg, 'k:', t, V_bub, 'k--', t, V_l+V_tg+V_bub,'k-.')
+        xlabel('Time [s]')
+        ylabel('volume [m^3]')
+        title('volumes')
+        legend('liquid (pure)','ullage','bubbles','sum')
+        
+
+
         
         
     end
+    
+    beep
     
     
 end
@@ -1213,8 +1333,8 @@ drho_dT_l_sat = drho_dT_P + drho_dP_T * dP_dT_tg_sat;
 
 % properties needed for Vdot calculation (vapor)
 [u_tg_v_sat, rho_tg_v, drho_dP_T, drho_dT_P, dh_dT_P, dh_dP_T,...
-    T_s, h_tg_sat] = ...
-    refpropm('UDRW(*TH', 'P', P/1e3, 'Q', 1, 'N2O');
+    T_s, h_tg_sat, s_tg_sat] = ...
+    refpropm('UDRW(*THS', 'P', P/1e3, 'Q', 1, 'N2O');
 drho_dP_T = drho_dP_T * 1e-3;
 dh_dP_T = dh_dP_T * 1e-3;
 
@@ -1324,6 +1444,7 @@ else
     r_nuc = 0;
     rdot = 0;
     nuc_rate = 0;
+    C_death_rate = 0;
     
 end
 
@@ -1355,66 +1476,89 @@ coal_birth_s = zeros(2*N,1);
 coal_death_s = zeros(2*N,1);
 
 if strcmp(constants.coalescence_switch,'on')
-
-nu_t = 0.0536*D^1.77/rho_l;
-U_max = ( (1 - 0.75*V_bubi)/(1 - V_bubi) )*V_bubi * D^2/(48*nu_t);
-mean_shear = 0.53*U_max/(0.5*D);
-
-P2 = P;
-
-liquid_height = V_l/(pi*D^2/4);
-
-P1 = P2 + rho_l*g*liquid_height;
-
-L = V_tank/(pi*D^2/4);
-
-Q = L/8;
-
-turb_diss = Q*g * P2*log(P1/P2) / ( pi * (0.5*D)^2 * (P1 - P2) );
-
-
-
-for k = 1:N*2
-    for i = 1:N
-        for j = 1:N
-            rbi = r_q(i);
-            rbj = r_q(j);
-            dbi = 2*rbi;
-            dbj = 2*rbj;
-            
-            qLS = 4/3*(rbi + rbj)^3*mean_shear;
-            
-            u_ri = sqrt( (2.14*sigma/(rho_l*dbi)) + 0.505*g*dbi);
-            u_rj = sqrt( (2.14*sigma/(rho_l*dbj)) + 0.505*g*dbj);
-            Sij = pi/4*(rbi + rbj)^2;
-            qB = Sij*abs(u_ri - u_rj);
-            
-            qT = 0.089*pi*(dbi + dbj)^2 * turb_diss^(1/3) * sqrt(dbi^(2/3) + dbj^(2/3));
-            
-            % coalescence kernel
-            
-            rb_eq = ( (1/rbi + 1/rbj)/2 )^-1;
-            
-            t_cont = rb_eq^(2/3) / turb_diss^(1/3);
-            
-            film_i = 1e-4;
-            film_f = (C_hamaker * rb_eq/(8*pi*sigma))^(1/3);
-            t_coal = sqrt( rb_eq^3 * rho_l/(16 * sigma) ) * log( film_i / film_f);
-            
-            beta = (qT + qB + qLS)*exp( - t_coal / t_cont);
-            
-            coal_birth_s(k) = coal_birth_s(k) + 0.5 * w_q(i) * w_q(j) * ( r_s(i)^3 + r_s(j)^3 )^((k-1)/3) * beta;
-            coal_death_s(k) = coal_death_s(k) + r_s(i)^(k-1) * w_q(i) * w_q(j) * beta;
+    
+    nu_t = 0.0536*D^1.77/rho_l;
+    U_max = ( (1 - 0.75*V_bubi)/(1 - V_bubi) )*V_bubi * D^2/(48*nu_t);
+    mean_shear = 0.53*U_max/(0.5*D);
+    
+    P2 = P;
+    
+    liquid_height = V_l/(pi*D^2/4);
+    
+    P1 = P2 + rho_l*g*liquid_height;
+    
+    L = V_tank/(pi*D^2/4);
+    
+    Q = V_tank/8; % volumetric gas flow rate. just assume a constant value here
+    
+    turb_diss = Q*g * P2*log(P1/P2) / ( pi * (0.5*D)^2 * (P1 - P2) );
+    
+    for k = 1:N*2
+        for i = 1:N
+            for j = 1:N
+                % radius and diameter of bubble i and bubble j
+                rbi = abs(r_q(i));
+                rbj = abs(r_q(j));
+                dbi = 2*rbi;
+                dbj = 2*rbj;
+                
+                % theta for laminar shear
+                qLS = 4/3*(rbi + rbj)^3*mean_shear;
+                
+                % rise velocity for bubble i and j
+                u_ri = sqrt( (2.14*sigma/(rho_l*dbi)) + 0.505*g*dbi);
+                u_rj = sqrt( (2.14*sigma/(rho_l*dbj)) + 0.505*g*dbj);
+                
+                % collision area
+                Sij = pi/4*(rbi + rbj)^2;
+                
+                % theta for buoyancy
+                qB = Sij*abs(u_ri - u_rj);
+                
+                % theta for turbulence
+                qT = 0.089*pi*(dbi + dbj)^2 * turb_diss^(1/3) * sqrt(dbi^(2/3) + dbj^(2/3));
+                                
+                % bubble radius
+                rb_eq = ( (1/rbi + 1/rbj)/2 )^-1;
+                
+                % contanct time
+                t_cont = rb_eq^(2/3) / turb_diss^(1/3);
+                
+                % film initial and final thicknesses
+                film_i = 1e-4;
+                film_f = (C_hamaker * rb_eq/(8*pi*sigma))^(1/3);
+                
+                % time required for coalescence
+                t_coal = sqrt( rb_eq^3 * rho_l/(16 * sigma) ) * log( film_i / film_f);
+                
+                % coalescence kernel
+                beta = (qT + qB + qLS)*exp( - t_coal / t_cont);
+                
+                coal_birth_s(k) = coal_birth_s(k) + 0.5 * w_q(i) * w_q(j) * ( abs(r_s(i))^3 + abs(r_s(j))^3 )^((k-1)/3) * beta;
+                coal_death_s(k) = coal_death_s(k) + r_s(i)^(k-1) * w_q(i) * w_q(j) * beta;
+            end
         end
     end
+    
+    
 end
 
 
-end
-    
-    
 dmom_dt_s = birth_int_s(:) - death_int_s(:) + growth_int_s(:) + coal_birth_s(:) - coal_death_s(:);
 
+
+V_birth = birth_int_s(4) + growth_int_s(4);
+V_death = death_int_s(4);
+% 
+% if constants.peak_flag
+%     
+%     C_death_ideal = V_birth / (V_death/C_death_rate);
+%     fprintf('ideal C_death_rate = %0.8g\t', C_death_ideal);
+%     fprintf('max radius = %0.4g in\n', max(r_q)/0.0254);
+%     
+% end
+
+% fprintf('V_death/V_binth = %0.8g\n',V_death/V_birth)
 
 % if deltaT_sup > 0
 %     fprintf('coalescence birth:\n')
@@ -1430,8 +1574,8 @@ n = 1;
 while ill_conditioned
     
     if n > 1
-        
-        r_sp = r_s + (0.5 - rand(size(r_s))).*abs(r_s)*1e-6;
+        % if it's ill conditioned, jiggle the abscissas around a little
+        r_sp = r_s + (0.5 - rand(size(r_s))).*abs(r_s)*1e-4;
         
     else
         r_sp = r_s;
@@ -1499,13 +1643,23 @@ if isinf(mdot_bub)
 end
 
 % mass flow rate out via injector
-mdot_out = A_inj*Cd*dyer_flow(Po, P, T_l, rho_l, P_sat, s_liq_sat, h_liq_sat);
+x = rho_tg_sat/rho_l / (1/V_bubi + rho_tg_sat/rho_l - 1);
+
+rho_liq_mix = rho_l*(1-V_bubi) + rho_tg_sat*V_bubi;
+s_liq_mix = s_liq_sat * (1-x) + s_tg_sat * x;
+h_liq_mix = h_liq_sat * (1-x) + h_tg_sat * x;
+
+% passing 2-phase properties
+mdot_out = A_inj*Cd*injector_flow(Po, P, T_l, rho_liq_mix, P_sat, s_liq_mix, h_liq_mix);
+
+% passing straight liquid properties
+% mdot_out = A_inj*Cd*injector_flow(Po, P, T_l, rho_l, P_sat, s_liq_sat, h_liq_sat);
 
 % net rate of change of gas mass
 mdot_tg = -mdot_bub_tg;
 
 % net rate of change of liquid mass
-mdot_l = - mdot_bub_l - mdot_out;
+mdot_l = - mdot_bub_l -  mdot_out;
 
 % HT from wall to liquid
 Qdot_lw = Qdot('lw',T_l,T_lw,rho_l,m_l,D);
@@ -1607,7 +1761,6 @@ dy = [mdot_tg;
     dw_dt(:);
     dg_dt(:)];
 
-
-
-
-
+if ~isreal(sum(dy(:))) || isnan(sum(dy(:)))
+    disp('complex or nans in derivatives')
+end
