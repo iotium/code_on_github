@@ -1,0 +1,573 @@
+job-ID  prior   name       user         state submit/start at     queue                          slots ja-task-ID 
+-----------------------------------------------------------------------------------------------------------------
+  15551 0.30385 SimDP63T2N hoyeoni      dr    12/19/2014 06:35:30 trusty.q@barley08.stanford.edu     1        
+  17837 0.28889 e1.0.g8.9  dsglass      dr    12/19/2014 12:41:15 trusty.q@barley08.stanford.edu     1        
+  17859 0.28889 e1.1.g6.1  dsglass      dr    12/19/2014 12:47:00 trusty.q@barley08.stanford.edu     1        
+  17860 0.28889 e1.1.g6.2  dsglass      dr    12/19/2014 12:47:00 trusty.q@barley08.stanford.edu     1        
+  17861 0.28889 e1.1.g6.3  dsglass      dr    12/19/2014 12:47:00 trusty.q@barley08.stanford.edu     1        
+  17871 0.28889 e1.1.g7.3  dsglass      dr    12/19/2014 12:49:15 trusty.q@barley08.stanford.edu     1        
+  17872 0.28889 e1.1.g7.4  dsglass      dr    12/19/2014 12:49:15 trusty.q@barley08.stanford.edu     1        
+  17880 0.28889 e1.1.g8.2  dsglass      dr    12/19/2014 12:54:00 trusty.q@barley08.stanford.edu     1        
+  17890 0.28889 e1.1.g9.2  dsglass      dr    12/19/2014 13:01:00 trusty.q@barley08.stanford.edu     1        
+  17891 0.28889 e1.1.g9.3  dsglass      dr    12/19/2014 13:01:00 trusty.q@barley08.stanford.edu     1        
+  17901 0.28889 e1.2.g5.3  dsglass      dt    12/19/2014 15:55:30 trusty.q@barley08.stanford.edu     1        
+  17910 0.28889 e1.2.g6.2  dsglass      dt    12/19/2014 15:54:45 trusty.q@barley08.stanford.edu     1        
+  17922 0.28889 e1.2.g7.4  dsglass      dt    12/19/2014 15:52:45 trusty.q@barley08.stanford.edu     1        
+  18085 0.31364 perf_eval- nmaster      dr    12/19/2014 13:01:00 trusty.q@barley08.stanford.edu     1        
+  18087 0.31364 perf_eval- nmaster      dr    12/19/2014 13:01:00 trusty.q@barley08.stanford.edu     1        
+  18088 0.31364 perf_eval- nmaster      dr    12/19/2014 13:01:00 trusty.q@barley08.stanford.edu     1        
+  18090 0.31364 perf_eval- nmaster      dr    12/19/2014 13:01:00 trusty.q@barley08.stanford.edu     1        
+  18091 0.31364 perf_eval- nmaster      dr    12/19/2014 13:01:00 trusty.q@barley08.stanford.edu     1        
+  18093 0.31364 perf_eval- nmaster      dr    12/19/2014 13:01:00 trusty.q@barley08.stanford.edu     1        
+  18284 0.31364 perf_eval- nmaster      dt    12/19/2014 15:50:45 trusty.q@barley08.stanford.edu     1        
+  18285 0.31364 perf_eval- nmaster      dt    12/19/2014 15:50:45 trusty.q@barley08.stanford.edu     1        
+  18286 0.31364 perf_eval- nmaster      dt    12/19/2014 15:50:45 trusty.q@barley08.stanford.edu     1        
+  18287 0.31364 perf_eval- nmaster      dt    12/19/2014 15:50:45 trusty.q@barley08.stanford.edu     1        
+  18288 0.31364 perf_eval- nmaster      dt    12/19/2014 15:55:45 trusty.q@barley08.stanford.edu     1        
+  24534 0.26167 runHanBoot abhaskar     r     12/25/2014 11:53:15 trusty.q@barley19.stanford.edu     1        
+  24537 0.26167 runLucampB abhaskar     r     12/25/2014 16:32:45 trusty.q@barley10.stanford.edu     1        
+  24543 0.26167 runLucampB abhaskar     r     12/25/2014 18:04:15 trusty.q@barley07.stanford.edu     1        
+  24544 0.26167 runHanBoot abhaskar     r     12/25/2014 18:20:30 trusty.q@barley18.Stanford.EDU     1        
+  24545 0.26167 runLucampB abhaskar     r     12/25/2014 18:49:00 trusty.q@barley12.Stanford.EDU     1        
+  24546 0.26167 runHanBoot abhaskar     r     12/25/2014 18:50:30 trusty.q@barley16.stanford.edu     1        
+  24548 0.26167 runHanBoot abhaskar     r     12/25/2014 19:27:00 trusty.q@barley02.stanford.edu     1        
+  24549 0.26167 runLucampB abhaskar     r     12/25/2014 20:00:15 trusty.q@barley05.Stanford.EDU     1        
+  24551 0.26167 runLucampB abhaskar     r     12/25/2014 21:04:00 trusty.q@barley16.stanford.edu     1        
+  24552 0.26167 runHanBoot abhaskar     r     12/25/2014 21:49:45 trusty.q@barley13.stanford.edu     1        
+  24554 0.26167 runHanBoot abhaskar     r     12/25/2014 22:10:15 trusty.q@barley02.stanford.edu     1        
+  24556 0.26167 runHanBoot abhaskar     r     12/25/2014 22:54:00 trusty.q@barley09.stanford.edu     1        
+  24557 0.26167 runLucampB abhaskar     r     12/25/2014 23:19:00 trusty.q@barley10.stanford.edu     1        
+  24558 0.26167 runHanBoot abhaskar     r     12/25/2014 23:50:30 trusty.q@barley02.stanford.edu     1        
+  24559 0.26167 runLucampB abhaskar     r     12/26/2014 00:04:00 trusty.q@barley07.stanford.edu     1        
+  24560 0.26167 runHanBoot abhaskar     r     12/26/2014 00:11:30 trusty.q@barley14.stanford.edu     1        
+  24562 0.26167 runHanBoot abhaskar     r     12/26/2014 00:48:00 trusty.q@barley02.stanford.edu     1        
+  24563 0.26167 runLucampB abhaskar     r     12/26/2014 01:18:00 trusty.q@barley18.Stanford.EDU     1        
+  24564 0.26167 runHanBoot abhaskar     r     12/26/2014 01:49:45 trusty.q@barley14.stanford.edu     1        
+  24565 0.26167 runLucampB abhaskar     r     12/26/2014 02:02:15 trusty.q@barley16.stanford.edu     1        
+  24566 0.26167 runHanBoot abhaskar     r     12/26/2014 02:52:30 trusty.q@barley05.Stanford.EDU     1        
+  24567 0.26167 runLucampB abhaskar     r     12/26/2014 03:26:30 trusty.q@barley02.stanford.edu     1        
+  24568 0.26167 runHanBoot abhaskar     r     12/26/2014 03:33:30 trusty.q@barley07.stanford.edu     1        
+  24569 0.26167 runLucampB abhaskar     r     12/26/2014 04:02:00 trusty.q@barley09.stanford.edu     1        
+  24570 0.26167 runHanBoot abhaskar     r     12/26/2014 04:10:15 trusty.q@barley10.stanford.edu     1        
+  24571 0.26167 runLucampB abhaskar     r     12/26/2014 04:13:45 trusty.q@barley12.Stanford.EDU     1        
+  24572 0.26167 runHanBoot abhaskar     r     12/26/2014 04:19:00 trusty.q@barley16.stanford.edu     1        
+  24573 0.26167 runLucampB abhaskar     r     12/26/2014 04:47:45 trusty.q@barley05.Stanford.EDU     1        
+  24574 0.26167 runHanBoot abhaskar     r     12/26/2014 04:56:45 trusty.q@barley02.stanford.edu     1        
+  24575 0.26167 runLucampB abhaskar     r     12/26/2014 05:08:45 trusty.q@barley13.stanford.edu     1        
+  24576 0.26167 runHanBoot abhaskar     r     12/26/2014 05:14:45 trusty.q@barley11.stanford.edu     1        
+  24577 0.26167 runLucampB abhaskar     r     12/26/2014 05:25:45 trusty.q@barley07.stanford.edu     1        
+  24578 0.26167 runHanBoot abhaskar     r     12/26/2014 05:48:45 trusty.q@barley14.stanford.edu     1        
+  24579 0.26167 runLucampB abhaskar     r     12/26/2014 06:37:30 trusty.q@barley12.Stanford.EDU     1        
+  24580 0.26167 runHanBoot abhaskar     r     12/26/2014 07:26:30 trusty.q@barley18.Stanford.EDU     1        
+  24581 0.26167 runLucampB abhaskar     r     12/26/2014 07:30:00 trusty.q@barley05.Stanford.EDU     1        
+  24582 0.26167 runHanBoot abhaskar     r     12/26/2014 07:39:00 trusty.q@barley16.stanford.edu     1        
+  24583 0.26167 runLucampB abhaskar     r     12/26/2014 07:54:00 trusty.q@barley02.stanford.edu     1        
+  24584 0.26167 runHanBoot abhaskar     r     12/26/2014 08:54:30 trusty.q@barley11.stanford.edu     1        
+  24585 0.26167 runLucampB abhaskar     r     12/26/2014 10:08:00 trusty.q@barley06.stanford.edu     1        
+  24586 0.26167 runHanBoot abhaskar     r     12/26/2014 10:29:30 trusty.q@barley12.Stanford.EDU     1        
+  24587 0.26167 runLucampB abhaskar     r     12/26/2014 10:59:00 trusty.q@barley11.stanford.edu     1        
+  24588 0.26167 runHanBoot abhaskar     r     12/26/2014 11:11:15 trusty.q@barley07.stanford.edu     1        
+  24589 0.26167 runLucampB abhaskar     r     12/26/2014 11:26:30 trusty.q@barley05.Stanford.EDU     1        
+  24590 0.26167 runHanBoot abhaskar     r     12/26/2014 11:33:30 trusty.q@barley14.stanford.edu     1        
+  24591 0.26167 runLucampB abhaskar     r     12/26/2014 11:38:15 trusty.q@barley19.stanford.edu     1        
+  24592 0.26167 runHanBoot abhaskar     r     12/26/2014 11:58:15 trusty.q@barley06.stanford.edu     1        
+  24593 0.26167 runLucampB abhaskar     r     12/26/2014 12:08:00 trusty.q@barley13.stanford.edu     1        
+  24594 0.26167 runHanBoot abhaskar     r     12/26/2014 12:12:00 trusty.q@barley16.stanford.edu     1        
+  24595 0.26167 runLucampB abhaskar     r     12/26/2014 12:15:45 trusty.q@barley11.stanford.edu     1        
+  24596 0.26167 runHanBoot abhaskar     r     12/26/2014 12:17:00 trusty.q@barley02.stanford.edu     1        
+  24597 0.26167 runLucampB abhaskar     r     12/26/2014 12:26:45 trusty.q@barley07.stanford.edu     1        
+  24598 0.26167 runHanBoot abhaskar     r     12/26/2014 13:30:00 trusty.q@barley02.stanford.edu     1        
+  24599 0.26167 runLucampB abhaskar     r     12/26/2014 14:23:45 trusty.q@barley12.Stanford.EDU     1        
+  24600 0.26167 runHanBoot abhaskar     r     12/26/2014 15:13:00 trusty.q@barley07.stanford.edu     1        
+  24601 0.26167 runLucampB abhaskar     r     12/26/2014 16:30:00 trusty.q@barley13.stanford.edu     1        
+  24602 0.26167 runHanBoot abhaskar     r     12/26/2014 16:35:45 trusty.q@barley09.stanford.edu     1        
+  24603 0.26167 runLucampB abhaskar     r     12/26/2014 16:38:30 trusty.q@barley06.stanford.edu     1        
+  24604 0.26167 runHanBoot abhaskar     r     12/26/2014 16:54:00 trusty.q@barley18.Stanford.EDU     1        
+  24605 0.26167 runLucampB abhaskar     r     12/26/2014 17:03:15 trusty.q@barley19.stanford.edu     1        
+  26046 0.30385 SimDP2T2N  hoyeoni      r     12/25/2014 13:48:15 trusty.q@barley11.stanford.edu     1        
+  26047 0.30385 SimDP26T2N hoyeoni      r     12/25/2014 13:48:30 trusty.q@barley12.Stanford.EDU     1        
+  26049 0.30385 SimDP93T2N hoyeoni      r     12/25/2014 13:48:45 trusty.q@barley16.stanford.edu     1        
+  26051 0.30385 SimDPT2T2N hoyeoni      r     12/25/2014 13:51:45 trusty.q@barley05.Stanford.EDU     1        
+  26052 0.30385 SimDPT19T2 hoyeoni      r     12/25/2014 13:51:45 trusty.q@barley05.Stanford.EDU     1        
+  26053 0.30385 SimDPT26T2 hoyeoni      r     12/25/2014 13:52:00 trusty.q@barley02.stanford.edu     1        
+  26054 0.30385 SimDPT36T2 hoyeoni      r     12/25/2014 13:52:00 trusty.q@barley02.stanford.edu     1        
+  26055 0.30385 SimDPT56T2 hoyeoni      r     12/25/2014 13:52:00 trusty.q@barley02.stanford.edu     1        
+  26056 0.30385 SimDPT89T2 hoyeoni      r     12/25/2014 13:52:00 trusty.q@barley02.stanford.edu     1        
+  26057 0.30385 SimDPT93T2 hoyeoni      r     12/25/2014 13:52:15 trusty.q@barley10.stanford.edu     1        
+  26058 0.30385 SimDPT96T2 hoyeoni      r     12/25/2014 13:52:15 trusty.q@barley10.stanford.edu     1        
+  26059 0.30385 SimDPT97T2 hoyeoni      r     12/25/2014 13:52:15 trusty.q@barley10.stanford.edu     1        
+  26171 0.95000 script_WCN wongml       r     12/25/2014 18:57:45 trusty.q@barley19.stanford.edu     1        
+  27662 0.95000 program    blara        r     12/26/2014 10:49:15 trusty.q@barley11.stanford.edu     1        
+  27864 0.28889 run1       henighan     r     12/26/2014 11:39:45 trusty.q@barley12.Stanford.EDU     1        
+  27865 0.28889 run2       henighan     r     12/26/2014 11:39:45 trusty.q@barley12.Stanford.EDU     1        
+  27867 0.28889 run4       henighan     r     12/26/2014 11:39:45 trusty.q@barley12.Stanford.EDU     1        
+  27868 0.28889 run5       henighan     r     12/26/2014 11:39:45 trusty.q@barley12.Stanford.EDU     1        
+  27869 0.28889 run6       henighan     r     12/26/2014 11:39:45 trusty.q@barley12.Stanford.EDU     1        
+  27870 0.28889 run7       henighan     r     12/26/2014 11:39:45 trusty.q@barley12.Stanford.EDU     1        
+  27871 0.28889 run8       henighan     r     12/26/2014 11:39:45 trusty.q@barley12.Stanford.EDU     1        
+  27873 0.28889 run10      henighan     r     12/26/2014 11:39:45 trusty.q@barley18.Stanford.EDU     1        
+  27874 0.28889 run11      henighan     r     12/26/2014 11:39:45 trusty.q@barley18.Stanford.EDU     1        
+  27875 0.28889 run12      henighan     r     12/26/2014 11:39:45 trusty.q@barley18.Stanford.EDU     1        
+  27876 0.28889 run13      henighan     r     12/26/2014 11:39:45 trusty.q@barley18.Stanford.EDU     1        
+  27877 0.28889 run14      henighan     r     12/26/2014 11:40:00 trusty.q@barley10.stanford.edu     1        
+  27878 0.28889 run15      henighan     r     12/26/2014 11:40:00 trusty.q@barley10.stanford.edu     1        
+  27879 0.28889 run16      henighan     r     12/26/2014 11:40:00 trusty.q@barley10.stanford.edu     1        
+  27880 0.28889 run17      henighan     r     12/26/2014 11:40:00 trusty.q@barley10.stanford.edu     1        
+  27881 0.28889 run18      henighan     r     12/26/2014 11:40:00 trusty.q@barley10.stanford.edu     1        
+  27882 0.28889 run19      henighan     r     12/26/2014 11:40:00 trusty.q@barley10.stanford.edu     1        
+  27883 0.28889 run20      henighan     r     12/26/2014 11:40:00 trusty.q@barley10.stanford.edu     1        
+  27937 0.32778 tma1       lkaplan2     r     12/26/2014 15:22:45 trusty.q@barley11.stanford.edu     1        
+  27938 0.32778 tma2       lkaplan2     r     12/26/2014 15:22:45 trusty.q@barley11.stanford.edu     1        
+  27939 0.32778 tma3       lkaplan2     r     12/26/2014 15:22:45 trusty.q@barley11.stanford.edu     1        
+  27940 0.32778 tma4       lkaplan2     r     12/26/2014 15:22:45 trusty.q@barley11.stanford.edu     1        
+  27941 0.32778 tma5       lkaplan2     r     12/26/2014 15:22:45 trusty.q@barley11.stanford.edu     1        
+  27942 0.32778 tma6       lkaplan2     r     12/26/2014 15:22:45 trusty.q@barley11.stanford.edu     1        
+  27943 0.32778 tma7       lkaplan2     r     12/26/2014 15:23:00 trusty.q@barley16.stanford.edu     1        
+  27947 0.32778 tma11      lkaplan2     r     12/26/2014 15:23:00 trusty.q@barley16.stanford.edu     1        
+  27949 0.32778 tma13      lkaplan2     r     12/26/2014 15:23:00 trusty.q@barley16.stanford.edu     1        
+  28092 0.28889 e5.0.g8.3  dsglass      r     12/26/2014 16:59:45 trusty.q@barley10.stanford.edu     1        
+  28158 0.28889 k32.e5.0.g dsglass      r     12/26/2014 17:02:30 trusty.q@barley05.Stanford.EDU     1        
+  28163 0.28889 k32.e5.0.g dsglass      r     12/26/2014 17:02:30 trusty.q@barley05.Stanford.EDU     1        
+  28181 0.28889 k32.e5.0.g dsglass      r     12/26/2014 17:02:45 trusty.q@barley10.stanford.edu     1        
+  28182 0.28889 k32.e5.0.g dsglass      r     12/26/2014 17:03:00 trusty.q@barley14.stanford.edu     1        
+  28198 0.28889 k32.e5.0.g dsglass      r     12/26/2014 17:03:15 trusty.q@barley02.stanford.edu     1        
+   2656 0.40556 job.sh     yuyan1       qw    12/11/2014 17:10:25                                   24        
+   3949 0.39000 run2.sh    yifanlu      qw    12/16/2014 19:06:49                                    1        
+   3957 0.37727 run16Entry joshx        qw    12/16/2014 21:13:36                                    1        
+   8908 0.37031 Localizati mkotaru      Eqw   12/17/2014 23:36:26                                    4        
+   8909 0.37031 Localizati mkotaru      Eqw   12/17/2014 23:36:28                                    4        
+   8910 0.37031 Localizati mkotaru      Eqw   12/17/2014 23:36:31                                    4        
+   8911 0.37031 Localizati mkotaru      Eqw   12/17/2014 23:36:33                                    4        
+   8912 0.37031 Localizati mkotaru      Eqw   12/17/2014 23:36:36                                    4        
+   8913 0.37031 Localizati mkotaru      Eqw   12/17/2014 23:36:38                                    4        
+   8915 0.37031 Localizati mkotaru      Eqw   12/17/2014 23:36:44                                    4        
+   8917 0.37031 Localizati mkotaru      Eqw   12/17/2014 23:36:49                                    4        
+   8919 0.37031 Localizati mkotaru      Eqw   12/17/2014 23:36:54                                    4        
+   8920 0.37031 Localizati mkotaru      Eqw   12/17/2014 23:36:56                                    4        
+  19750 0.36667 script.sh  montanar     qw    12/22/2014 13:05:27                                    1        
+  20106 0.36250 BABYto     pusiol       Eqw   12/23/2014 08:54:48                                    1        
+  26398 0.36250 BABYto     pusiol       Eqw   12/26/2014 06:01:46                                    1        
+   8914 0.31016 Localizati mkotaru      Eqw   12/17/2014 23:36:41                                    4        
+   8916 0.31016 Localizati mkotaru      Eqw   12/17/2014 23:36:46                                    4        
+   8918 0.31016 Localizati mkotaru      Eqw   12/17/2014 23:36:51                                    4        
+   2658 0.30833 job.sh     yuyan1       qw    12/11/2014 21:09:07                                    1        
+   3950 0.30833 run3.sh    yifanlu      qw    12/16/2014 19:08:16                                    1        
+   3959 0.30833 run32Entry joshx        qw    12/16/2014 21:13:38                                    1        
+  19751 0.30833 script_B.s montanar     qw    12/22/2014 13:11:10                                    1        
+   2659 0.28889 job.sh     yuyan1       qw    12/11/2014 21:11:38                                    1        
+   3961 0.28889 run64Entry joshx        qw    12/16/2014 21:13:41                                    1        
+  19811 0.28889 script_C.s montanar     qw    12/22/2014 13:28:37                                    1        
+   3963 0.27917 run128Entr joshx        qw    12/16/2014 21:13:44                                    1        
+  10828 0.27402 Localizati mkotaru      Eqw   12/18/2014 15:56:17                                    4        
+  10832 0.27402 Localizati mkotaru      Eqw   12/18/2014 15:56:22                                    4        
+  10827 0.27402 Localizati mkotaru      Eqw   12/18/2014 15:56:16                                    4        
+  10829 0.27402 Localizati mkotaru      Eqw   12/18/2014 15:56:19                                    4        
+  10830 0.27402 Localizati mkotaru      Eqw   12/18/2014 15:56:20                                    4        
+  10834 0.27402 Localizati mkotaru      Eqw   12/18/2014 15:56:25                                    4        
+   3969 0.27333 run16PermH joshx        qw    12/16/2014 21:16:45                                    1        
+  10833 0.27059 Localizati mkotaru      Eqw   12/18/2014 15:56:23                                    4        
+  10831 0.27059 Localizati mkotaru      Eqw   12/18/2014 15:56:21                                    4        
+   3970 0.26944 run32PermH joshx        qw    12/16/2014 21:16:46                                    1        
+   3971 0.26667 run64PermH joshx        qw    12/16/2014 21:16:47                                    1        
+   3972 0.26458 run128Perm joshx        qw    12/16/2014 21:16:49                                    1        
+   3973 0.26296 run16RSPer joshx        qw    12/16/2014 21:19:51                                    1        
+   3974 0.26167 run32RSPer joshx        qw    12/16/2014 21:19:53                                    1        
+   3975 0.26061 run64RSPer joshx        qw    12/16/2014 21:19:56                                    1        
+   3976 0.25972 run128RSPe joshx        qw    12/16/2014 21:19:58                                    1        
+   4007 0.25897 run16CSPer joshx        qw    12/16/2014 21:23:01                                    1        
+   4009 0.25833 run32CSPer joshx        qw    12/16/2014 21:23:04                                    1        
+   4011 0.25778 run64CSPer joshx        qw    12/16/2014 21:23:06                                    1        
+   4013 0.25729 run128CSPe joshx        qw    12/16/2014 21:23:09                                    1        
+   4123 0.25686 run16RGPer joshx        qw    12/16/2014 21:26:10                                    1        
+   4125 0.25648 run32RGPer joshx        qw    12/16/2014 21:26:11                                    1        
+   4127 0.25614 run64RGPer joshx        qw    12/16/2014 21:26:13                                    1        
+   4129 0.25583 run128RGPe joshx        qw    12/16/2014 21:26:14                                    1        
+   4274 0.25556 run16CGPer joshx        qw    12/16/2014 21:29:15                                    1        
+   4276 0.25530 run32CGPer joshx        qw    12/16/2014 21:29:16                                    1        
+   4278 0.25507 run64CGPer joshx        qw    12/16/2014 21:29:17                                    1        
+   4280 0.25486 run128CGPe joshx        qw    12/16/2014 21:29:19                                    1        
+   4319 0.25467 run16RDira joshx        qw    12/16/2014 21:32:20                                    1        
+   4320 0.25449 run32RDira joshx        qw    12/16/2014 21:32:21                                    1        
+   4321 0.25432 run64RDira joshx        qw    12/16/2014 21:32:22                                    1        
+   4322 0.25417 run128RDir joshx        qw    12/16/2014 21:32:24                                    1        
+   4323 0.25402 run16CDira joshx        qw    12/16/2014 21:35:25                                    1        
+   4324 0.25389 run32CDira joshx        qw    12/16/2014 21:35:26                                    1        
+   4325 0.25376 run64CDira joshx        qw    12/16/2014 21:35:27                                    1        
+   4326 0.25365 run128CDir joshx        qw    12/16/2014 21:35:28                                    1        
+   4327 0.25354 run16RGaus joshx        qw    12/16/2014 21:38:30                                    1        
+   4328 0.25343 run32RGaus joshx        qw    12/16/2014 21:38:31                                    1        
+   4329 0.25333 run64RGaus joshx        qw    12/16/2014 21:38:32                                    1        
+   4330 0.25324 run128RGau joshx        qw    12/16/2014 21:38:33                                    1        
+   4331 0.25315 run16CGaus joshx        qw    12/16/2014 21:41:34                                    1        
+   4332 0.25307 run32CGaus joshx        qw    12/16/2014 21:41:36                                    1        
+   4333 0.25299 run64CGaus joshx        qw    12/16/2014 21:41:37                                    1        
+   4334 0.25292 run128CGau joshx        qw    12/16/2014 21:41:38                                    1        
+  24606 0.00000 runHanBoot abhaskar     qw    12/25/2014 01:43:55                                    1        
+  24607 0.00000 runLucampB abhaskar     qw    12/25/2014 01:43:56                                    1        
+  24608 0.00000 runHanBoot abhaskar     qw    12/25/2014 01:43:57                                    1        
+  24609 0.00000 runLucampB abhaskar     qw    12/25/2014 01:43:58                                    1        
+  24610 0.00000 runHanBoot abhaskar     qw    12/25/2014 01:44:00                                    1        
+  24611 0.00000 runLucampB abhaskar     qw    12/25/2014 01:44:01                                    1        
+  24612 0.00000 runHanBoot abhaskar     qw    12/25/2014 01:44:02                                    1        
+  24613 0.00000 runLucampB abhaskar     qw    12/25/2014 01:44:03                                    1        
+  24614 0.00000 runHanBoot abhaskar     qw    12/25/2014 01:44:04                                    1        
+  24615 0.00000 runLucampB abhaskar     qw    12/25/2014 01:44:05                                    1        
+  24616 0.00000 runHanBoot abhaskar     qw    12/25/2014 01:44:07                                    1        
+  24617 0.00000 runLucampB abhaskar     qw    12/25/2014 01:44:08                                    1        
+  24618 0.00000 runHanBoot abhaskar     qw    12/25/2014 01:44:09                                    1        
+  24619 0.00000 runLucampB abhaskar     qw    12/25/2014 01:44:10                                    1        
+  24620 0.00000 runHanBoot abhaskar     qw    12/25/2014 01:44:11                                    1        
+  24621 0.00000 runLucampB abhaskar     qw    12/25/2014 01:44:12                                    1        
+  24622 0.00000 runHanBoot abhaskar     qw    12/25/2014 01:44:13                                    1        
+  24623 0.00000 runLucampB abhaskar     qw    12/25/2014 01:44:15                                    1        
+  24624 0.00000 runHanBoot abhaskar     qw    12/25/2014 01:44:16                                    1        
+  24625 0.00000 runLucampB abhaskar     qw    12/25/2014 01:44:17                                    1        
+  24626 0.00000 runHanBoot abhaskar     qw    12/25/2014 01:44:18                                    1        
+  24627 0.00000 runLucampB abhaskar     qw    12/25/2014 01:44:19                                    1        
+  24628 0.00000 runHanBoot abhaskar     qw    12/25/2014 01:44:20                                    1        
+  24629 0.00000 runLucampB abhaskar     qw    12/25/2014 01:44:22                                    1        
+  24630 0.00000 runHanBoot abhaskar     qw    12/25/2014 01:44:23                                    1        
+  24631 0.00000 runLucampB abhaskar     qw    12/25/2014 01:44:24                                    1        
+  24632 0.00000 runHanBoot abhaskar     qw    12/25/2014 01:44:25                                    1        
+  24633 0.00000 runLucampB abhaskar     qw    12/25/2014 01:44:26                                    1        
+  24634 0.00000 runHanBoot abhaskar     qw    12/25/2014 01:44:27                                    1        
+  24635 0.00000 runLucampB abhaskar     qw    12/25/2014 01:44:28                                    1        
+  24636 0.00000 runHanBoot abhaskar     qw    12/25/2014 01:44:30                                    1        
+  24637 0.00000 runLucampB abhaskar     qw    12/25/2014 01:44:31                                    1        
+  24638 0.00000 runHanBoot abhaskar     qw    12/25/2014 01:44:32                                    1        
+  24639 0.00000 runLucampB abhaskar     qw    12/25/2014 01:44:33                                    1        
+  24640 0.00000 runHanBoot abhaskar     qw    12/25/2014 01:44:34                                    1        
+  24641 0.00000 runLucampB abhaskar     qw    12/25/2014 01:44:35                                    1        
+  24642 0.00000 runHanBoot abhaskar     qw    12/25/2014 01:44:36                                    1        
+  24643 0.00000 runLucampB abhaskar     qw    12/25/2014 01:44:38                                    1        
+  24644 0.00000 runHanBoot abhaskar     qw    12/25/2014 01:44:39                                    1        
+  24645 0.00000 runLucampB abhaskar     qw    12/25/2014 01:44:40                                    1        
+  24646 0.00000 runHanBoot abhaskar     qw    12/25/2014 01:44:41                                    1        
+  24647 0.00000 runLucampB abhaskar     qw    12/25/2014 01:44:42                                    1        
+  24648 0.00000 runHanBoot abhaskar     qw    12/25/2014 01:44:43                                    1        
+  24649 0.00000 runLucampB abhaskar     qw    12/25/2014 01:44:44                                    1        
+  24650 0.00000 runHanBoot abhaskar     qw    12/25/2014 01:44:46                                    1        
+  24651 0.00000 runLucampB abhaskar     qw    12/25/2014 01:44:47                                    1        
+  24652 0.00000 runHanBoot abhaskar     qw    12/25/2014 01:44:48                                    1        
+  24653 0.00000 runLucampB abhaskar     qw    12/25/2014 01:44:49                                    1        
+  24654 0.00000 runHanBoot abhaskar     qw    12/25/2014 01:44:50                                    1        
+  24655 0.00000 runLucampB abhaskar     qw    12/25/2014 01:44:51                                    1        
+  24656 0.00000 runHanBoot abhaskar     qw    12/25/2014 01:44:52                                    1        
+  24657 0.00000 runLucampB abhaskar     qw    12/25/2014 01:44:54                                    1        
+  24658 0.00000 runHanBoot abhaskar     qw    12/25/2014 01:44:55                                    1        
+  24659 0.00000 runLucampB abhaskar     qw    12/25/2014 01:44:56                                    1        
+  24660 0.00000 runHanBoot abhaskar     qw    12/25/2014 01:44:57                                    1        
+  24661 0.00000 runLucampB abhaskar     qw    12/25/2014 01:44:58                                    1        
+  24662 0.00000 runHanBoot abhaskar     qw    12/25/2014 01:44:59                                    1        
+  24663 0.00000 runLucampB abhaskar     qw    12/25/2014 01:45:00                                    1        
+  24664 0.00000 runHanBoot abhaskar     qw    12/25/2014 01:45:02                                    1        
+  24665 0.00000 runLucampB abhaskar     qw    12/25/2014 01:45:03                                    1        
+  24666 0.00000 runHanBoot abhaskar     qw    12/25/2014 01:45:04                                    1        
+  24667 0.00000 runLucampB abhaskar     qw    12/25/2014 01:45:05                                    1        
+  24668 0.00000 runHanBoot abhaskar     qw    12/25/2014 01:45:06                                    1        
+  24669 0.00000 runLucampB abhaskar     qw    12/25/2014 01:45:07                                    1        
+  24670 0.00000 runHanBoot abhaskar     qw    12/25/2014 01:45:09                                    1        
+  24671 0.00000 runLucampB abhaskar     qw    12/25/2014 01:45:10                                    1        
+  26244 0.00000 runHanBoot abhaskar     qw    12/26/2014 05:43:14                                    1        
+  26245 0.00000 runHanBoot abhaskar     qw    12/26/2014 05:43:15                                    1        
+  26246 0.00000 runHanBoot abhaskar     qw    12/26/2014 05:43:16                                    1        
+  26247 0.00000 runHanBoot abhaskar     qw    12/26/2014 05:43:17                                    1        
+  26248 0.00000 runHanBoot abhaskar     qw    12/26/2014 05:43:18                                    1        
+  26249 0.00000 runHanBoot abhaskar     qw    12/26/2014 05:43:19                                    1        
+  26250 0.00000 runHanBoot abhaskar     qw    12/26/2014 05:43:21                                    1        
+  26251 0.00000 runHanBoot abhaskar     qw    12/26/2014 05:43:22                                    1        
+  26252 0.00000 runHanBoot abhaskar     qw    12/26/2014 05:43:23                                    1        
+  26253 0.00000 runHanBoot abhaskar     qw    12/26/2014 05:43:24                                    1        
+  26254 0.00000 runHanBoot abhaskar     qw    12/26/2014 05:43:25                                    1        
+  26255 0.00000 runHanBoot abhaskar     qw    12/26/2014 05:43:26                                    1        
+  26256 0.00000 runHanBoot abhaskar     qw    12/26/2014 05:43:27                                    1        
+  26257 0.00000 runHanBoot abhaskar     qw    12/26/2014 05:43:29                                    1        
+  26258 0.00000 runHanBoot abhaskar     qw    12/26/2014 05:43:30                                    1        
+  26259 0.00000 runHanBoot abhaskar     qw    12/26/2014 05:43:31                                    1        
+  26260 0.00000 runHanBoot abhaskar     qw    12/26/2014 05:43:32                                    1        
+  26261 0.00000 runHanBoot abhaskar     qw    12/26/2014 05:43:33                                    1        
+  26262 0.00000 runHanBoot abhaskar     qw    12/26/2014 05:43:34                                    1        
+  26263 0.00000 runHanBoot abhaskar     qw    12/26/2014 05:43:35                                    1        
+  26264 0.00000 runHanBoot abhaskar     qw    12/26/2014 05:43:37                                    1        
+  26265 0.00000 runHanBoot abhaskar     qw    12/26/2014 05:43:38                                    1        
+  26266 0.00000 runHanBoot abhaskar     qw    12/26/2014 05:43:39                                    1        
+  26267 0.00000 runHanBoot abhaskar     qw    12/26/2014 05:43:40                                    1        
+  26268 0.00000 runHanBoot abhaskar     qw    12/26/2014 05:43:41                                    1        
+  26269 0.00000 runHanBoot abhaskar     qw    12/26/2014 05:43:42                                    1        
+  26270 0.00000 runHanBoot abhaskar     qw    12/26/2014 05:43:43                                    1        
+  26271 0.00000 runHanBoot abhaskar     qw    12/26/2014 05:43:45                                    1        
+  26272 0.00000 runHanBoot abhaskar     qw    12/26/2014 05:43:46                                    1        
+  26273 0.00000 runHanBoot abhaskar     qw    12/26/2014 05:43:47                                    1        
+  26274 0.00000 runHanBoot abhaskar     qw    12/26/2014 05:43:48                                    1        
+  26275 0.00000 runHanBoot abhaskar     qw    12/26/2014 05:43:49                                    1        
+  26276 0.00000 runHanBoot abhaskar     qw    12/26/2014 05:43:50                                    1        
+  26277 0.00000 runHanBoot abhaskar     qw    12/26/2014 05:43:51                                    1        
+  26278 0.00000 runHanBoot abhaskar     qw    12/26/2014 05:43:53                                    1        
+  26279 0.00000 runHanBoot abhaskar     qw    12/26/2014 05:43:54                                    1        
+  26280 0.00000 runHanBoot abhaskar     qw    12/26/2014 05:43:55                                    1        
+  26281 0.00000 runHanBoot abhaskar     qw    12/26/2014 05:43:56                                    1        
+  26282 0.00000 runHanBoot abhaskar     qw    12/26/2014 05:43:57                                    1        
+  26283 0.00000 runHanBoot abhaskar     qw    12/26/2014 05:43:58                                    1        
+  26284 0.00000 runHanBoot abhaskar     qw    12/26/2014 05:43:59                                    1        
+  26285 0.00000 runHanBoot abhaskar     qw    12/26/2014 05:44:01                                    1        
+  26286 0.00000 runHanBoot abhaskar     qw    12/26/2014 05:44:02                                    1        
+  26287 0.00000 runHanBoot abhaskar     qw    12/26/2014 05:44:03                                    1        
+  26288 0.00000 runHanBoot abhaskar     qw    12/26/2014 05:44:04                                    1        
+  26289 0.00000 runHanBoot abhaskar     qw    12/26/2014 05:44:05                                    1        
+  26290 0.00000 runHanBoot abhaskar     qw    12/26/2014 05:44:06                                    1        
+  26291 0.00000 runHanBoot abhaskar     qw    12/26/2014 05:44:08                                    1        
+  26292 0.00000 runHanBoot abhaskar     qw    12/26/2014 05:44:09                                    1        
+  26293 0.00000 runHanBoot abhaskar     qw    12/26/2014 05:44:10                                    1        
+  26294 0.00000 runHanBoot abhaskar     qw    12/26/2014 05:44:11                                    1        
+  26295 0.00000 runHanBoot abhaskar     qw    12/26/2014 05:44:12                                    1        
+  26296 0.00000 runHanBoot abhaskar     qw    12/26/2014 05:44:13                                    1        
+  26297 0.00000 runHanBoot abhaskar     qw    12/26/2014 05:44:14                                    1        
+  26298 0.00000 runHanBoot abhaskar     qw    12/26/2014 05:44:16                                    1        
+  26299 0.00000 runHanBoot abhaskar     qw    12/26/2014 05:44:17                                    1        
+  26300 0.00000 runHanBoot abhaskar     qw    12/26/2014 05:44:18                                    1        
+  26301 0.00000 runHanBoot abhaskar     qw    12/26/2014 05:44:19                                    1        
+  26302 0.00000 runHanBoot abhaskar     qw    12/26/2014 05:44:20                                    1        
+  26303 0.00000 runHanBoot abhaskar     qw    12/26/2014 05:44:21                                    1        
+  26304 0.00000 runHanBoot abhaskar     qw    12/26/2014 05:44:22                                    1        
+  26305 0.00000 runHanBoot abhaskar     qw    12/26/2014 05:44:24                                    1        
+  26306 0.00000 runHanBoot abhaskar     qw    12/26/2014 05:44:25                                    1        
+  26307 0.00000 runHanBoot abhaskar     qw    12/26/2014 05:44:26                                    1        
+  26308 0.00000 runHanBoot abhaskar     qw    12/26/2014 05:44:27                                    1        
+  26309 0.00000 runHanBoot abhaskar     qw    12/26/2014 05:44:28                                    1        
+  26310 0.00000 runHanBoot abhaskar     qw    12/26/2014 05:44:29                                    1        
+  26311 0.00000 runHanBoot abhaskar     qw    12/26/2014 05:44:31                                    1        
+  26312 0.00000 runHanBoot abhaskar     qw    12/26/2014 05:44:32                                    1        
+  26313 0.00000 runHanBoot abhaskar     qw    12/26/2014 05:44:33                                    1        
+  26314 0.00000 runHanBoot abhaskar     qw    12/26/2014 05:44:34                                    1        
+  26315 0.00000 runHanBoot abhaskar     qw    12/26/2014 05:44:35                                    1        
+  26316 0.00000 runHanBoot abhaskar     qw    12/26/2014 05:44:36                                    1        
+  26317 0.00000 runHanBoot abhaskar     qw    12/26/2014 05:44:37                                    1        
+  26318 0.00000 runHanBoot abhaskar     qw    12/26/2014 05:44:39                                    1        
+  26319 0.00000 runHanBoot abhaskar     qw    12/26/2014 05:44:40                                    1        
+  26320 0.00000 runHanBoot abhaskar     qw    12/26/2014 05:44:41                                    1        
+  26321 0.00000 runHanBoot abhaskar     qw    12/26/2014 05:44:42                                    1        
+  26322 0.00000 runHanBoot abhaskar     qw    12/26/2014 05:44:43                                    1        
+  26323 0.00000 runHanBoot abhaskar     qw    12/26/2014 05:44:44                                    1        
+  26324 0.00000 runHanBoot abhaskar     qw    12/26/2014 05:44:45                                    1        
+  26325 0.00000 runHanBoot abhaskar     qw    12/26/2014 05:44:47                                    1        
+  26326 0.00000 runHanBoot abhaskar     qw    12/26/2014 05:44:48                                    1        
+  26327 0.00000 runHanBoot abhaskar     qw    12/26/2014 05:44:49                                    1        
+  26328 0.00000 runHanBoot abhaskar     qw    12/26/2014 05:44:50                                    1        
+  26329 0.00000 runHanBoot abhaskar     qw    12/26/2014 05:44:51                                    1        
+  26330 0.00000 runHanBoot abhaskar     qw    12/26/2014 05:44:52                                    1        
+  26331 0.00000 runHanBoot abhaskar     qw    12/26/2014 05:44:54                                    1        
+  26332 0.00000 runHanBoot abhaskar     qw    12/26/2014 05:44:55                                    1        
+  26333 0.00000 runHanBoot abhaskar     qw    12/26/2014 05:44:56                                    1        
+  26334 0.00000 runHanBoot abhaskar     qw    12/26/2014 05:44:57                                    1        
+  26335 0.00000 runHanBoot abhaskar     qw    12/26/2014 05:44:58                                    1        
+  26336 0.00000 runHanBoot abhaskar     qw    12/26/2014 05:44:59                                    1        
+  26337 0.00000 runHanBoot abhaskar     qw    12/26/2014 05:45:00                                    1        
+  26338 0.00000 runHanBoot abhaskar     qw    12/26/2014 05:45:02                                    1        
+  26339 0.00000 runHanBoot abhaskar     qw    12/26/2014 05:45:03                                    1        
+  26340 0.00000 runHanBoot abhaskar     qw    12/26/2014 05:45:04                                    1        
+  26341 0.00000 runHanBoot abhaskar     qw    12/26/2014 05:45:05                                    1        
+  26342 0.00000 runHanBoot abhaskar     qw    12/26/2014 05:45:06                                    1        
+  26343 0.00000 runHanBoot abhaskar     qw    12/26/2014 05:45:07                                    1        
+  26344 0.00000 runHanBoot abhaskar     qw    12/26/2014 05:45:08                                    1        
+  26345 0.00000 runHanBoot abhaskar     qw    12/26/2014 05:45:10                                    1        
+  26346 0.00000 runHanBoot abhaskar     qw    12/26/2014 05:45:11                                    1        
+  26347 0.00000 runHanBoot abhaskar     qw    12/26/2014 05:45:12                                    1        
+  26348 0.00000 runHanBoot abhaskar     qw    12/26/2014 05:45:13                                    1        
+  26349 0.00000 runHanBoot abhaskar     qw    12/26/2014 05:45:14                                    1        
+  26350 0.00000 runHanBoot abhaskar     qw    12/26/2014 05:45:15                                    1        
+  26351 0.00000 runHanBoot abhaskar     qw    12/26/2014 05:45:16                                    1        
+  26352 0.00000 runHanBoot abhaskar     qw    12/26/2014 05:45:18                                    1        
+  26353 0.00000 runHanBoot abhaskar     qw    12/26/2014 05:45:19                                    1        
+  26354 0.00000 runHanBoot abhaskar     qw    12/26/2014 05:45:20                                    1        
+  26355 0.00000 runHanBoot abhaskar     qw    12/26/2014 05:45:21                                    1        
+  26356 0.00000 runHanBoot abhaskar     qw    12/26/2014 05:45:22                                    1        
+  26357 0.00000 runHanBoot abhaskar     qw    12/26/2014 05:45:23                                    1        
+  26358 0.00000 runHanBoot abhaskar     qw    12/26/2014 05:45:24                                    1        
+  26359 0.00000 runHanBoot abhaskar     qw    12/26/2014 05:45:26                                    1        
+  26360 0.00000 runHanBoot abhaskar     qw    12/26/2014 05:45:27                                    1        
+  26361 0.00000 runHanBoot abhaskar     qw    12/26/2014 05:45:28                                    1        
+  26362 0.00000 runHanBoot abhaskar     qw    12/26/2014 05:45:29                                    1        
+  26363 0.00000 runHanBoot abhaskar     qw    12/26/2014 05:45:30                                    1        
+  26364 0.00000 runHanBoot abhaskar     qw    12/26/2014 05:45:31                                    1        
+  26365 0.00000 runHanBoot abhaskar     qw    12/26/2014 05:45:32                                    1        
+  26366 0.00000 runHanBoot abhaskar     qw    12/26/2014 05:45:34                                    1        
+  26367 0.00000 runHanBoot abhaskar     qw    12/26/2014 05:45:35                                    1        
+  26368 0.00000 runHanBoot abhaskar     qw    12/26/2014 05:45:36                                    1        
+  26369 0.00000 runHanBoot abhaskar     qw    12/26/2014 05:45:37                                    1        
+  26370 0.00000 runHanBoot abhaskar     qw    12/26/2014 05:45:38                                    1        
+  26371 0.00000 runHanBoot abhaskar     qw    12/26/2014 05:45:39                                    1        
+  26372 0.00000 runHanBoot abhaskar     qw    12/26/2014 05:45:41                                    1        
+  26373 0.00000 runHanBoot abhaskar     qw    12/26/2014 05:45:42                                    1        
+  26374 0.00000 runHanBoot abhaskar     qw    12/26/2014 05:45:43                                    1        
+  26375 0.00000 runHanBoot abhaskar     qw    12/26/2014 05:45:44                                    1        
+  26376 0.00000 runHanBoot abhaskar     qw    12/26/2014 05:45:45                                    1        
+  26377 0.00000 runHanBoot abhaskar     qw    12/26/2014 05:45:46                                    1        
+  26378 0.00000 runHanBoot abhaskar     qw    12/26/2014 05:45:47                                    1        
+  26379 0.00000 runHanBoot abhaskar     qw    12/26/2014 05:45:49                                    1        
+  26380 0.00000 runHanBoot abhaskar     qw    12/26/2014 05:45:50                                    1        
+  26381 0.00000 runHanBoot abhaskar     qw    12/26/2014 05:45:51                                    1        
+  26382 0.00000 runHanBoot abhaskar     qw    12/26/2014 05:45:52                                    1        
+  26383 0.00000 runHanBoot abhaskar     qw    12/26/2014 05:45:53                                    1        
+  26384 0.00000 runHanBoot abhaskar     qw    12/26/2014 05:45:54                                    1        
+  26385 0.00000 runHanBoot abhaskar     qw    12/26/2014 05:45:55                                    1        
+  26386 0.00000 runHanBoot abhaskar     qw    12/26/2014 05:45:57                                    1        
+  26387 0.00000 runHanBoot abhaskar     qw    12/26/2014 05:45:58                                    1        
+  26388 0.00000 runHanBoot abhaskar     qw    12/26/2014 05:45:59                                    1        
+  26389 0.00000 runHanBoot abhaskar     qw    12/26/2014 05:46:00                                    1        
+  26390 0.00000 runHanBoot abhaskar     qw    12/26/2014 05:46:01                                    1        
+  26391 0.00000 runHanBoot abhaskar     qw    12/26/2014 05:46:02                                    1        
+  26392 0.00000 runHanBoot abhaskar     qw    12/26/2014 05:46:03                                    1        
+  26393 0.00000 runHanBoot abhaskar     qw    12/26/2014 05:46:05                                    1        
+  26394 0.00000 runHanBoot abhaskar     qw    12/26/2014 05:46:06                                    1        
+  26395 0.00000 runHanBoot abhaskar     qw    12/26/2014 05:46:07                                    1        
+  26396 0.00000 runHanBoot abhaskar     qw    12/26/2014 05:46:08                                    1        
+  26397 0.00000 runHanBoot abhaskar     qw    12/26/2014 05:46:09                                    1        
+  26399 0.00000 runLucampB abhaskar     qw    12/26/2014 06:02:25                                    1        
+  26400 0.00000 runLucampB abhaskar     qw    12/26/2014 06:02:26                                    1        
+  26401 0.00000 runLucampB abhaskar     qw    12/26/2014 06:02:27                                    1        
+  26402 0.00000 runLucampB abhaskar     qw    12/26/2014 06:02:28                                    1        
+  26403 0.00000 runLucampB abhaskar     qw    12/26/2014 06:02:30                                    1        
+  26404 0.00000 runLucampB abhaskar     qw    12/26/2014 06:02:31                                    1        
+  26405 0.00000 runLucampB abhaskar     qw    12/26/2014 06:02:32                                    1        
+  26406 0.00000 runLucampB abhaskar     qw    12/26/2014 06:02:33                                    1        
+  26407 0.00000 runLucampB abhaskar     qw    12/26/2014 06:02:34                                    1        
+  26408 0.00000 runLucampB abhaskar     qw    12/26/2014 06:02:35                                    1        
+  26409 0.00000 runLucampB abhaskar     qw    12/26/2014 06:02:37                                    1        
+  26410 0.00000 runLucampB abhaskar     qw    12/26/2014 06:02:38                                    1        
+  26411 0.00000 runLucampB abhaskar     qw    12/26/2014 06:02:39                                    1        
+  26412 0.00000 runLucampB abhaskar     qw    12/26/2014 06:02:40                                    1        
+  26413 0.00000 runLucampB abhaskar     qw    12/26/2014 06:02:41                                    1        
+  26414 0.00000 runLucampB abhaskar     qw    12/26/2014 06:02:42                                    1        
+  26415 0.00000 runLucampB abhaskar     qw    12/26/2014 06:02:43                                    1        
+  26416 0.00000 runLucampB abhaskar     qw    12/26/2014 06:02:45                                    1        
+  26417 0.00000 runLucampB abhaskar     qw    12/26/2014 06:02:46                                    1        
+  26418 0.00000 runLucampB abhaskar     qw    12/26/2014 06:02:47                                    1        
+  26419 0.00000 runLucampB abhaskar     qw    12/26/2014 06:02:48                                    1        
+  26420 0.00000 runLucampB abhaskar     qw    12/26/2014 06:02:49                                    1        
+  26421 0.00000 runLucampB abhaskar     qw    12/26/2014 06:02:50                                    1        
+  26422 0.00000 runLucampB abhaskar     qw    12/26/2014 06:02:51                                    1        
+  26423 0.00000 runLucampB abhaskar     qw    12/26/2014 06:02:53                                    1        
+  26424 0.00000 runLucampB abhaskar     qw    12/26/2014 06:02:54                                    1        
+  26425 0.00000 runLucampB abhaskar     qw    12/26/2014 06:02:55                                    1        
+  26426 0.00000 runLucampB abhaskar     qw    12/26/2014 06:02:56                                    1        
+  26427 0.00000 runLucampB abhaskar     qw    12/26/2014 06:02:57                                    1        
+  26428 0.00000 runLucampB abhaskar     qw    12/26/2014 06:02:58                                    1        
+  26429 0.00000 runLucampB abhaskar     qw    12/26/2014 06:02:59                                    1        
+  26430 0.00000 runLucampB abhaskar     qw    12/26/2014 06:03:01                                    1        
+  26431 0.00000 runLucampB abhaskar     qw    12/26/2014 06:03:02                                    1        
+  26432 0.00000 runLucampB abhaskar     qw    12/26/2014 06:03:03                                    1        
+  26433 0.00000 runLucampB abhaskar     qw    12/26/2014 06:03:04                                    1        
+  26434 0.00000 runLucampB abhaskar     qw    12/26/2014 06:03:05                                    1        
+  26435 0.00000 runLucampB abhaskar     qw    12/26/2014 06:03:06                                    1        
+  26436 0.00000 runLucampB abhaskar     qw    12/26/2014 06:03:07                                    1        
+  26437 0.00000 runLucampB abhaskar     qw    12/26/2014 06:03:09                                    1        
+  26438 0.00000 runLucampB abhaskar     qw    12/26/2014 06:03:10                                    1        
+  26439 0.00000 runLucampB abhaskar     qw    12/26/2014 06:03:11                                    1        
+  26440 0.00000 runLucampB abhaskar     qw    12/26/2014 06:03:12                                    1        
+  26441 0.00000 runLucampB abhaskar     qw    12/26/2014 06:03:13                                    1        
+  26442 0.00000 runLucampB abhaskar     qw    12/26/2014 06:03:14                                    1        
+  26443 0.00000 runLucampB abhaskar     qw    12/26/2014 06:03:16                                    1        
+  26444 0.00000 runLucampB abhaskar     qw    12/26/2014 06:03:17                                    1        
+  26445 0.00000 runLucampB abhaskar     qw    12/26/2014 06:03:18                                    1        
+  26446 0.00000 runLucampB abhaskar     qw    12/26/2014 06:03:19                                    1        
+  26447 0.00000 runLucampB abhaskar     qw    12/26/2014 06:03:20                                    1        
+  26448 0.00000 runLucampB abhaskar     qw    12/26/2014 06:03:21                                    1        
+  26449 0.00000 runLucampB abhaskar     qw    12/26/2014 06:03:22                                    1        
+  26450 0.00000 runLucampB abhaskar     qw    12/26/2014 06:03:24                                    1        
+  26451 0.00000 runLucampB abhaskar     qw    12/26/2014 06:03:25                                    1        
+  26452 0.00000 runLucampB abhaskar     qw    12/26/2014 06:03:26                                    1        
+  26453 0.00000 runLucampB abhaskar     qw    12/26/2014 06:03:27                                    1        
+  26454 0.00000 runLucampB abhaskar     qw    12/26/2014 06:03:28                                    1        
+  26455 0.00000 runLucampB abhaskar     qw    12/26/2014 06:03:29                                    1        
+  26456 0.00000 runLucampB abhaskar     qw    12/26/2014 06:03:30                                    1        
+  26457 0.00000 runLucampB abhaskar     qw    12/26/2014 06:03:32                                    1        
+  26458 0.00000 runLucampB abhaskar     qw    12/26/2014 06:03:33                                    1        
+  26459 0.00000 runLucampB abhaskar     qw    12/26/2014 06:03:34                                    1        
+  26460 0.00000 runLucampB abhaskar     qw    12/26/2014 06:03:35                                    1        
+  26461 0.00000 runLucampB abhaskar     qw    12/26/2014 06:03:36                                    1        
+  26462 0.00000 runLucampB abhaskar     qw    12/26/2014 06:03:37                                    1        
+  26463 0.00000 runLucampB abhaskar     qw    12/26/2014 06:03:38                                    1        
+  26464 0.00000 runLucampB abhaskar     qw    12/26/2014 06:03:40                                    1        
+  26465 0.00000 runLucampB abhaskar     qw    12/26/2014 06:03:41                                    1        
+  26466 0.00000 runLucampB abhaskar     qw    12/26/2014 06:03:42                                    1        
+  26467 0.00000 runLucampB abhaskar     qw    12/26/2014 06:03:43                                    1        
+  26468 0.00000 runLucampB abhaskar     qw    12/26/2014 06:03:44                                    1        
+  26469 0.00000 runLucampB abhaskar     qw    12/26/2014 06:03:45                                    1        
+  26470 0.00000 runLucampB abhaskar     qw    12/26/2014 06:03:47                                    1        
+  26471 0.00000 runLucampB abhaskar     qw    12/26/2014 06:03:48                                    1        
+  26472 0.00000 runLucampB abhaskar     qw    12/26/2014 06:03:49                                    1        
+  26473 0.00000 runLucampB abhaskar     qw    12/26/2014 06:03:50                                    1        
+  26474 0.00000 runLucampB abhaskar     qw    12/26/2014 06:03:51                                    1        
+  26475 0.00000 runLucampB abhaskar     qw    12/26/2014 06:03:52                                    1        
+  26476 0.00000 runLucampB abhaskar     qw    12/26/2014 06:03:53                                    1        
+  26477 0.00000 runLucampB abhaskar     qw    12/26/2014 06:03:55                                    1        
+  26478 0.00000 runLucampB abhaskar     qw    12/26/2014 06:03:56                                    1        
+  26479 0.00000 runLucampB abhaskar     qw    12/26/2014 06:03:57                                    1        
+  26480 0.00000 runLucampB abhaskar     qw    12/26/2014 06:03:58                                    1        
+  26481 0.00000 runLucampB abhaskar     qw    12/26/2014 06:03:59                                    1        
+  26482 0.00000 runLucampB abhaskar     qw    12/26/2014 06:04:00                                    1        
+  26483 0.00000 runLucampB abhaskar     qw    12/26/2014 06:04:01                                    1        
+  26484 0.00000 runLucampB abhaskar     qw    12/26/2014 06:04:03                                    1        
+  26485 0.00000 runLucampB abhaskar     qw    12/26/2014 06:04:04                                    1        
+  26486 0.00000 runLucampB abhaskar     qw    12/26/2014 06:04:05                                    1        
+  26487 0.00000 runLucampB abhaskar     qw    12/26/2014 06:04:06                                    1        
+  26488 0.00000 runLucampB abhaskar     qw    12/26/2014 06:04:07                                    1        
+  26489 0.00000 runLucampB abhaskar     qw    12/26/2014 06:04:08                                    1        
+  26490 0.00000 runLucampB abhaskar     qw    12/26/2014 06:04:09                                    1        
+  26491 0.00000 runLucampB abhaskar     qw    12/26/2014 06:04:11                                    1        
+  26492 0.00000 runLucampB abhaskar     qw    12/26/2014 06:04:12                                    1        
+  26493 0.00000 runLucampB abhaskar     qw    12/26/2014 06:04:13                                    1        
+  26494 0.00000 runLucampB abhaskar     qw    12/26/2014 06:04:14                                    1        
+  26495 0.00000 runLucampB abhaskar     qw    12/26/2014 06:04:15                                    1        
+  26496 0.00000 runLucampB abhaskar     qw    12/26/2014 06:04:16                                    1        
+  26497 0.00000 runLucampB abhaskar     qw    12/26/2014 06:04:17                                    1        
+  26498 0.00000 runLucampB abhaskar     qw    12/26/2014 06:04:19                                    1        
+  26499 0.00000 runLucampB abhaskar     qw    12/26/2014 06:04:20                                    1        
+  26500 0.00000 runLucampB abhaskar     qw    12/26/2014 06:04:21                                    1        
+  26501 0.00000 runLucampB abhaskar     qw    12/26/2014 06:04:22                                    1        
+  26502 0.00000 runLucampB abhaskar     qw    12/26/2014 06:04:23                                    1        
+  26503 0.00000 runLucampB abhaskar     qw    12/26/2014 06:04:24                                    1        
+  26504 0.00000 runLucampB abhaskar     qw    12/26/2014 06:04:26                                    1        
+  26505 0.00000 runLucampB abhaskar     qw    12/26/2014 06:04:27                                    1        
+  26506 0.00000 runLucampB abhaskar     qw    12/26/2014 06:04:28                                    1        
+  26507 0.00000 runLucampB abhaskar     qw    12/26/2014 06:04:29                                    1        
+  26508 0.00000 runLucampB abhaskar     qw    12/26/2014 06:04:30                                    1        
+  26509 0.00000 runLucampB abhaskar     qw    12/26/2014 06:04:31                                    1        
+  26510 0.00000 runLucampB abhaskar     qw    12/26/2014 06:04:32                                    1        
+  26511 0.00000 runLucampB abhaskar     qw    12/26/2014 06:04:34                                    1        
+  26512 0.00000 runLucampB abhaskar     qw    12/26/2014 06:04:35                                    1        
+  26513 0.00000 runLucampB abhaskar     qw    12/26/2014 06:04:36                                    1        
+  26514 0.00000 runLucampB abhaskar     qw    12/26/2014 06:04:37                                    1        
+  26515 0.00000 runLucampB abhaskar     qw    12/26/2014 06:04:38                                    1        
+  26516 0.00000 runLucampB abhaskar     qw    12/26/2014 06:04:39                                    1        
+  26517 0.00000 runLucampB abhaskar     qw    12/26/2014 06:04:40                                    1        
+  26518 0.00000 runLucampB abhaskar     qw    12/26/2014 06:04:42                                    1        
+  26519 0.00000 runLucampB abhaskar     qw    12/26/2014 06:04:43                                    1        
+  26520 0.00000 runLucampB abhaskar     qw    12/26/2014 06:04:44                                    1        
+  26521 0.00000 runLucampB abhaskar     qw    12/26/2014 06:04:45                                    1        
+  26522 0.00000 runLucampB abhaskar     qw    12/26/2014 06:04:46                                    1        
+  26523 0.00000 runLucampB abhaskar     qw    12/26/2014 06:04:47                                    1        
+  26524 0.00000 runLucampB abhaskar     qw    12/26/2014 06:04:48                                    1        
+  26525 0.00000 runLucampB abhaskar     qw    12/26/2014 06:04:50                                    1        
+  26526 0.00000 runLucampB abhaskar     qw    12/26/2014 06:04:51                                    1        
+  26527 0.00000 runLucampB abhaskar     qw    12/26/2014 06:04:52                                    1        
+  26528 0.00000 runLucampB abhaskar     qw    12/26/2014 06:04:53                                    1        
+  26529 0.00000 runLucampB abhaskar     qw    12/26/2014 06:04:54                                    1        
+  26530 0.00000 runLucampB abhaskar     qw    12/26/2014 06:04:55                                    1        
+  26531 0.00000 runLucampB abhaskar     qw    12/26/2014 06:04:56                                    1        
+  26532 0.00000 runLucampB abhaskar     qw    12/26/2014 06:04:58                                    1        
+  26533 0.00000 runLucampB abhaskar     qw    12/26/2014 06:04:59                                    1        
+  26534 0.00000 runLucampB abhaskar     qw    12/26/2014 06:05:00                                    1        
+  26535 0.00000 runLucampB abhaskar     qw    12/26/2014 06:05:01                                    1        
+  26536 0.00000 runLucampB abhaskar     qw    12/26/2014 06:05:02                                    1        
+  26537 0.00000 runLucampB abhaskar     qw    12/26/2014 06:05:03                                    1        
+  26538 0.00000 runLucampB abhaskar     qw    12/26/2014 06:05:05                                    1        
+  26539 0.00000 runLucampB abhaskar     qw    12/26/2014 06:05:06                                    1        
+  26540 0.00000 runLucampB abhaskar     qw    12/26/2014 06:05:07                                    1        
+  26541 0.00000 runLucampB abhaskar     qw    12/26/2014 06:05:08                                    1        
+  26542 0.00000 runLucampB abhaskar     qw    12/26/2014 06:05:09                                    1        
+  26543 0.00000 runLucampB abhaskar     qw    12/26/2014 06:05:10                                    1        
+  26544 0.00000 runLucampB abhaskar     qw    12/26/2014 06:05:11                                    1        
+  26545 0.00000 runLucampB abhaskar     qw    12/26/2014 06:05:13                                    1        
+  26546 0.00000 runLucampB abhaskar     qw    12/26/2014 06:05:14                                    1        
+  26547 0.00000 runLucampB abhaskar     qw    12/26/2014 06:05:15                                    1        

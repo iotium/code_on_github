@@ -1,0 +1,35 @@
+% optimize constants to fit data
+
+function optimize_constants
+
+A = [];
+b = [];
+Aeq = [];
+beq = [];
+nonlcon = [];
+lb = [1     1   1   0.01];     
+ub = [10    1e4 1e4 10];
+x0 = mean([lb; ub]);
+options = optimset('display','iter','UseParallel','Always');
+matlabpool
+[x, fval, exitflag] = fmincon( @(x) cost_fn(x), x0, A, b, Aeq, beq, ...
+    lb, ub, nonlcon, options);
+
+save optimization_results
+
+function E = cost_fn(x)
+
+try
+
+    [t_sim, P_sim] = bubble_growth(x(1), x(2), x(3), x(4), 'intermediate_save_for_optimization_run');
+
+    load data_for_finding_constants
+
+    P_exp = interp1(t/t(end), P, t_sim/t_sim(end));
+
+    E = trapz(t_sim/t_sim(end), abs(P_exp - P_sim))/mean(P);
+
+catch err
+    
+    E = 
+    
