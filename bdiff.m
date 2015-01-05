@@ -5,7 +5,7 @@ function out = bdiff(in,j,n,t,adaptive)
 % in = vector of whatever to diff
 % h = time step
 
-max_order = 3;
+max_order = 6;
 
 k = n - j + 1; % number of points to work with
 
