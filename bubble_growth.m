@@ -8,10 +8,10 @@ switch computer
         % on server
         addpath('~/refprop/refprop');
         t_save = 60*60; % save interval in seconds
-        plot_stuff = 0;
+        plot_stuff = 1;
         save_stuff = 1;
         save_periodically = 0;
-        save_parameters_only = 1;
+        save_parameters_only = 0;
         time_out = 1;
         max_comp_time = 20*60;
         
@@ -68,11 +68,11 @@ clock_start = clock;
 % close all
 
 if nargin == 0
-    constants.C_rdot = 1;
-    constants.C_nuc_rate = 1e4;
+    constants.C_rdot = 3;
+    constants.C_nuc_rate = 1e3;
     constants.n_nuc_freq = 3;
     constants.checking_gauss_error = 0;
-    constants.C_death_rate = 1;
+    constants.C_death_rate = 1e-1;
     constants.C_erf_death_rate = 1;
     constants.coalescence_switch = 'on';
     % constants.n_death_rate = 2;
@@ -160,11 +160,11 @@ end
 h = 1e-12;           % [s] initial time step
 running = 1;        % [] switch, 1 = program running, 0 = program stopped
 rel_tol = 1e-4;     % [] max relative error allowed in adaptive scheme
-abs_tol = 1e3;     % [] max absolute error allowed in adaptive scheme
+abs_tol = 1e9;     % [] max absolute error allowed in adaptive scheme
 min_error = 1e-3;   % [] min error (relative to error_tol) before step size is increased
 h_max = 1;       % [s] max allowable time step
 h_min = 1e-16;      % [s] min allowable time step
-t_end = 300;         % [s] end time (if LRO doesn't happen first)
+t_end = 100;         % [s] end time (if LRO doesn't happen first)
 LRO_tol = 5e-3;     % [s] tolerance for resolving the LRO point
 dT_sup_tol = 1e-14;
 
@@ -412,12 +412,17 @@ while running == 1;
     
     starti = max([n-3, 1]);
     
-    Pdot = 0.1*Pdot + 0.9*bdiff(P,starti,n,t,adaptive);
-    rhodot_l = 0.1*rhodot_l + 0.9*bdiff(rho_l,starti,n,t,adaptive);
-    rhodot_tg = 0.1*rhodot_tg + 0.9*bdiff(rho_tg,starti,n,t,adaptive);
+    Pdot = 0.5*Pdot + 0.5*bdiff(P,starti,n,t,adaptive);
+%     rhodot_l = 0.1*rhodot_l + 0.9*bdiff(rho_l,starti,n,t,adaptive);
+%     rhodot_tg = 0.1*rhodot_tg + 0.9*bdiff(rho_tg,starti,n,t,adaptive);
     Vdot_l(n+1) = V_tank*bdiff(V_l/V_tank,starti,n,t,adaptive);
-    Vdot_tg(n+1) = V_tank*bdiff(V_tg/V_tank,starti,n,t,adaptive);
+%     Vdot_tg(n+1) = V_tank*bdiff(V_tg/V_tank,starti,n,t,adaptive);
     
+    if h > 5*h_min
+               
+        guesses.Vdot_l = 0.5*Vdot_l(n+1) + 0.5*guesses.Vdot_l;
+        
+    end
     
     % check for min
     if (t(n) > 0.05) && (Pdot) > 0
@@ -437,6 +442,9 @@ while running == 1;
             t_peak = t(n);
         end
     end
+    dt = t(n) - t(max([1, n-1]));
+    constants.t = t(n);
+    constants.dt = dt;
     
     %     if peak_flag == 1
     %         if t(n) > t_peak*1.5
@@ -455,18 +463,12 @@ end
 
     
     mdot_l = f(4);
-    rhodot_l = mdot_l/V_l(n) - m_l(n)/V_l(n)^2*Vdot_l(n);
+%     rhodot_l = mdot_l/V_l(n) - m_l(n)/V_l(n)^2*Vdot_l(n);
     
     mdot_tg = f(1);
-    rhodot_tg = mdot_tg/V_tg(n) - m_tg(n)/V_tg(n)^2*Vdot_tg(n);
+%     rhodot_tg = mdot_tg/V_tg(n) - m_tg(n)/V_tg(n)^2*Vdot_tg(n);
     
-    if h > 5*h_min
-        
-        derivatives = 0.5*[Pdot; rhodot_l; rhodot_tg; Vdot_l(n+1); Vdot_tg(n+1)] + 0.5*derivatives;
-        
-        guesses.Vdot_l = 0.25*Vdot_l(n+1) + 0.75*guesses.Vdot_l;
-        
-    end
+
     %     derivatives = zeros(5,1);
     
     
@@ -482,13 +484,26 @@ end
     % if I'm just playing around, print status at each step
     if nargin == 0
         
-        fprintf(['t = %#4.4g, dt = %#4.4g, P = %#4.4g, V_bub = %#4.4g, dT_sup = %#6.6g,' ...
-            'alpha = %#4.4g, T_l = %#4.4g, T_tg = %#4.4g, m_l = %#4.4g,'...
-            'm_tg = %#4.4g, fill_level%% = %#4.4g, Vdot_l = %#4.4g, Vdot_tg = %#4.4g,'...
-            ' rhodot_l = %#4.4g, rhodot_tg = %#4.4g\n'],...
-            t(n), t(n) - t(max([1, n-1])), P(n)/1e6, V_bub(n), dT_superheat(n), gas_holdup(n), T_l(n), 0,...
-            m_l(n), m_tg(n), 100*fill_level(n), Vdot_l(n+1),...
-            Vdot_tg(n+1), rhodot_l, rhodot_tg);
+        fprintf(['t = %#4.4g, dt = %#4.4g, P = %#4.4g, alpha = %#4.4g, dT_sup = %#6.6g,' ...
+            'V_bub = %#4.4g, T_l = %#4.4g, m_l = %#4.4g,'...
+            'fill_level%% = %#4.4g, Vdot_l = %#4.4g\n'],...
+            t(n), t(n) - t(max([1, n-1])), P(n)/1e6, gas_holdup(n), dT_superheat(n), ...
+            V_bub(n), T_l(n), m_l(n), 100*fill_level(n), Vdot_l(n+1));
+        
+        fprintf('y:\t \t \t \t');
+        fprintf('%3.3e\t', y(1:6,end))
+        fprintf('|')
+        fprintf('%3.3e\t', y(7:end,end))
+       
+        
+        if n > 1
+        fprintf('\nrelative change in last step:\t')
+        fprintf('%3.3e\t', (y(1:6,end) - y(1:6,end-1))./(y(1:6,end-1)))
+        fprintf('|')
+        fprintf('%3.3e\t', (y(7:end,end) - y(7:end,end-1))./(y(7:end,end-1)))
+        fprintf('\n')
+        
+        end
         
     end
     
@@ -892,11 +907,7 @@ end
         %         disp('reached end t or ran out of liquid')
         running = 0;
     end
-    
-    if t(n) > ti
-        ti = ti + 0.1;
-        %         disp(num2str(t(n)))
-    end
+   
     
     if P(end) < 2e5
         running = 0;
@@ -910,8 +921,7 @@ end
         disp('alpha -> 0.8')
     end
     
-    
-    
+
     
     if save_periodically
         
@@ -1522,7 +1532,12 @@ if strcmp(constants.coalescence_switch,'on')
                 rb_eq = ( (1/rbi + 1/rbj)/2 )^-1;
                 
                 % contanct time
-                t_cont = rb_eq^(2/3) / turb_diss^(1/3);
+                t_cont = 0.1*rb_eq^(2/3) / turb_diss^(1/3); % prince + blanch, 1990
+
+                % kamp & chesters, 2001
+%                 rho_c = rho_l;
+                C_vm = 0.8;
+%                 t_cont = sqrt( rho_c*C_vm/(3*sigma) * ( 2*dbi*dbj/(dbi + dbj))^3 );
                 
                 % film initial and final thicknesses
                 film_i = 1e-4;
@@ -1530,10 +1545,11 @@ if strcmp(constants.coalescence_switch,'on')
                 
                 % time required for coalescence
                 t_coal = sqrt( rb_eq^3 * rho_l/(16 * sigma) ) * log( film_i / film_f);
-                
+                                
                 % coalescence kernel
                 beta = (qT + qB + qLS)*exp( - t_coal / t_cont);
                 
+                                
                 coal_birth_s(k) = coal_birth_s(k) + 0.5 * w_q(i) * w_q(j) * ( abs(r_s(i))^3 + abs(r_s(j))^3 )^((k-1)/3) * beta;
                 coal_death_s(k) = coal_death_s(k) + r_s(i)^(k-1) * w_q(i) * w_q(j) * beta;
             end
@@ -1543,10 +1559,15 @@ if strcmp(constants.coalescence_switch,'on')
     
 end
 
+if constants.t > 1
+    if constants.dt < 1e-10
+        disp('uh oh')
+    end
+end
 
 dmom_dt_s = birth_int_s(:) - death_int_s(:) + growth_int_s(:) + coal_birth_s(:) - coal_death_s(:);
 
-
+% change in total bubble volume (nothing from coalescence - V is conserved)
 V_birth = birth_int_s(4) + growth_int_s(4);
 V_death = death_int_s(4);
 % 
