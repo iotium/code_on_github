@@ -1,5 +1,6 @@
 % calculate system P based on m_tg, U_tg, m_l, T_l
 % used for non-saturated liquid, saturated ullage
+% should work for 0D or 1D
 function P = get_P_from_mU_mT(m_tg, U_tg, m_l, T_l, V_tank, V_bubi, PDT, guesses)
 
 
@@ -34,9 +35,13 @@ end
         rho_l = qinterp2(PDT.T, PDT.P, PDT.D_liq, T_l, P/1e3);
         
         V_tg = m_tg/rho_tg;
-        V_l = m_l/rho_l;
+        V_l = m_l./rho_l;
         
-        V_bub = V_bubi*V_l/(1 - V_bubi);
+        % how to deal with V_bub in 1D case?
+        % currently the nodes have no real definition
+        % so use mean(V_bubi) for now
+        
+        V_bub = mean(V_bubi.*V_l./(1 - V_bubi));
         
         F = (V_tg + V_l + V_bub - V_tank)/V_tank;
         
