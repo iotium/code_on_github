@@ -472,8 +472,8 @@ T_guess = guesses(1);
 
 T = get_T_from_m_U(m, U, V_tank, T_guess);
 
-[u_l, rho_l, P, h_l] = refpropm('UDPH','T',T,'Q',0,'N2O');
-[u_tg, rho_tg] = refpropm('UD','T',T,'Q',1,'N2O');
+[u_l, rho_l, P, h_l, s_l] = refpropm('UDPHS','T',T,'Q',0,'N2O');
+[u_tg, rho_tg, h_tg, s_tg] = refpropm('UDHS','T',T,'Q',1,'N2O');
 
 x = (U/m - u_l)/(u_tg - u_l);
 
@@ -481,7 +481,17 @@ P = P*1e3;
 
 % mdot = Cd*A_inj*sqrt(2*rho_l*(P - Po));
 
-mdot = Cd*A_inj*dyer_flow(Po, P, T, rho_l);
+% using saturated liquid
+mdot = Cd*A_inj*dyer_flow(Po, P, T, rho_l, P, s_l, h_l);
+
+
+% % using two phase properties
+% s_mix = x*s_tg + (1-x)*s_l;
+% h_mix = x*h_tg + (1-x)*h_tg;
+% alpha = 1/( 1 + rho_tg/rho_l * (1 - x)/x );
+% rho_mix = alpha*rho_tg + (1-alpha)*rho_l;
+% 
+% mdot = Cd*A_inj*dyer_flow(Po, P, T, rho_mix, P, s_mix, h_mix);
 
 % need: rho_l, m_l, T_l, rho_tg, m_tg, T_tg, V_l, V_tg, Vdot_tg
 T_l = T;
