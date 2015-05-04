@@ -859,7 +859,7 @@ end
     
     % get system pressure
     P(n+1) = get_P_from_mU_mT(m_tg(n+1), U_tg(n+1), m_l(n+1), T_l(n+1), ...
-        V_tank, V_bubi, PDT, guesses);
+        V_tank, 0, V_bubi, PDT, guesses);
     
     
     % saturation temp based on pressure
@@ -1305,7 +1305,7 @@ end
 V_bubi = 4/3*pi*mom(4);
 
 % get system pressure
-P = get_P_from_mU_mT(m_tg, U_tg, m_l, T_l, V_tank, V_bubi, PDT, guesses);
+P = get_P_from_mU_mT(m_tg, U_tg, m_l, T_l, V_tank, 0, V_bubi, PDT, guesses);
 
 if P == pi
     disp('P error')
