@@ -25,9 +25,6 @@ end
         % the "guess" variables use the guesses.Vdot_l value
         % to get an estimate for Pdot and use that to normalize the error.
         
-
-        
-        
         rhodot_l = mdot_l/V_l - m_l/V_l^2 * Vdot_l;
         
         Udot_l = Udot_li - P*Vdot_l;
@@ -46,8 +43,6 @@ end
         
         Pdot_l_guess = dP_dT_l*Tdot_l_guess + dP_drho_l*rhodot_l_guess;
         
-        
-                
         Vdot_tg = -Vdot_l - Vdot_bub;
         
         Udot_tg = Udot_tgi - P*Vdot_tg;
@@ -58,8 +53,7 @@ end
             (u_tg_v_sat - u_tg_l_sat)/drho_dx_P_tg * drho_dP_x_tg * dP_dT_tg_sat );
         
         Pdot_tg = dP_dT_tg_sat * Tdot_tg;
-
-       
+      
         F = (Pdot_l - Pdot_tg)/(abs(Pdot_l_guess) + 1e-6);
         
 %         if isnan(F) || ~isreal(F)

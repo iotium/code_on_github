@@ -65,13 +65,17 @@ IC_moments = IC_moments * alpha_ic/alpha_mom;
 % DQMOM_IC = [w_ic(:); r_ic(:).*w_ic(:)];
 
 % repeat IC for each node
-DQMOM_IC = repmat(w_ic(:), N_nodes, 1);
-DQMOM_IC = [DQMOM_IC; repmat(r_ic(:).*w_ic(:), N_nodes, 1)];
+
+% weights
+% DQMOM_IC = repmat(w_ic(:), N_nodes, 1); % repeats w_ic N_nodes times
+
+% after the weights, put all the the abscissas
+% DQMOM_IC = [DQMOM_IC; repmat(r_ic(:).*w_ic(:), N_nodes, 1)];
 
 r_ic = repmat(r_ic(:), N_nodes, 1);
 w_ic = repmat(w_ic(:), N_nodes, 1);
 
-DQMOM_IC = [r_ic; r_ic.*w_ic];
+DQMOM_IC = [w_ic; r_ic.*w_ic];
 
 % DQMOM_IC = [1-6; 1e-6; 1e-6; 2e-1; 1e-4; 3e-9];
 
@@ -179,6 +183,14 @@ else
     
 end
 
+% divide the whole tank into nodes
+% L_node = L_tank*(1 + 20*alpha_ic)*fill_level/(N_nodes - 0.5);
+L_node = L_tank/N_nodes;
+V_node = pi*0.25*D^2*L_node;
+
+constants.L_node = L_node;
+constants.V_node = V_node;
+
 % initialize program parameters
 h = 1e-12;           % [s] initial time step
 running = 1;        % [] switch, 1 = program running, 0 = program stopped
@@ -191,7 +203,8 @@ t_end = 100;         % [s] end time (if LRO doesn't happen first)
 LRO_tol = 5e-3;     % [s] tolerance for resolving the LRO point
 dT_sup_tol = 1e-14;
 
-ode_solver = 'DP'; % [] options: 'RKF' for runge-kutta-fehlberg
+ode_solver = 'DP'; % [] options: 
+% 'RKF' for runge-kutta-fehlberg
 % 'euler' for 1st order euler
 % 'RK4' for 4th order runge-kutta
 % 'CK' for cash-karp
@@ -324,8 +337,6 @@ n = 1;              % [] counter
 
 t = 0;
 
-
-
 %
 [rho_l, rho_tg, P] = refpropm('+-P','T',Ti,'Q',0.5,'N2O');
 [u_tg] = refpropm('U', 'T', Ti ,'Q', 1, 'N2O');
@@ -343,6 +354,13 @@ P = P*1e3;
 
 T_sat = Ti;
 
+
+% reshape so each ROW is one node
+w_ic = reshape(w_ic, N_ab, N_nodes)';
+
+% reshape so each ROW is one node
+r_ic = reshape(r_ic, N_ab, N_nodes)';
+
 for i = 1:2*N_ab
     mom(:, i) = sum( r_ic.^(i-1) .* w_ic, 2 );
 end
@@ -350,13 +368,24 @@ end
 % net volume of bubbles, per unit volume of liquid
 V_bubi = 4/3*pi*mom(:,4);
 
-V_l_star = fill_level.*V_tank;
-V_bub = V_l_star .* V_bubi;
+V_l = fill_level*V_tank;
+
+node_level = get_node_levels(V_l, V_bubi, V_node, V_l/V_node);
+guesses.node_level = node_level;
+
+V_bub = sum(node_level.*V_bubi*V_node);
+
+V_l_star = V_bub + V_l;
+
+% V_l_star = fill_level.*V_tank;
+% V_bub = V_l_star .* V_bubi;
 
 
-V_tg = (1 - fill_level).*(V_tank - V_bub);
+% V_tg = (1 - fill_level).*(V_tank - V_bub);
 
-V_l = V_l_star.*(1 - V_bubi);
+V_tg = V_tank - V_l_star;
+
+% V_l = V_l_star.*(1 - V_bubi);
 
 m_l = V_l*rho_l;
 m_tg = V_tg*rho_tg;
@@ -453,6 +482,12 @@ while running == 1;
     end
     
     
+    if dT_superheat(n) < 0
+        constants.outerloop_superheat = 0;
+    else
+        constants.outerloop_superheat = 1;
+    end
+    
     % check for min
     if (t(n) > 0.1) && (Pdot > 10)
         %         Pdot
@@ -520,14 +555,14 @@ while running == 1;
         
         fprintf(['t = %#4.4g, dt = %#4.4g, P = %#4.4g, alpha = %#4.4g, dT_sup = %#6.6g,' ...
             'V_bub = %#4.4g, T_l = %#4.4g, m_l/m_li = %#4.4g,'...
-            'fill_level%% = %#4.4g, Vdot_l = %#4.4g\n'],...
+            'node level = %#4.4g, fill_level%% = %#4.4g, Vdot_l = %#4.4g\n'],...
             t(n), t(n) - t(max([1, n-1])), P(n)/6895, gas_holdup(n), dT_superheat(n), ...
-            V_bub(n), T_l(n), m_l(n)/m_l(1), 100*fill_level(n), Vdot_l(n+1));
+            V_bub(n), T_l(n), m_l(n)/m_l(1), sum(node_level), 100*fill_level(n), Vdot_l(n+1));
         
-        %         fprintf('y:\t \t \t \t');
-        %         fprintf('%3.3e\t', y(1:6,end))
-        %         fprintf('|')
-        %         fprintf('%3.3e\t', y(7:end,end))
+%                 fprintf('y:\t \t \t \t');
+%                 fprintf('%3.3e\t', y(1:6,end))
+%                 fprintf('|')
+%                 fprintf('%3.3e\t', y(7:end,end))
         %
         %
         %         if n > 1
@@ -535,7 +570,7 @@ while running == 1;
         %         fprintf('%3.3e\t', (y(1:6,end) - y(1:6,end-1))./(y(1:6,end-1)))
         %         fprintf('|')
         %         fprintf('%3.3e\t', (y(7:end,end) - y(7:end,end-1))./(y(7:end,end-1)))
-        %         fprintf('\n')
+%                 fprintf('\n')
         %
         %         end
         
@@ -572,6 +607,7 @@ while running == 1;
             
         end
         
+        % refine as we get close (LRO_slope < 0)
         if (LRO_slope*h < -0.003/100) && (fill_level(n) < 0.1/100)
             h = h/4;
             
@@ -584,36 +620,73 @@ while running == 1;
         
         
         % also check if we're close to going subcooled -> superheated
+        % maybe should modify this for going the other way too?
         
-        if dT_superheat(n) < 0
+%         if dT_superheat(n) < 0
             
             % slope of dT_superheat curve
             dTs_slope = bdiff(dT_superheat,starti,n,t,adaptive);
             
             % projected t_sup (t when dT_sup = 0)
             t_sup = -dT_superheat(n)/dTs_slope + t(n);
+
             
             h_sup = t_sup - t(n); % distance to t_sup
             
-            % if the step we're about to take is >3/4 the distance to LRO
-            % and the distance te LRO is bigger than the tolerance
-            if (h > 2*h_sup && h_sup > dT_sup_tol) && (h_sup > 0);
+            % if the step we're about to take is >3/4 the distance to the
+            % crossover point and the distance is bigger than the tolerance
+            if (dTs_slope > 0 && dT_superheat(n) < 0) || (dTs_slope < 0 && dT_superheat(n) > 0 )
+                
+                if (h > 0.5*h_sup && h_sup > dT_sup_tol) && (h_sup > 0);
                 
                 % set h to 1/2 the distance to LRO (ie refine)
                 h = 0.5*h_sup;
+                disp('refining based on superheat being near 0')
+                
+                end
                 
             end
             
-            if (dTs_slope*h < -0.003/100) && (dT_superheat(n) > -0.1/100)
-                h = h/4;
+%             if dT_superheat(n) < 0
+%             % dTs_slope > 0, dT_superheat < 0
+%                 
+%                 
+%                 % refine as we get close
+%                 if (dTs_slope*h < 0.003/100) && ((dT_superheat(n)) > -0.1/100)
+%                     h = h/4;
+%                     disp('refining')
+% 
+%                 elseif (dTs_slope*h < 0.03/100) && ((dT_superheat(n)) > -1/100);
+%                     h = h/2;
+%                                         disp('refining')
+% 
+% 
+%                 elseif (dTs_slope*h < 0.3/100) && ((dT_superheat(n)) > -5/100);
+%                     h = h/2;
+%                                         disp('refining')
+% 
+% 
+%                 end
+%             
+%             else
+%                 % dTs_slope < 0, dT_superheat > 0
+%                 
+%                             % refine as we get close
+%                 if (dTs_slope*h < -0.003/100) && ((dT_superheat(n)) < 0.1/100)
+%                     h = h/4;
+% 
+%                 elseif (dTs_slope*h < -0.03/100) && ((dT_superheat(n)) < 1/100);
+%                     h = h/2;
+% 
+%                 elseif (dTs_slope*h < -0.3/100) && ((dT_superheat(n)) < 5/100);
+%                     h = h/2;
+% 
+%                 end
+%             
+%             end
                 
-            elseif (dTs_slope*h < -0.03/100) && (dT_superheat(n) > -1/100);
-                h = h/2;
-            elseif (dTs_slope*h < -0.3/100) && (dT_superheat(n) > -5/100);
-                h = h/2;
-            end
             
-        end
+%         end
         
     end
     
@@ -851,41 +924,42 @@ while running == 1;
     %     disp('outside of loop')
     
     
-% indices of the weights
-i_w = 6 + [1:(N_nodes*N_ab)];
-
-w_q = y(i_w,n+1);
-
-% reshape so each ROW is one node
-w_q = reshape(w_q, N_ab, N_nodes)';
-
-% indices of the abscissas
-i_g = i_w(end) + [1:(N_nodes*N_ab)];
-
-g_q = y(i_g,n+1);
-
-% reshape so each ROW is one node
-g_q = reshape(g_q, N_ab, N_nodes)';
+    % indices of the weights
+    i_w = 6 + [1:(N_nodes*N_ab)];
     
-%     w_q = y(7:(N_ab+6),n+1);
-%     g_q = y(N_ab+7:(2*N_ab+6),n+1);
+    w_q = y(i_w,n+1);
+    
+    % reshape so each ROW is one node
+    w_q = reshape(w_q, N_ab, N_nodes)';
+    
+    % indices of the abscissas
+    i_g = i_w(end) + [1:(N_nodes*N_ab)];
+    
+    g_q = y(i_g,n+1);
+    
+    % reshape so each ROW is one node
+    g_q = reshape(g_q, N_ab, N_nodes)';
+    
+    %     w_q = y(7:(N_ab+6),n+1);
+    %     g_q = y(N_ab+7:(2*N_ab+6),n+1);
     
     r_q = g_q./w_q;
     
-%     for i = 1:2*N_ab
-%         mom{i}(:,n+1) = sum( r_q.^(i-1) .* w_q );
-%     end
+    %     for i = 1:2*N_ab
+    %         mom{i}(:,n+1) = sum( r_q.^(i-1) .* w_q );
+    %     end
     
-    % {i} = 
+    % {i} =
     for i = 1:2*N_ab
         mom(:, i) = sum( r_q.^(i-1) .* w_q, 2 );
     end
     
-    death_rate = 0.5.*(1 + erf( constants.C_erf_death_rate * (abs(r_q)/constants.r_death - 1) ));
     
-    if max(death_rate) == 0
-        %         disp('no death')
-    end
+%     death_rate = 0.5.*(1 + erf( constants.C_erf_death_rate * (abs(r_q)/constants.r_death - 1) ));
+    
+%     if max(death_rate) == 0
+%         %         disp('no death')
+%     end
     
     
     if sum(mom(:)<0) > 0
@@ -893,11 +967,11 @@ g_q = reshape(g_q, N_ab, N_nodes)';
     end
     
     % net volume of bubbles, per unit volume of liquid
-    V_bubi = 4/3*pi*mom(4,:);
+    V_bubi = 4/3*pi*mom(:,4);
     
     % get system pressure
     P(n+1) = get_P_from_mU_mT(m_tg(n+1), U_tg(n+1), m_l(n+1), T_l(n+1), ...
-        V_tank, V_bubi, PDT, guesses);
+        V_tank, V_node, V_bubi, PDT, guesses);
     
     
     % saturation temp based on pressure
@@ -930,25 +1004,30 @@ g_q = reshape(g_q, N_ab, N_nodes)';
     V_l(n+1) = m_l(n+1)/rho_l(n+1);
     V_tg(n+1) = m_tg(n+1)/rho_tg(n+1);
     
-    V_l_star(n+1) = mean(V_l./(1 - V_bubi));
+    % fill level of each node
+    node_level = get_node_levels(V_l(n+1), V_bubi, V_node, guesses.node_level);
     
-    
+    % volume of all the bubbles
+    V_bub(n+1) = sum(node_level.*V_bubi*V_node);
+   
+    % volume of liquid + bubbles
+    V_l_star(n+1) = V_l(n+1) + V_bub(n+1);
+        
     % fill level based on liquid and tank volume
     fill_level(n+1) = V_l_star(n+1)/V_tank;
-    
-    % actual volume of all the bubbles
-    V_bub(n+1) = mean(V_bubi) * V_l_star(n+1);
+   
     
     T_lw = y(6,n+1);
     
     Qdot_lw(n+1) = Qdot('lw',T_l(n+1), T_lw ,rho_l(n+1), m_l(n+1),D);
     
-    gas_holdup(n+1) = mean(V_bubi);
+    gas_holdup(n+1) = V_bub(n+1)/V_l_star(n+1);
     
     
     guesses.P = P(n+1);
     guesses.rho_tg = rho_tg(n+1);
     guesses.rho_l = rho_l(n+1);
+    guesses.node_level = node_level;
     
     t(n+1) = t(n) + h;
     
@@ -980,7 +1059,6 @@ g_q = reshape(g_q, N_ab, N_nodes)';
         %         disp('alpha -> 0.8')
         stop_reason = 'alpha got big';
     end
-    
     
     
     if save_periodically
@@ -1291,7 +1369,7 @@ C_coalescence = constants.C_coalescence;
 r_death = constants.r_death;
 
 L_node = constants.L_node;
-V_node = 0.25*pi*D^2*L_nod;
+V_node = 0.25*pi*D^2*L_node;
 
 N_ab = constants.N_ab; % number of abscissas
 % (2*N = number of moments, going from 0 to 2N-1)
@@ -1391,7 +1469,7 @@ V_bubi = 4/3*pi*mom(:,4);
 
 % get system pressure
 % (assumes pressure is same throughout tank, with no gravity head)
-P = get_P_from_mU_mT(m_tg, U_tg, m_l, T_l, V_tank, V_bubi, PDT, guesses);
+P = get_P_from_mU_mT(m_tg, U_tg, m_l, T_l, V_tank, V_node, V_bubi, PDT, guesses);
 
 if P == pi
     disp('P error')
@@ -1429,26 +1507,27 @@ V_l = m_l./rho_l;
 % I've kind of changed the meaning so that V_l_star is in fact the TOTAL
 % volume of the liquid+bubbles
 
-% net volume of bubbles
-V_bub = sum(V_node.*V_bubi);
+% how full each node is. will be 1 for all nodes below liquid level, 0 for
+% all nodes above, and [0,1] for the node in which the liquid level
+% currently sits
+node_level = get_node_levels(V_l, V_bubi, V_node, guesses.node_level);
+V_bub = sum(node_level.*V_bubi*V_node);
+
 V_l_star = V_l + V_bub;
 
-% number of nodes still in the liquid
-N_full = floor(V_l_star/V_node);
-
-% how full is the top node? (goes 0->1)
-level_top_node = (V_l_star - N_full*V_node)/V_node;
+% number of nodes still in the liquid (completely)
+N_full = sum(node_level == 1);
 
 V_tg = m_tg/rho_tg;
 
 % liquid properties
-    
-    [h_l, dh_drho_l, drho_dP_l, u_l, Cv_l, dP_dT_l, ...
-        k_l, Cp_l, MW] = ...
-        refpropm('H!RUO#LCM','T',T_l,'D&',rho_l,'N2O');
-    
-    [P_sat, s_liq_sat, h_liq_sat] = refpropm('PSH', 'T', T_l, 'Q', 0, 'N2O');
-    
+
+[h_l, dh_drho_l, drho_dP_l, u_l, Cv_l, dP_dT_l, ...
+    k_l, Cp_l, MW] = ...
+    refpropm('H!RUO#LCM','T',T_l,'D&',rho_l,'N2O');
+
+[P_sat, s_liq_sat, h_liq_sat] = refpropm('PSH', 'T', T_l, 'Q', 0, 'N2O');
+
 dP_drho_l = 1e3./drho_dP_l;
 dP_dT_l = dP_dT_l*1e3;
 alpha_l = k_l./(rho_l .* Cp_l);
@@ -1511,6 +1590,15 @@ h_lv = h_tg_sat - h_l_sat;
 % superheat = T - T_sat
 deltaT_sup = T_l - T_s;
 
+if constants.outerloop_superheat && deltaT_sup < 0
+    disp('outer loop superheated, diffeqns subcooled')
+        disp(['diffeqns subcool: ' num2str(deltaT_sup)])
+
+elseif ~constants.outerloop_superheat && deltaT_sup > 0
+    disp('outer loop subcooled, diffeqns superheated')
+    disp(['diffeqns superheat: ' num2str(deltaT_sup)])
+end
+
 for i = 1:N_full + 1
     
     % if superheated, then calculate bubble stuff
@@ -1533,15 +1621,12 @@ for i = 1:N_full + 1
         r_nuc = 2*sigma*T_s/(rho_tg * h_lv * deltaT_sup);
         
         % length of liquid node volume [m]
-%         L_l = V_l_star(i) / (pi * 0.25 * D^2);
-        L_l = L_node;
+        %         L_l = V_l_star(i) / (pi * 0.25 * D^2);
+        L_l = node_level(i)*L_node;
         
-        if i == N_full+1
-            L_l = level_top_node*L_node;
-        end
         
         % surface area of node[m^2]
-        A_l = pi * D * L_l + pi * 0.25 * D^2;
+        A_l = pi * D * L_l;% + pi * 0.25 * D^2;
         
         switch constants.nuc_model
             
@@ -1589,7 +1674,9 @@ for i = 1:N_full + 1
         
         
     else
-        
+        if deltaT_sup < -0.5
+            disp('real subcooled')
+        end
         % no superheat -> no bubble growth or nucleation
         r_nuc = 0;
         rdot = 0;
@@ -1616,12 +1703,18 @@ for i = 1:N_full + 1
     end
     
     % nucleation rate per volume
-%     spec_nuc_rate = nuc_rate / V_l_star(i);
-    spec_nuc_rate = nuc_rate / V_node;
     
-    if i == N_full+1
-        spec_nuc_rate = spec_nuc_rate / level_top_node;
-    end
+    % think this maybe shouldn't have the node level term in it, and 
+    % maybe not the V node either -> maybe V_l_star?
+    % changed my mind -> nuc_rate is based on V_node
+    
+    %     spec_nuc_rate = nuc_rate / V_l_star(i);
+    spec_nuc_rate = nuc_rate / ( node_level(i) * V_node );
+    % spec_nuc_rate = nuc_rate / V_l_star;
+
+    %     if i == N_full+1
+    %         spec_nuc_rate = spec_nuc_rate / level_top_node;
+    %     end
     
     % birth due to nucleation and
     % death due to bubbles getting too large
@@ -1647,9 +1740,9 @@ for i = 1:N_full + 1
         
         P2 = P;
         
-%         liquid_height = V_l_star(i)/(pi*D^2/4);
+        %         liquid_height = V_l_star(i)/(pi*D^2/4);
         liquid_height = V_l_star/(pi*D^2/4);
-
+        
         
         P1 = P2 + rho_l*g*liquid_height;
         
@@ -1826,24 +1919,14 @@ for i = 1:N_full + 1
     death_term = death_int_s(4)*r_m^3;
     
     % mdot into bubbles from liquid
-%     mdot_bub_l(i) = V_l_star(i) * 4/3*pi * rho_tg_sat * (birth_term + growth_term);
-    mdot_bub_l(i) = V_node * 4/3*pi * rho_tg_sat * (birth_term + growth_term);
+    %     mdot_bub_l(i) = V_l_star(i) * 4/3*pi * rho_tg_sat * (birth_term + growth_term);
+    mdot_bub_l(i) = node_level(i) * V_node * 4/3*pi * rho_tg_sat * (birth_term + growth_term);
     
-    if i = N_full+1
-        mdot_bub_l(i) = mdot_bub_l(i)*level_top_node;
-    end
-
-
     % mdot into bubbles from tg (really from bubbles into tg, but have to
     % keep sign convention for mdot)
-%     mdot_bub_tg(i) = - V_l_star(i) * 4/3*pi * rho_tg_sat * death_term;
-        mdot_bub_tg(i) = - V_node * 4/3*pi * rho_tg_sat * death_term;
-
-        if i = N_full+1
-        mdot_bub_tg(i) = mdot_bub_tg(i)*level_top_node;
-    end
-        
-        
+    %     mdot_bub_tg(i) = - V_l_star(i) * 4/3*pi * rho_tg_sat * death_term;
+    mdot_bub_tg(i) = - node_level(i) * V_node * 4/3*pi * rho_tg_sat * death_term;
+    
     % mdot into the bubbles
     mdot_bub(i) = mdot_bub_l(i) + mdot_bub_tg(i);
     
@@ -1854,11 +1937,22 @@ for i = 1:N_full + 1
     
 end
 
+% need to deal with dw_dt and dg_dt for the nodes that have left the liquid
+for i = N_full+2:N_nodes
+    
+    ind_node = (i-1)*N_ab + [1:N_ab];
+    
+    dw_dt(ind_node) = zeros(1,N_ab);
+    dg_dt(ind_node) = zeros(1,N_ab);
+    
+end
+
+
 % mass flow rate out via injector
 
 % passing 2-phase properties
 % x = rho_tg_sat/rho_l / (1/V_bubi + rho_tg_sat/rho_l - 1);
-% 
+%
 % rho_liq_mix = rho_l*(1-V_bubi) + rho_tg_sat*V_bubi;
 % s_liq_mix = s_liq_sat * (1-x) + s_tg_sat * x;
 % h_liq_mix = h_liq_sat * (1-x) + h_tg_sat * x;
