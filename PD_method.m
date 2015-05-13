@@ -71,18 +71,18 @@ else
     w = m_0 * fliplr(w);
     r = fliplr(r);
     
-%     if sum(abs(imag([r(:); w(:)]))) > 0
-%         disp('imaginary abscissas or weights')
-%     end
+    %     if sum(abs(imag([r(:); w(:)]))) > 0
+    %         disp('imaginary abscissas or weights')
+    %     end
     if recover_moments
         % % recover moments (for debugging)
-
-for i = 1:(2*Nq)
-    rec_moment(i) = sum( r.^(i-1) .* w );
-end
-fprintf(' recovered moments: ')
-fprintf('%6.6g\t',rec_moment)
-fprintf('\n')
+        
+        for i = 1:(2*Nq)
+            rec_moment(i) = sum( r.^(i-1) .* w );
+        end
+        fprintf(' recovered moments: ')
+        fprintf('%6.6g\t',rec_moment)
+        fprintf('\n')
     end
 end
 

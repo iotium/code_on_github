@@ -1,12 +1,53 @@
 function node_level = get_node_levels(V_l, V_bubi, V_node, node_level_guess)
-IC = sum(node_level_guess);
+% IC = sum(node_level_guess);
+% 
+% x = fzero(@(x) error_fn(x), IC);
+% % x = fsolve(@(x) error_fn(x), IC, optimset('Jacobian','on','display','off'));
+% 
+% x_NI = non_iterative_version;
+% 
+% if abs(x_NI - x) > 1e-6
+%     disp('non-iterative version didn''t work')
+% end
 
-x = fzero(@(x) error_fn(x), IC);
+x = non_iterative_version;
 
 node_level = convert_x_to_NL(x);
 
+    function x = non_iterative_version
+        N = length(V_bubi);
+%         A = zeros(N);
+%         A(tril(true(size(A)))) = ones(1, 0.5*N*(N+1));
+%         
+%         bub_term = sum(A*V_bubi(:), 2);
+        
+        bub_term = cumsum(V_bubi);
+        bub_term = [0; bub_term(1:N-1)];
+        
+        N_full_term = [0:N-1]';
+        
+        x_top = (V_l/V_node - N_full_term + bub_term)./(1 - V_bubi);
+        
+%         for i = 1:N-1
+%             residue(i) = (V_l/V_node - i + bub_term(i))/(1 - V_bubi(i+1));
+%         end
+        
+        ind_correct = find( x_top > 0 & x_top < 1);
+        
+        N_full = N_full_term(ind_correct);
+        
+        if length(N_full) > 1
+            error('node level problem')
+        end
+        
+        x_top = x_top(ind_correct);
+        
+        x = x_top + N_full;
+    end
 
-    function E = error_fn(x)
+
+    function [E] = error_fn(x)
+        % x is the actual number (eg 7.65)
         
         NL = convert_x_to_NL(x);
         
@@ -14,7 +55,10 @@ node_level = convert_x_to_NL(x);
             disp('uh oh, tank is overfilled in node level calculation')
         end
         
-        E = (V_l/V_node - sum(NL) + sum(NL.*V_bubi));
+        E = (V_l/V_node - x + sum(NL.*V_bubi));
+        
+        % jacobian
+        J = -1 + V_bubi(floor(x) + 1);
         
     end
 
