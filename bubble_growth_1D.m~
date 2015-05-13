@@ -2027,10 +2027,8 @@ for i = 1:N_full + 1
                 A1(2,:) = (p-1)/p * r_sp.^(1/p);
                 A2(2,:) = (1/p) * r_sp.^(1/p - 1);
             else
-%                 A1(j+1,:) = (1 - j)*r_sp.^j;
-%                 A2(j+1,:) = j*r_sp.^(j);
                 A1(j+1,:) = (1 - j/p) * r_sp.^(j/p);
-                A2(j+1,:) = (j/p) * r_sp.^(j/p - 1);
+                A2(j+1,:) = (j/p)*r_sp.^(j);
             end
         end
         
