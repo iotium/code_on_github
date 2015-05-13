@@ -31,11 +31,12 @@ switch computer
 end
 
 constants.nuc_model = 'SJ';
-constants.ADQMOM_p = 1/3;
+constants.ADQMOM_p = 5/3;
+p = constants.ADQMOM_p;
 
 N_nodes = 20;
 
-N_mom = 10;
+N_mom = 6;
 IC_moments = gamma_dist_moments( 5e-10, 1e-3, N_mom);
 
 % 10%
@@ -366,11 +367,19 @@ w_ic = reshape(w_ic, N_ab, N_nodes)';
 r_ic = reshape(r_ic, N_ab, N_nodes)';
 
 for i = 1:2*N_ab
-    mom(:, i) = sum( r_ic.^(i-1) .* w_ic, 2 );
+    mom(:, i) = sum( r_ic.^((i-1)/p) .* w_ic, 2 );
 end
 
 % net volume of bubbles, per unit volume of liquid
-V_bubi = 4/3*pi*mom(:,4);
+if p == 1
+    constants.V_moment_index = 4;
+elseif rem(p*3,1) == 0
+    constants.V_moment_index = 1 + 3*p;
+end
+
+V_moment_index = constants.V_moment_index;
+
+V_bubi = 4/3*pi*mom(:,V_moment_index);
 
 V_l = fill_level*V_tank;
 
@@ -942,16 +951,18 @@ while running == 1;
     r_q = g_q./w_q;
     
     for i = 1:2*N_ab
-        mom(:, i) = sum( r_q.^(i-1) .* w_q, 2 );
+        mom(:, i) = sum( r_q.^((i-1)/p) .* w_q, 2 );
     end
     
     if sum(mom(:)<0) > 0
         disp('negative moments')
     end
     
+    
+    
     % net volume of bubbles, per unit volume of liquid
-    V_bubi = 4/3*pi*mom(:,4);
-    A_bubi = 4*pi*mom(:,3);
+    V_bubi = 4/3*pi*mom(:,V_moment_index);
+    %     A_bubi = 4*pi*mom(:,3);
     
     
     % get system pressure
@@ -998,7 +1009,7 @@ while running == 1;
     
     % volume of all the bubbles
     V_bub(n+1) = sum(node_level.*V_bubi) * V_node;
-    A_bub(n+1) = sum(node_level.*A_bubi) * V_node;
+    %     A_bub(n+1) = sum(node_level.*A_bubi) * V_node;
     
     
     
@@ -1041,6 +1052,7 @@ while running == 1;
             
             y(ind_w_node, n+1) = w_q_top;
             y(ind_g_node, n+1) = g_q_top;
+            
         end
         
     end
@@ -1333,13 +1345,13 @@ else
         ylabel('gas holdup')
         title('gas holdup')
         
-        figure(9)
-        hold on
-        plot(t, 6*V_bub./A_bub, 'k')
-        xlabel('Time [s]')
-        ylabel('sauter mean diameter [m]')
-        set(gca,'yscale','log')
-        title('sauter mean diameter')
+        %         figure(9)
+        %         hold on
+        %         plot(t, 6*V_bub./A_bub, 'k')
+        %         xlabel('Time [s]')
+        %         ylabel('sauter mean diameter [m]')
+        %         set(gca,'yscale','log')
+        %         title('sauter mean diameter')
         
         %         figure(10)
         %         hold on
@@ -1519,12 +1531,14 @@ r_q = g_q./w_q;
 
 % get the moments from gauss quadrature
 for i = 1:2*N_ab
-    mom(:, i) = sum( r_q.^(i-1) .* w_q, 2 );
+    mom(:, i) = sum( r_q.^((i-1)/p) .* w_q, 2 );
 end
+
+V_moment_index = constants.V_moment_index;
 
 % bubble volume per unit volume of liquid/bubble mixture (hence the i)
 % (can also view this as the vapor volume fraction aka gas holdup)
-V_bubi = 4/3*pi*mom(:,4);
+V_bubi = 4/3*pi*mom(:,V_moment_index);
 
 if sum(imag(V_bubi)) > 0
     disp('V_bubi went imaginary')
@@ -1738,10 +1752,10 @@ for i = 1:N_full + 1
     
 end
 
-        if deltaT_sup > 15
-            disp('real superheat!')
-            keyboard
-        end
+if deltaT_sup > 15
+    disp('real superheat!')
+    keyboard
+end
 
 
 for i = 1:N_full + 1
@@ -1756,7 +1770,7 @@ for i = 1:N_full + 1
             
         end
         
-
+        
         
         % jakob number
         Ja_T = Cp_l * rho_l * deltaT_sup/(rho_tg * h_lv);
@@ -1767,7 +1781,7 @@ for i = 1:N_full + 1
         % radius of new bubbles
         r_nuc = 2*sigma*T_s/(rho_tg * h_lv * deltaT_sup);
         
-%         r_nuc/min(r_q(i,:))
+        %         r_nuc/min(r_q(i,:))
         
         % length of liquid node volume [m]
         %         L_l = V_l_star(i) / (pi * 0.25 * D^2);
@@ -1845,7 +1859,7 @@ for i = 1:N_full + 1
     
     % calculate the scaled growth integral term
     for k = 2:N_ab*2
-        growth_int_s(k) = (k-1)*sum( (1/r_m) * r_s.^(k-2) .* w_q(i,:) .* rdot );
+        growth_int_s(k) = ((k-1)/p)*sum( (1/r_m) * r_s.^((k-1)/p - 1) .* w_q(i,:) .* rdot );
     end
     
     % nucleation rate per volume
@@ -1872,7 +1886,7 @@ for i = 1:N_full + 1
     death_int_s = birth_int_s;
     
     for k = 1:N_ab*2
-        birth_int_s(k) = (r_nuc/r_m).^(k-1) * spec_nuc_rate;
+        birth_int_s(k) = (r_nuc/r_m).^((k-1)/p) * spec_nuc_rate;
         %         death_int_s(k) = sum( r_s.^(k-1) .* w_q(i,:) .* C_death_rate ...
         %             .* 0.5.*(1 + erf( C_erf_death_rate * (abs(r_q(i,:))/r_death - 1) ) ) );
     end
@@ -1952,8 +1966,8 @@ for i = 1:N_full + 1
                     beta = C_coalescence*(qT + qB + qLS)*exp( - t_coal / t_cont);
                     
                     
-                    coal_birth_s(k) = coal_birth_s(k) + 0.5 * w_q(i,l) * w_q(i,j) * ( abs(r_s(l))^3 + abs(r_s(j))^3 )^((k-1)/3) * beta;
-                    coal_death_s(k) = coal_death_s(k) + r_s(l)^(k-1) * w_q(i,l) * w_q(i,j) * beta;
+                    coal_birth_s(k) = coal_birth_s(k) + 0.5 * w_q(i,l) * w_q(i,j) * ( abs(r_s(l))^3 + abs(r_s(j))^3 )^((k-1)/(3*p)) * beta;
+                    coal_death_s(k) = coal_death_s(k) + r_s(l)^((k-1)/p) * w_q(i,l) * w_q(i,j) * beta;
                 end
             end
         end
@@ -2022,15 +2036,15 @@ for i = 1:N_full + 1
                 A1(1,:) = ones(1,N_ab);
                 A2(1,:) = zeros(1,N_ab);
             elseif j == 1
-%                 A1(2,:) = zeros(1,N_ab);
-%                 A2(2,:) = ones(1,N_ab);
+                %                 A1(2,:) = zeros(1,N_ab);
+                %                 A2(2,:) = ones(1,N_ab);
                 A1(2,:) = (p-1)/p * r_sp.^(1/p);
                 A2(2,:) = (1/p) * r_sp.^(1/p - 1);
             else
-%                 A1(j+1,:) = (1 - j)*r_sp.^j;
-%                 A2(j+1,:) = j*r_sp.^(j);
+                %                 A1(j+1,:) = (1 - j)*r_sp.^j;
+                %                 A2(j+1,:) = j*r_sp.^(j);
                 A1(j+1,:) = (1 - j/p) * r_sp.^(j/p);
-                A2(j+1,:) = (j/p) * r_sp.^(j/p - 1);
+                A2(j+1,:) = (j/p) * r_sp.^(j/p);
             end
         end
         
@@ -2047,9 +2061,9 @@ for i = 1:N_full + 1
             end
         end
         
-        if n > 100
+        if n > 500
             ill_conditioned = 0;
-            %         disp('gave up')
+            disp('gave up trying to fix ill-conditioned A matrix')
         end
         
         n = n + 1;
@@ -2061,7 +2075,7 @@ for i = 1:N_full + 1
     
     a_q = alpha_q(1:N_ab);
     b_q_s = alpha_q(N_ab+1:end);
-    b_q = b_q_s.*r_q(i,:)';
+    b_q = b_q_s.*r_q(i,:)'; % go from scaled b (ie b*) back to the real thing
     
     % have to put this in the right place
     ind_node = (i-1)*N_ab + [1:N_ab];
@@ -2075,13 +2089,13 @@ for i = 1:N_full + 1
     dg_dt(ind_node) = b_q - dug_dx(i,:)';
     
     % these have units of (m^3/(m^3*s)) ie (volume/time)/(volume of mix)
-    birth_term = birth_int_s(4)*r_m^3;
-    growth_term = growth_int_s(4)*r_m^3;
+    birth_term = birth_int_s(V_moment_index)*r_m^(3/p);
+    growth_term = growth_int_s(V_moment_index)*r_m^(3/p);
     %     death_term = death_int_s(4)*r_m^3;
     
     if i == N_full + 1
         % bubbles leaving from free surface (m^3/(m^2 * s))
-        death_term = 4/3 * pi * sum(r_q(i,:).^3 .* w_q(i,:) .* (u_rise(i,:) - u_bulk) );
+        death_term = 4/3 * pi * sum(r_q(i,:).^(3/p) .* w_q(i,:) .* (u_rise(i,:) - u_bulk) );
     else
         death_term = 0;
     end
