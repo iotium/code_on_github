@@ -4,7 +4,7 @@ function varargout = EQ(varargin)
 
 if nargin == 0
     %     A_inj = 1.764e-4;
-    specified_case = 2;
+    specified_case = 0;
     if ~exist('A_inj','var')
         switch specified_case
             case 1
@@ -69,21 +69,21 @@ fsolve_options = optimset('display','off');
 
 if specified_case == 0
             % can play with this one
-        Ti = 292.5;           % [K] initial temperature
-        fill_level = 0.8;        % [] initial fill_level ratio (by volume)
-        %         E = 2e2;          % [] heat transfer multiplier
-        V_tank = 0.05;   % [m^3] tank volume
-        L_tank = 62.3*0.0254;     % [m] tank length
-        Cd = 0.5;         % [] injector Cd
-        %         A_inj = 3.15e-7;       % [m^2] injector area
+        Ti = 243;           % [K] initial temperature
+        fill_level = 0.80;        % [] initial fill_level ratio (by volume)
+        %         E = 2.1e4;          % [] heat transfer multiplier
+        V_tank = 1.80e-4;   % [m^3] tank volume
+        L_tank = 0.356;     % [m] tank length
+        Cd = 1;         % [] injector Cd
+        A_inj = 3.15e-7;       % [m^2] injector area
         Po = 1e5;           % [Pa] external pressure
         T_air = 293;        % [K] air temperature
-        rho_w = 2700;       % [kg/m^3] density of wall material (aluminum)
-        cv_w = 904;         % [J/kg.K] specific heat of wall (aluminum)
-        t_w = 0.0254*1/8;   % [m] wall thickness
+        rho_w = 1360;       % [kg/m^3] density of wall material (polycarb)
+        cv_w = 1250;        % [J/kg.K] specific heat of wall (polycarb)
+        t_w = 0.0254*1/4;   % [m] wall thickness
         D = sqrt(4/pi*V_tank/L_tank);
         % [m] tank diameter
-        k_w = 167;          % [W/m.K] thermal conductivity of wall
+        k_w = 0.195;          % [W/m.K] thermal conductivity of wall
 else
 
 [Ti, fill_level, V_tank, L_tank, ...
