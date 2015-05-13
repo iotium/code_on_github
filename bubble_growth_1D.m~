@@ -26,7 +26,7 @@ switch computer
         plot_periodically = 0;
         t_plot = 5;
         time_out = 1;
-        max_comp_time = 100*60;
+        max_comp_time = 10*60;
         
 end
 
@@ -96,12 +96,12 @@ clock_plot = clock;
 if nargin == 0
     constants.C_coalescence = 1e0;
     constants.C_rdot = 2.5*pi;
-    constants.C_nuc_rate = 1e1;
+    constants.C_nuc_rate = 1e6;
     constants.n_nuc_freq = 3;
     constants.checking_gauss_error = 0;
     constants.C_death_rate = 0;%5e-1;
     constants.C_erf_death_rate = 1;
-    constants.coalescence_switch = 'on';
+    constants.coalescence_switch = 'off';
     % constants.n_death_rate = 2;
     % constants.alpha_lim = 0.05;
     constants.r_death = 0.5 * 0.1 * 0.0254;
@@ -197,7 +197,7 @@ constants.V_node = V_node;
 % initialize program parameters
 h = 1e-12;           % [s] initial time step
 running = 1;        % [] switch, 1 = program running, 0 = program stopped
-rel_tol = 1e-3;     % [] max relative error allowed in adaptive scheme
+rel_tol = 1e-4;     % [] max relative error allowed in adaptive scheme
 abs_tol = 1e9;     % [] max absolute error allowed in adaptive scheme
 min_error = 1e-3;   % [] min error (relative to error_tol) before step size is increased
 h_max = 1;       % [s] max allowable time step
@@ -793,7 +793,7 @@ while running == 1;
             %             rel_err = rel_err(1:6); % remove the bubble distribution terms
             
             [rel_err, ind_max_rel_err] = max(rel_err(isfinite(rel_err)));  % fix rel_err to the maximum finite value of rel_err
-            fprintf('max rel error is %4.4g, at index %d, y(i) = %4.4g\n', rel_err, ind_max_rel_err, y(ind_max_rel_err,n))
+            fprintf('max rel error is %4.4g, at index %d, y(i) = %4.4g\n', rel_err, ind_max_rel_err, y()
             
             
             abs_err = abs(err);
@@ -1669,14 +1669,14 @@ end
 mdot_out = A_inj*Cd*injector_flow(Po, P, T_l, rho_l, P_sat, s_liq_sat, h_liq_sat);
 
 % bulk flow velocity out the bottom
-u_bulk = mdot_out / rho_l / (0.25 * pi * D^2);
-% u_bulk = 0;
+% u_bulk = mdot_out / rho_l / (0.25 * pi * D^2);
+u_bulk = 0;
 
 % rise velocity due to buoyancy
 % u_rise = sqrt( 2.14*sigma./( rho_l*(2*abs(r_q) ) + 0.505*g*( 2*abs(r_q) ) ) );
-u_rise = 0.71*sqrt(g*2*abs(r_q));
+% u_rise = 0.71*sqrt(g*2*abs(r_q));
 % u_rise = 2*g*rho_l*r_q.^2./(9*sigma);
-% u_rise = zeros(size(r_q));
+u_rise = zeros(size(r_q));
 
 duw_dx = zeros(size(w_q));
 dug_dx = duw_dx;
@@ -2044,7 +2044,7 @@ for i = 1:N_full + 1
         
         if n > 100
             ill_conditioned = 0;
-                    disp('gave up trying to fix an ill-conditioned A matrix')
+            %         disp('gave up')
         end
         
         n = n + 1;
