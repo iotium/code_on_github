@@ -2025,7 +2025,7 @@ for i = 1:N_full + 1
                 A2(2,:) = ones(1,N_ab);
             else
                 A1(j+1,:) = (1 - j)*r_sp.^j;
-                A2(j+1,:) = j*r_sp.^(j - 1);
+                A2(j+1,:) = j*r_sp.^(j);
             end
         end
         
