@@ -1,6 +1,6 @@
 function varargout = bubble_growth(varargin)
-
-
+close all
+warning('off','MATLAB:nearlySingularMatrix')
 %% define input parameters
 
 switch computer
@@ -26,18 +26,20 @@ switch computer
         plot_periodically = 0;
         t_plot = 5;
         time_out = 1;
-        max_comp_time = 10*60;
+        max_comp_time = 120*60;
         
 end
 
 constants.nuc_model = 'SJ';
-constants.ADQMOM_p = 5/3;
+constants.ADQMOM_p = 1;
 p = constants.ADQMOM_p;
 
-N_nodes = 20;
+ADQMOM = 'off';
+
+N_nodes = 10;
 
 N_mom = 6;
-IC_moments = gamma_dist_moments( 5e-10, 1e-3, N_mom);
+IC_moments = gamma_dist_moments( 5e-10, 1e-3, N_mom, p);
 
 % 10%
 % IC_moments = exp([21.9729 13.3408 4.7871 -3.7236 -12.2013 -20.6546]');
@@ -49,39 +51,6 @@ IC_moments = gamma_dist_moments( 5e-10, 1e-3, N_mom);
 % IC_moments = exp([21.3164 13.2875 5.3121 -2.6353 -10.5581 -18.4594]');
 
 alpha_ic = 1e-8;
-alpha_mom = 4/3 * pi * IC_moments(4);
-
-IC_moments = IC_moments * alpha_ic/alpha_mom;
-
-[r_ic, w_ic] = PD_method(IC_moments);
-
-% N_mom = 6;
-
-% r_ic = [3e-6 2e-3 7e-4];
-% w_ic = [1 0.01  1e-3];
-
-% r_ic = [2e-5 2e-4 5e-4];
-% w_ic = [1 0.01  1e-3];
-
-% r_ic = [3e-8 2e-8 7e-8];
-% w_ic = [1 0.01  1e-3];
-
-% DQMOM_IC = [w_ic(:); r_ic(:).*w_ic(:)];
-
-% repeat IC for each node
-
-% weights
-% DQMOM_IC = repmat(w_ic(:), N_nodes, 1); % repeats w_ic N_nodes times
-
-% after the weights, put all the the abscissas
-% DQMOM_IC = [DQMOM_IC; repmat(r_ic(:).*w_ic(:), N_nodes, 1)];
-
-r_ic = repmat(r_ic(:), N_nodes, 1);
-w_ic = repmat(w_ic(:), N_nodes, 1);
-
-DQMOM_IC = [w_ic; r_ic.*w_ic];
-
-% DQMOM_IC = [1-6; 1e-6; 1e-6; 2e-1; 1e-4; 3e-9];
 
 N_ab = N_mom/2;
 constants.N_ab = N_ab; % number of abscissas
@@ -110,7 +79,7 @@ if nargin == 0
     save_filename = 'bubble_sim_data.mat';
     
     %     E = 3*3.2e2;
-    A_inj = 1e-7;
+    A_inj = 6e-7;
     E = 1;
     specified_case = 6;
     if ~exist('A_inj','var')
@@ -359,6 +328,40 @@ P = P*1e3;
 
 T_sat = Ti;
 
+if strcmp(ADQMOM, 'off')
+    p = 1;
+    constants.ADQMOM_p = p;
+end
+
+if p == 1
+    constants.V_moment_index = 4;
+elseif rem(p*3,1) == 0
+    constants.V_moment_index = 1 + 3*p;
+end
+
+V_moment_index = constants.V_moment_index;
+
+alpha_mom = 4/3 * pi * IC_moments(V_moment_index);
+
+IC_moments = IC_moments * alpha_ic/alpha_mom;
+
+% [r_ic, w_ic] = PD_method(IC_moments);
+
+[r_ic, w_ic] = PD_method_alternative(IC_moments,p);
+
+% r_ic = logspace(-12,-9,N_ab);
+%
+% w_ic = 1e20*ones(N_ab,1);
+
+if ~isreal(r_ic)
+    error('imaginary IC')
+end
+
+r_ic = repmat(r_ic(:), N_nodes, 1);
+w_ic = repmat(w_ic(:), N_nodes, 1);
+
+DQMOM_IC = [w_ic; r_ic.*w_ic];
+
 
 % reshape so each ROW is one node
 w_ic = reshape(w_ic, N_ab, N_nodes)';
@@ -371,13 +374,7 @@ for i = 1:2*N_ab
 end
 
 % net volume of bubbles, per unit volume of liquid
-if p == 1
-    constants.V_moment_index = 4;
-elseif rem(p*3,1) == 0
-    constants.V_moment_index = 1 + 3*p;
-end
 
-V_moment_index = constants.V_moment_index;
 
 V_bubi = 4/3*pi*mom(:,V_moment_index);
 
@@ -392,7 +389,6 @@ V_l_star = V_bub + V_l;
 
 % V_l_star = fill_level.*V_tank;
 % V_bub = V_l_star .* V_bubi;
-
 
 % V_tg = (1 - fill_level).*(V_tank - V_bub);
 
@@ -453,7 +449,7 @@ guesses.P = P;
 guesses.rho_tg = rho_tg;
 guesses.rho_l = rho_l;
 guesses.Vdot_l = 0;
-
+constants.r_nuc = 0;
 V_bub = 0;
 gas_holdup = 0;
 
@@ -461,6 +457,8 @@ dT_superheat = 0;
 Pdot = 0;
 rhodot_l = 0;
 rhodot_tg = 0;
+
+net_nuc = zeros(N_nodes,1);
 
 % I don't seem to be using this term anymore so just leave it
 derivatives = zeros(5,1);
@@ -487,6 +485,8 @@ while running == 1;
     %     rhodot_tg = 0.1*rhodot_tg + 0.9*bdiff(rho_tg,starti,n,t,adaptive);
     Vdot_l(n+1) = V_tank*bdiff(V_l/V_tank,starti,n,t,adaptive);
     %     Vdot_tg(n+1) = V_tank*bdiff(V_tg/V_tank,starti,n,t,adaptive);
+    
+    Vdot_bub(n+1) = bdiff(V_bub, starti, n, t, adaptive);
     
     if h > 5*h_min
         
@@ -962,6 +962,7 @@ while running == 1;
     
     % net volume of bubbles, per unit volume of liquid
     V_bubi = 4/3*pi*mom(:,V_moment_index);
+    N_bubi = mom(:,1);
     %     A_bubi = 4*pi*mom(:,3);
     
     
@@ -971,7 +972,7 @@ while running == 1;
     
     
     % saturation temp based on pressure
-    T_sat(n+1) = refpropm('T','P',P(n+1)/1e3,'Q',0.5,'N2O');
+    [T_sat(n+1), h_lv] = refpropm('TY','P',P(n+1)/1e3,'Q',0.5,'N2O');
     
     % liquid superheat
     dT_superheat(n+1) = T_l(n+1) - T_sat(n+1);
@@ -1057,10 +1058,179 @@ while running == 1;
         
     end
     
-    [P_sat, s_liq_sat, h_liq_sat] = refpropm('PSH', 'T', T_l(n+1), 'Q', 0, 'N2O');
+    [P_sat, s_liq_sat, h_liq_sat, sigma] = refpropm('PSHI', 'T', T_l(n+1), 'Q', 0, 'N2O');
     P_sat = P_sat*1e3;
     
     mdot_out(n+1) = A_inj*Cd*injector_flow(Po, P(n+1), T_l(n+1), rho_l(n+1), P_sat, s_liq_sat, h_liq_sat);
+    
+    
+    
+    
+    [h_l, dh_drho_l, drho_dP_l, u_l, Cv_l, dP_dT_l, ...
+    k_l, Cp_l, MW] = ...
+    refpropm('H!RUO#LCM','T',T_l(n+1),'D&',rho_l(n+1),'N2O');
+    
+alpha_l = k_l./(rho_l(n+1) .* Cp_l);
+
+    % jakob number
+    Ja_T = Cp_l * rho_l(n+1) * dT_superheat(n+1)/(rho_tg(n+1) * h_lv);
+    
+    % bubble radius rate of change
+    rdot = constants.C_rdot * Ja_T^2 * alpha_l ./ r_q(i,:);
+    
+    % radius of new bubbles
+    
+    %         if constants.step == 1
+    % %             figure(100)
+    % %             subplot(1,2,1)
+    % %             hold on
+    % %             plot(constants.t,r_nuc,'ro')
+    % %             set(gca,'yscale','log')
+    % % N_nuc = length(constants.r_nuc);
+    % constants.r_nuc = r_nuc;
+    %         end
+    
+    %         r_nuc/min(r_q(i,:))
+    
+    % length of liquid node volume [m]
+    %         L_l = V_l_star(i) / (pi * 0.25 * D^2);
+    L_l = node_level*L_node;
+    
+    % surface area of node[m^2]
+    A_l = pi * D * L_l;% + pi * 0.25 * D^2;
+    
+    r_nuc = 2*sigma*T_sat(n+1)/(rho_tg(n+1) * h_lv * dT_superheat(n+1));
+    
+    % birth of bubbles from nucleation
+    % turn off coalescence so don't have to deal with it
+    % maybe turn off u_rise so don't have to worry about that either
+    
+    % departure diameter [m]
+    r_dep = 0.5 * 2.97e4 * (P(n+1)/P_cr)^-1.09 * ( K_b * T_cr / (P_cr * MW) )^(1/3);
+    % correlation from Jensen & Memmel, 1986
+    % gives values on the order of 10-20 microns
+    
+    % non-dimensional cavity size (ie bubble nucleation size)
+    r_c_star = r_nuc / r_dep;
+    
+    % non-dimensional nucleation rate
+    N_ns_star = 1e-7 * r_c_star;
+    
+    % nucleation site density [1/m^2]
+    nuc_density = N_ns_star * ( 0.5 / r_dep )^2;
+    
+    % nucleation frequency [Hz]
+    nuc_freq = 1e4 * dT_superheat(n+1)^constants.n_nuc_freq;
+    
+    % nucleation rate [Hz]
+    nuc_rate = constants.C_nuc_rate * nuc_density * nuc_freq * A_l;
+    
+    if dT_superheat(n+1) > 1e-4
+       
+    
+    spec_nuc_rate(:,n+1) = nuc_rate ./ ( node_level * V_node );
+    
+    else
+        spec_nuc_rate(:,n+1) = zeros(size(nuc_rate));
+    end
+    
+    for i = 1:N_full+1
+        net_nuc(i) = net_nuc(i) + dt*spec_nuc_rate(i,n+1);
+    end
+    
+    total_nuc = sum(net_nuc);
+    
+%     figure(84)
+%     clf
+%     subplot(2,1,1)
+%     %     hold on
+%     plot(V_bubi(1:N_full+1),'ks-')
+%     set(gca,'yscale','log')
+%     subplot(2,1,2)
+%     
+%     plot(N_bubi(1:N_full+1),'ks-')
+%     hold on
+% %     hline(total_nuc)
+%     plot(net_nuc(1:N_full+1),'ro-')
+%     set(gca,'yscale','log')
+%     title(['N total = ' num2str(sum(N_bubi.*node_level))])
+    
+    
+        figure(100)
+        subplot(1,4,1)
+        hold on
+        plot(t(n)*ones(size(r_q(5,:))), r_q(5,:),'ks')
+        if r_nuc > 0
+            plot(t(n),r_nuc,'ro')
+        end
+        set(gca,'yscale','log')
+    
+        subplot(1,4,2)
+        hold on
+        plot(t(n)*ones(size(r_q(5,:))), w_q(5,:),'ks')
+        set(gca,'yscale','log')
+        
+        subplot(1,4,3)
+        bar(r_q(5,:),w_q(5,:),0.1)
+        set(gca,'yscale','log')
+        set(gca,'xscale','log')
+        
+        subplot(1,4,4)
+        hold on
+        plot(t(n), abs(Vdot_bub(n)),'ks')
+        set(gca,'yscale','log')
+        
+    
+    
+    % ADQMOM
+    
+    %         if p == 1
+    %     constants.V_moment_index = 4;
+    % elseif rem(p*3,1) == 0
+    %     constants.V_moment_index = 1 + 3*p;
+    % end
+    %
+    % V_moment_index = constants.V_moment_index;
+    %
+    
+    if strcmp(ADQMOM, 'on')
+        
+        
+        % possible values of p
+        p_max = (N_mom - 1);
+        p_vec = [1:p_max]/3;
+        
+        for i = 1:length(p_vec)
+            
+            % equivalent abscissas
+            l = r_q.^(1/p_vec(i));
+            l_norm = l/max(l);
+            
+            l_std(i) = std(l_norm);
+            
+        end
+        
+        % take p that has max std
+        [~, i_p] = max(l_std);
+        
+        p = p_vec(i_p);
+        
+        disp(num2str(p))
+        
+        constants.ADQMOM_p = p;
+        V_moment_index = 1 + 3*p;
+        constants.V_moment_index = V_moment_index;
+        
+    elseif strcmp(ADQMOM,'off')
+        p = 1;
+    end
+    
+    %         figure(95)
+    %         hold on
+    %         plot(t(n),l_std,'ks')
+    %         set(gca,'yscale','log')
+    
+    
     
     if plot_periodically
         
@@ -1534,6 +1704,14 @@ for i = 1:2*N_ab
     mom(:, i) = sum( r_q.^((i-1)/p) .* w_q, 2 );
 end
 
+mom(mom<0) = 0;
+
+N_bubi = mom(:,1);
+
+if ~isreal(mom)
+    disp('imaginary moments')
+end
+
 V_moment_index = constants.V_moment_index;
 
 % bubble volume per unit volume of liquid/bubble mixture (hence the i)
@@ -1698,7 +1876,7 @@ dug_dx = duw_dx;
 
 for i = 1:N_full + 1
     % fluxes in and out of node
-    
+
     % %     at the interface above the node (i + 1/2)
     %         if i < N_full + 1
     %
@@ -1741,7 +1919,7 @@ for i = 1:N_full + 1
     %         duw_dx(i,:) = (u_ip2.*w_ip2 - u_im2.*w_im2)/L_node;
     %         dug_dx(i,:) = (u_ip2.*g_ip2 - u_im2.*g_im2)/L_node;
     %
-    
+
     if i > 1
         duw_dx(i,:) = ( (u_rise(i,:) - u_bulk).*w_q(i,:) - (u_rise(i-1,:) - u_bulk).*w_q(i-1,:) )/L_node;
         dug_dx(i,:) = ( (u_rise(i,:) - u_bulk).*g_q(i,:) - (u_rise(i-1,:) - u_bulk).*g_q(i-1,:) )/L_node;
@@ -1749,7 +1927,7 @@ for i = 1:N_full + 1
         duw_dx(i,:) = ( u_rise(i,:) - u_bulk).*w_q(i,:)/L_node;
         dug_dx(i,:) = ( u_rise(i,:) - u_bulk).*g_q(i,:)/L_node;
     end
-    
+
 end
 
 if deltaT_sup > 15
@@ -1780,6 +1958,16 @@ for i = 1:N_full + 1
         
         % radius of new bubbles
         r_nuc = 2*sigma*T_s/(rho_tg * h_lv * deltaT_sup);
+        
+        %         if constants.step == 1
+        % %             figure(100)
+        % %             subplot(1,2,1)
+        % %             hold on
+        % %             plot(constants.t,r_nuc,'ro')
+        % %             set(gca,'yscale','log')
+        % % N_nuc = length(constants.r_nuc);
+        % constants.r_nuc = r_nuc;
+        %         end
         
         %         r_nuc/min(r_q(i,:))
         
@@ -1869,7 +2057,17 @@ for i = 1:N_full + 1
     % changed my mind -> nuc_rate is based on V_node
     
     %     spec_nuc_rate = nuc_rate / V_l_star(i);
+    %
+    %     if constants.step == 1 && i == 5
+    %         spec_nuc_rate
+    %     end
+    
+    
     spec_nuc_rate = nuc_rate / ( node_level(i) * V_node );
+    
+    %     if deltaT_sup > 4
+    %     spec_nuc_rate = spec_nuc_rate * (1 + (deltaT_sup - 4) * 1e3);
+    % end
     % spec_nuc_rate = nuc_rate / V_l_star;
     
     %     if i == N_full+1
@@ -1885,11 +2083,16 @@ for i = 1:N_full + 1
     birth_int_s = zeros(1,N_ab*2);
     death_int_s = birth_int_s;
     
+    %     if constants.t < 1
+    
     for k = 1:N_ab*2
+        %         birth_int_s(k) = (r_nuc/r_m).^((k-1)/p) * spec_nuc_rate;
         birth_int_s(k) = (r_nuc/r_m).^((k-1)/p) * spec_nuc_rate;
         %         death_int_s(k) = sum( r_s.^(k-1) .* w_q(i,:) .* C_death_rate ...
         %             .* 0.5.*(1 + erf( C_erf_death_rate * (abs(r_q(i,:))/r_death - 1) ) ) );
     end
+    
+    %     end
     
     % birth and death due to coalescence
     
@@ -1983,6 +2186,8 @@ for i = 1:N_full + 1
     
     dmom_dt_s = birth_int_s(:) - death_int_s(:) + growth_int_s(:) + coal_birth_s(:) - coal_death_s(:);
     
+%     fprintf('%4.4g\n', birth_int_s(1)/N_bubi(i))
+    
     % change in total bubble volume (nothing from coalescence - V is conserved)
     %     V_birth = birth_int_s(4) + growth_int_s(4);
     %     V_death = death_int_s(4);
@@ -2018,60 +2223,61 @@ for i = 1:N_full + 1
     %     dmom_dt_s = birth_int_s(:) - death_int_s(:) + growth_int_s(:) + coal_birth_s(:) - coal_death_s(:);
     % end
     
-    ill_conditioned = 1;
+    %     ill_conditioned = 1;
+    %
+    %     n = 1;
+    %     while ill_conditioned
+    %
+    %         if n > 1
+    %             % if it's ill conditioned, jiggle the abscissas around a little
+    %             r_sp = r_s + (0.5 - rand(size(r_s))).*abs(r_s)*1e-2;
+    %
+    %         else
+    r_sp = r_s;
+    %         end
     
-    n = 1;
-    while ill_conditioned
-        
-        if n > 1
-            % if it's ill conditioned, jiggle the abscissas around a little
-            r_sp = r_s + (0.5 - rand(size(r_s))).*abs(r_s)*1e-4;
-            
+    for j = 0:(2*N_ab - 1)
+        if j == 0
+            A1(1,:) = ones(1,N_ab);
+            A2(1,:) = zeros(1,N_ab);
+        elseif j == 1
+            %                 A1(2,:) = zeros(1,N_ab);
+            %                 A2(2,:) = ones(1,N_ab);
+            A1(2,:) = (p-1)/p * r_sp.^(1/p);
+            A2(2,:) = (1/p) * r_sp.^(1/p - 1);
         else
-            r_sp = r_s;
+            %                 A1(j+1,:) = (1 - j)*r_sp.^j;
+            %                 A2(j+1,:) = j*r_sp.^(j);
+            A1(j+1,:) = (1 - j/p) * r_sp.^(j/p);
+            A2(j+1,:) = (j/p) * r_sp.^(j/p);
         end
-        
-        for j = 0:(2*N_ab - 1)
-            if j == 0
-                A1(1,:) = ones(1,N_ab);
-                A2(1,:) = zeros(1,N_ab);
-            elseif j == 1
-                %                 A1(2,:) = zeros(1,N_ab);
-                %                 A2(2,:) = ones(1,N_ab);
-                A1(2,:) = (p-1)/p * r_sp.^(1/p);
-                A2(2,:) = (1/p) * r_sp.^(1/p - 1);
-            else
-                %                 A1(j+1,:) = (1 - j)*r_sp.^j;
-                %                 A2(j+1,:) = j*r_sp.^(j);
-                A1(j+1,:) = (1 - j/p) * r_sp.^(j/p);
-                A2(j+1,:) = (j/p) * r_sp.^(j/p);
-            end
-        end
-        
-        A = [A1 A2];
-        
-        cond_val = rcond(A);
-        
-        if (cond_val < 1e-15) || isnan(cond_val)
-            ill_conditioned = 1;
-        else
-            ill_conditioned = 0;
-            if n > 1
-                %             disp('fixed')
-            end
-        end
-        
-        if n > 500
-            ill_conditioned = 0;
-            disp('gave up trying to fix ill-conditioned A matrix')
-        end
-        
-        n = n + 1;
     end
+    
+    A = [A1 A2];
+    
+    %         cond_val = rcond(A);
+    %
+    %         if (cond_val < 1e-15) || isnan(cond_val)
+    %             ill_conditioned = 1;
+    %         else
+    %             ill_conditioned = 0;
+    %             if n > 1
+    %                 %             disp('fixed')
+    %             end
+    %         end
+    %
+    %         if n > 50
+    %             ill_conditioned = 0;
+    % %             disp('gave up trying to fix ill-conditioned A matrix')
+    %         end
+    %
+    %         n = n + 1;
+    %     end
     
     beta_q = dmom_dt_s;
     
-    alpha_q = A\beta_q;
+    %     alpha_q = A\beta_q;
+    alpha_q = linear_equation_solver(A,beta_q);
     
     a_q = alpha_q(1:N_ab);
     b_q_s = alpha_q(N_ab+1:end);
@@ -2089,13 +2295,13 @@ for i = 1:N_full + 1
     dg_dt(ind_node) = b_q - dug_dx(i,:)';
     
     % these have units of (m^3/(m^3*s)) ie (volume/time)/(volume of mix)
-    birth_term = birth_int_s(V_moment_index)*r_m^(3/p);
-    growth_term = growth_int_s(V_moment_index)*r_m^(3/p);
+    birth_term = birth_int_s(V_moment_index)*r_m^(3);
+    growth_term = growth_int_s(V_moment_index)*r_m^(3);
     %     death_term = death_int_s(4)*r_m^3;
     
     if i == N_full + 1
         % bubbles leaving from free surface (m^3/(m^2 * s))
-        death_term = 4/3 * pi * sum(r_q(i,:).^(3/p) .* w_q(i,:) .* (u_rise(i,:) - u_bulk) );
+        death_term = 4/3 * pi * sum(r_q(i,:).^(3) .* w_q(i,:) .* (u_rise(i,:) - u_bulk) );
     else
         death_term = 0;
     end
@@ -2153,7 +2359,7 @@ Qdot_tg = Qdot_gw;
 
 Udot_li = - mdot_out*h_l - sum( mdot_bub_l )*(h_lv + (h_l_sat - h_l) + h_l) + Qdot_l;
 
-Udot_tgi = Qdot_tg;
+Udot_tgi = Qdot_tg - sum(mdot_bub_tg)*(h_tg_sat) ;
 
 % du_drho_tg = dh_drho_tg + P/rho_tg^2  - 1/rho_tg * dP_drho_tg;
 
