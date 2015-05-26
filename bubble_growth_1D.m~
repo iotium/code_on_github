@@ -1,7 +1,7 @@
 function varargout = bubble_growth(varargin)
 close all
 warning('off','MATLAB:nearlySingularMatrix')
-warning('off','MATLAB:Axes:NegativeDataInLogAxis')
+warning('off','MATLAB:Axes:
 %% define input parameters
 
 switch computer
@@ -80,7 +80,7 @@ if nargin == 0
     save_filename = 'bubble_sim_data.mat';
     
     %     E = 3*3.2e2;
-    A_inj = 2e-7;
+    A_inj = 6e-7;
     E = 1;
     specified_case = 6;
     if ~exist('A_inj','var')

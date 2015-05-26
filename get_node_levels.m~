@@ -23,7 +23,7 @@ node_level = convert_x_to_NL(x);
         N = length(V_bubi);
         
         bub_term = cumsum(V_bubi(2:N-1));
-        bub_term = [0; bub_term(:)];
+%         bub_term = [0; bub_term(1:N-1)];
         
         N_full_term = [1:N-2]';
         
@@ -31,15 +31,15 @@ node_level = convert_x_to_NL(x);
         x_top(1) = V_l*2/(V_node * (1 - V_bubi(1)) );
         
         % for N_full > 0 and < N-1 
-        x_top(2:N-1) = (V_l/V_node + V_bubi(1)/2 + bub_term(1:N-2) - N_full_term + 0.5)./(1 - V_bubi(2:N-1));
+        x_top(2:N-1) = (V_l/V_node + V_bubi(1)/2 + bub_term - N_full_term + 0.5)./(1 - V_bubi(2:N-1));
         
         % for N_full = N-1
-        x_top(N) =   2*(V_l/V_node + V_bubi(1)/2 + bub_term(N-1) - (N-1) + 0.5)./(1 - V_bubi(N));
+        x_top(N) =   2*(V_l/V_node + V_bubi(1)/2 + bub_term(end) - (N-1) + 0.5)./(1 - V_bubi(N));
         
 %         x_top = (V_l/V_node - N_full_term + bub_term)./(1 - V_bubi);
 
         ind_correct = find( x_top > 0 & x_top < 1);
-        N_full_term = [0:N-1];
+        
         N_full = N_full_term(ind_correct);
         
         if length(N_full) > 1

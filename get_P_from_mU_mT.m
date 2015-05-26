@@ -42,7 +42,8 @@ end
         else
             
             node_level = get_node_levels(V_l, V_bubi, V_node, guesses.node_level);
-            V_bub = sum(node_level.*V_bubi*V_node);
+%             V_bub = sum(node_level.*V_bubi*V_node);
+            V_bub = sum_over_nodes(V_bubi, node_level, V_node);
             
         end
         
