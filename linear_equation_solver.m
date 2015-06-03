@@ -31,7 +31,7 @@ dx = A\( (A*x - b));
     delta_new = max((abs(x) > 1e-6 ).*abs(dx./(x + eps)));
 %     fprintf('delta = %4.4g\n',delta_new);
     
-    if delta_new < 1e-4
+    if delta_new < 1e-6
         converged = 1;
     end
     
