@@ -4,9 +4,18 @@ load their_data
 
 % P = N2O_11.p;
 % t = N2O_11.t;
+% 
+% P = N2O_2.p;
+% t = N2O_2.t;
 
-P = N2O_2.p;
-t = N2O_2.t;
+% P = quartz24.p;
+% t = quartz24.t;
+
+% P = quartz48.p;
+% t = quartz48.t;
+
+P = quartz236.p;
+t = quartz236.t;
 
 % P_out = interp1(t/t(end), P, t_sim/t_sim(end));
 P_out = interp1(t, P, t_sim);

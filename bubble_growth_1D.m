@@ -34,10 +34,12 @@ end
 constants.nuc_model = 'SJ';
 constants.ADQMOM_p = 1;
 p = constants.ADQMOM_p;
+fluid = 'CO2';
+constants.fluid = fluid;
 
 ADQMOM = 'off';
 
-N_nodes = 10;
+N_nodes = 40;
 
 N_mom = 4;
 IC_moments = gamma_dist_moments( 5e-10, 1e-3, N_mom, p);
@@ -57,7 +59,7 @@ N_ab = N_mom/2;
 constants.N_ab = N_ab; % number of abscissas
 % (2*N = number of moments, going from 0 to 2N-1)
 
-constants.phi = 1e-2;
+constants.phi = 1e-1;
 
 clock_save = clock;
 clock_start = clock;
@@ -65,75 +67,19 @@ clock_plot = clock;
 
 % close all
 
-if nargin == 0
-    constants.C_coalescence = 1e0;
-    constants.C_rdot = 2.5*pi;
-    constants.C_u_rise = 1;
-    constants.C_nuc_rate = 1e1;
-    constants.n_nuc_freq = 3;
-    constants.C_r_nuc = 0.1;
-    %     constants.checking_gauss_error = 0;
-    %     constants.C_death_rate = 0;%5e-1;
-    %     constants.C_erf_death_rate = 1;
-    constants.coalescence_switch = 'on';
-    % constants.n_death_rate = 2;
-    % constants.alpha_lim = 0.05;
-    %     constants.r_death = 0.5 * 0.1 * 0.0254;
-    save_filename = 'bubble_sim_data.mat';
-    
-    %     E = 3*3.2e2;
-    A_inj = 1.8e-7;
-    E = 1;
-    specified_case = 5;
-    if ~exist('A_inj','var')
-        switch specified_case
-            case 1
-                A_inj = 9.347e-5;
-                E = 1.3e3;
-            case 2
-                A_inj = 2.277e-5;
-                E = 2.4e2;
-            case 3
-                A_inj = 2.936e-5;
-                E = 5.3e2;
-            case 4
-                A_inj = 2.637e-5;
-                E = 1e3;
-            case 5
-                A_inj = 1.56e-7;
-                E = 3.4e2;
-            case 6
-                A_inj = 6.977e-7;
-                E = 7.5e2;
-        end
-    end
-else
-    
-    if isa(varargin{1}, 'char')
-        constants.C_coalescence = str2num( varargin{1} );
-        constants.C_death_rate = str2num( varargin{2} );
-        constants.C_erf_death_rate = str2num( varargin{3} );
-    else
-        constants.C_rdot = varargin{1} ;
-        constants.C_nuc_rate =  varargin{2} ;
-        constants.C_death_rate =  varargin{3} ;
-        constants.C_erf_death_rate =  varargin{4} ;
-    end
-    
-    
-    constants.n_nuc_freq = 3;
-    constants.checking_gauss_error = 0;
-    constants.C_rdot = 2.5*pi;
-    constants.C_nuc_rate = 1e2;
-    constants.n_nuc_freq = 3;
-    constants.checking_gauss_error = 0;
-    constants.coalescence_switch = 'on';
-    constants.r_death = 0.5 * 0.25 * 0.0254;
-    specified_case = 6;
-    save_filename = varargin{4};
-    A_inj = 4e-7;
-    E = 7.5e2;
-end
+constants.C_coalescence = 1e0;
+constants.C_rdot = 2.5*pi;
+constants.C_u_rise = 3;
+constants.C_nuc_rate = 5e2;
+constants.n_nuc_freq = 3;
+constants.C_r_nuc = 1;
+constants.C_dTs = 1;
+constants.coalescence_switch = 'on';
+save_filename = 'bubble_sim_data.mat';
+d_inj = 0.053 * 0.0254;
+A_inj = pi/4 * (d_inj^2);
+%     A_inj = 1.8e-8;
+specified_case = 9;
 
 
 if specified_case == 0
@@ -176,11 +122,11 @@ abs_tol = 1e9;     % [] max absolute error allowed in adaptive scheme
 min_error = 1e-4;   % [] min error (relative to error_tol) before step size is increased
 h_max = 1;       % [s] max allowable time step
 h_min = 1e-16;      % [s] min allowable time step
-t_end = 100;         % [s] end time (if LRO doesn't happen first)
+t_end = 1e3;         % [s] end time (if LRO doesn't happen first)
 LRO_tol = 5e-3;     % [s] tolerance for resolving the LRO point
 dT_sup_tol = 1e-14;
 
-ode_solver = 'CK'; % [] options:
+ode_solver = 'RKF'; % [] options:
 % 'RKF' for runge-kutta-fehlberg
 % 'euler' for 1st order euler
 % 'RK4' for 4th order runge-kutta
@@ -194,7 +140,16 @@ N_dim = 6 + N_mom*N_nodes;
 
 % fsolve_options = optimset('display','off');
 
-load PDT_table
+hesson_fit = load('hesson_fit');
+constants.hesson_fit = hesson_fit;
+
+if strcmp(fluid,'N2O')
+    load N2O_PDT_table
+elseif strcmp(fluid,'CO2')
+    load CO2_PDT_table
+else
+    error('fluid string incorrect. try N2O or CO2')
+end
 
 % need this code for using qinterp2:
 Tvec_table = PDT.T;
@@ -315,11 +270,11 @@ n = 1;              % [] counter
 t = 0;
 
 %
-[rho_l, rho_tg, P] = refpropm('+-P','T',Ti,'Q',0.5,'N2O');
-[u_tg] = refpropm('U', 'T', Ti ,'Q', 1, 'N2O');
+[rho_l, rho_tg, P] = refpropm('+-P','T',Ti,'Q',0.5,fluid);
+[u_tg] = refpropm('U', 'T', Ti ,'Q', 1, fluid);
 P = P*1e3;
 rho_tg_sat = rho_tg;
-% P = 1e3*refpropm('P','T',Ti,'Q',0,'N2O');
+% P = 1e3*refpropm('P','T',Ti,'Q',0,fluid);
 %
 % [rho_tg_l, rho_tg_v, ~, u_tg_v] = n2o_fits_for_getting_P(P);
 % u_tg = u_tg_v;
@@ -329,7 +284,7 @@ rho_tg_sat = rho_tg;
 % rho_l = qinterp2(PDT.T, PDT.P, PDT.D_liq, Ti, P/1e3);
 
 
-T_sat = Ti;
+T_s = Ti;
 
 if strcmp(ADQMOM, 'off')
     p = 1;
@@ -426,10 +381,9 @@ y(7:(6+length(DQMOM_IC)), 1) = DQMOM_IC(:);
 
 [K_b, N_A, h_planck] = universal_constants('boltzmann', 'avagadro', 'planck');
 
-[P_cr, T_cr] = refpropm('PT', 'C', 0, '', 0, 'N2O');
+[P_cr, T_cr] = refpropm('PT', 'C', 0, '', 0, fluid);
 P_cr = P_cr*1e3;
 
-constants.E = E;
 constants.D = D;
 constants.t_w = t_w;
 constants.rho_w = rho_w;
@@ -763,6 +717,11 @@ while running == 1;
                 
                 y_new = y(:,n) + a_k_term;
                 
+                if min(y_new) < 0
+                    disp('negative part of y')
+%                     keyboard
+                end
+                
                 %                 mom_part = ((N_dim - N_mom + 1):N_dim);
                 %
                 %                 if sum( y_new(mom_part) < 0) > 0
@@ -979,6 +938,10 @@ while running == 1;
     gas_holdup_injector(n+1) = debug_data.gas_holdup_injector;
     Vdot_bub(n+1) = debug_data.Vdot_bub;
     
+%     figure(100)
+%     plot(g_q,'ks')
+%     set(gca,'yscale','log')
+    
     
     %     if t(n) >= 11.70
     %         keyboard
@@ -1045,7 +1008,7 @@ while running == 1;
     
     
     % saturation temp based on pressure
-    [T_sat(n+1), h_lv] = refpropm('TY','P',P(n+1)/1e3,'Q',0.5,'N2O');
+    [T_sat(n+1), h_lv] = refpropm('TY','P',P(n+1)/1e3,'Q',0.5,fluid);
     
     % liquid superheat
     dT_superheat(n+1) = T_l(n+1) - T_sat(n+1);
@@ -1065,7 +1028,7 @@ while running == 1;
     rho_tg(n+1) = alpha*rho_tg_v + (1 - alpha)*rho_tg_l;
     rho_tg_sat(n+1) = rho_tg_v;
     x_tg(n+1) = x;
-    %     rho_tg(n+1) = refpropm('D', 'P', P(n+1)/1e3, 'Q', 1, 'N2O');
+    %     rho_tg(n+1) = refpropm('D', 'P', P(n+1)/1e3, 'Q', 1, fluid);
     
     guesses.rho_l = rho_l(n+1);
     
@@ -1394,8 +1357,8 @@ else
         
         figure(2)
         hold on
-        plot(t,y(5,:),'k-',t,T_sat,'r:')
-        legend('Liquid','T_{sat}(P)')
+        plot(t,y(5,:),'k-',t,T_s,'r:')
+        legend('Liquid','T_{sat}(P) = T_{tg}')
         ylabel('Temperature')
         xlabel('Time [s]')
         title('temperatures')
@@ -1508,19 +1471,16 @@ else
         ylabel('index []')
         title('index of max relative error')
         
-        
-        
+  
         
     end
     
     beep
     
-    
 end
 
 %% differential equations
 function varargout = diffeqns(y, constants, guesses, PDT)
-
 
 % retrieve constants
 D = constants.D;
@@ -1548,14 +1508,15 @@ C_rdot = constants.C_rdot;
 C_nuc_rate = constants.C_nuc_rate;
 C_r_nuc = constants.C_r_nuc;
 C_coalescence = constants.C_coalescence;
+C_dTs = constants.C_dTs;
 
 L_node = constants.L_node;
 V_node = 0.25*pi*D^2*L_node;
-
+fluid = constants.fluid;
 N_ab = constants.N_ab; % number of abscissas
 % (2*N = number of moments, going from 0 to 2N-1)
 N_mom = 2*N_ab;
-
+hesson_fit = constants.hesson_fit;
 p = constants.ADQMOM_p;
 
 % retrieve derivatives calculated with backwards differencing
@@ -1564,6 +1525,14 @@ p = constants.ADQMOM_p;
 % rhodot_tg = derivatives(3);
 % Vdot_l = derivatives(4);
 % Vdot_tg = derivatives(5);
+
+% check for negative values
+if min(y) < 0
+    ind_negative = find(y < 0);
+    y(ind_negative) = -y(ind_negative);
+else
+    ind_negative = [];
+end
 
 % retrieve variables
 % 1 = m_tg
@@ -1641,6 +1610,11 @@ end
 % get the abscissas from the weighted abscissas
 r_q = g_q./w_q;
 
+if min(r_q) < 0
+    disp('negative abscissa')
+    keyboard
+end
+
 % get the moments from gauss quadrature
 for i = 1:2*N_ab
     mom(:, i) = sum( r_q.^((i-1)/p) .* w_q, 2 );
@@ -1671,7 +1645,7 @@ end
 
 % get system pressure
 % (assumes pressure is same throughout tank, with no gravity head)
-P = get_P_from_mU_mT(m_tg, U_tg, m_l, T_l, V_tank, V_node, V_bubi, PDT, guesses);
+P = get_P_from_mU_mT(m_tg, U_tg, m_l, T_l, V_tank, V_node, V_bubi, fluid, PDT, guesses);
 
 if P == pi
     disp('P error')
@@ -1686,12 +1660,12 @@ end
 rho_l = qinterp2(PDT.T, PDT.P, PDT.D_liq, T_l, P/1e3);
 % rho_tg = qqinterp2(PDT.T, PDT.P, PDT.D_vap, T_tg, P, 'linear');
 
-% [rho_tg, T_tg] = refpropm('DT', 'P', P/1e3, 'U', U_tg/m_tg, 'N2O');
+% [rho_tg, T_tg] = refpropm('DT', 'P', P/1e3, 'U', U_tg/m_tg, fluid);
 
 % get saturation properties for ullage
 % at some point should include a switch here to take into account times
 % when the ullage is just superheated vapor (not saturated, not metastable)
-[rho_tg_l, rho_tg_v, u_tg_l, u_tg_v] = n2o_fits_for_getting_P(P);
+[rho_tg_l, rho_tg_v, u_tg_l, u_tg_v] = fits_for_getting_P(P, fluid);
 
 u_tg = U_tg/m_tg;
 x_tg = (u_tg - u_tg_l)/(u_tg_v - u_tg_l);
@@ -1727,9 +1701,9 @@ V_tg = m_tg/rho_tg;
 
 [h_l, dh_drho_l, drho_dP_l, u_l, Cv_l, dP_dT_l, ...
     k_l, Cp_l, s_l, MW, mu_l] = ...
-    refpropm('H!RUO#LCSMV','T',T_l,'D&',rho_l,'N2O');
+    refpropm('H!RUO#LCSMV','T',T_l,'D&',rho_l,fluid);
 
-[P_sat, s_liq_sat, h_liq_sat] = refpropm('PSH', 'T', T_l, 'Q', 0, 'N2O');
+[P_sat, s_liq_sat, h_liq_sat] = refpropm('PSH', 'T', T_l, 'Q', 0, fluid);
 
 dP_drho_l = 1e3./drho_dP_l;
 dP_dT_l = dP_dT_l*1e3;
@@ -1742,7 +1716,7 @@ P_sat = 1e3*P_sat;
 
 % properties needed for Vdot calculation (liquid)
 [u_tg_l_sat, rho_tg_l, dP_dT_tg_sat, drho_dP_T, drho_dT_P, dh_dT_P, dh_dP_T...
-    ,sigma, h_l_sat, T_tg] = refpropm('UDERW(*IHT', 'P', P/1e3, 'Q', 0, 'N2O');
+    ,sigma, h_l_sat, T_tg] = refpropm('UDERW(*IHT', 'P', P/1e3, 'Q', 0, fluid);
 dP_dT_tg_sat = dP_dT_tg_sat * 1e3;
 drho_dP_T = drho_dP_T * 1e-3;
 dh_dP_T = dh_dP_T * 1e-3;
@@ -1762,7 +1736,7 @@ drho_dT_l_sat = drho_dT_P + drho_dP_T * dP_dT_tg_sat;
 % properties needed for Vdot calculation (vapor)
 [u_tg_v_sat, rho_tg_v, drho_dP_T, drho_dT_P, dh_dT_P, dh_dP_T,...
     T_s, h_tg_sat, s_tg_sat] = ...
-    refpropm('UDRW(*THS', 'P', P/1e3, 'Q', 1, 'N2O');
+    refpropm('UDRW(*THS', 'P', P/1e3, 'Q', 1, fluid);
 drho_dP_T = drho_dP_T * 1e-3;
 dh_dP_T = dh_dP_T * 1e-3;
 
@@ -1779,10 +1753,10 @@ drho_dP_x_tg = (1/dP_dT_tg_sat) * rho_tg^2 * ( x_tg/rho_tg_v^2 * drho_dT_v_sat +
 
 rho_tg_sat = rho_tg_v;
 % % temp of saturated surface based on pressure (and h of sat. vapor)
-% [T_s, h_tg_sat, rho_tg_sat] = refpropm('THD','P',P/1e3,'Q',1,'N2O');
+% [T_s, h_tg_sat, rho_tg_sat] = refpropm('THD','P',P/1e3,'Q',1,fluid);
 %
 % % saturated liquid enthalpy at P
-% [sigma, h_l_sat] = refpropm('IH','P',P/1e3,'Q',0,'N2O');
+% [sigma, h_l_sat] = refpropm('IH','P',P/1e3,'Q',0,fluid);
 
 % heat of vaporization (at saturation based on P)
 h_lv = h_tg_sat - h_l_sat;
@@ -1792,9 +1766,9 @@ h_lv = h_tg_sat - h_l_sat;
 % superheat = T - T_sat
 deltaT_sup = T_l - T_s;
 
-if abs(constants.outerloop_superheat - deltaT_sup)/deltaT_sup > 5e-2
-    fprintf('superheat of outer loop and diff eqns differs. \n outer: %4.4g, inner: %4.4g\n', constants.outerloop_superheat, deltaT_sup)
-end
+% if abs(constants.outerloop_superheat - deltaT_sup)/deltaT_sup > 5e-2
+%     fprintf('superheat of outer loop and diff eqns differs. \n outer: %4.4g, inner: %4.4g\n', constants.outerloop_superheat, deltaT_sup)
+% end
 
 % mass flow rate out via injector
 
@@ -1802,11 +1776,15 @@ end
 % x = rho_tg_sat/rho_l / (1/V_bubi(1) + rho_tg_sat/rho_l - 1);
 x_inj = V_bubi(1)/(V_bubi(1) + rho_l/rho_tg_sat*(1 - V_bubi(1)));
 
+% if x_inj < 0.05
+%     x_inj = x_inj + 0.05;
+% end
+
 rho_liq_mix = rho_l*(1-V_bubi(1)) + rho_tg_sat*V_bubi(1);
 s_liq_mix = s_l * (1-x_inj) + s_tg_sat * x_inj;
 h_liq_mix = h_l * (1-x_inj) + h_tg_sat * x_inj;
 
-mdot_out_mix = A_inj*Cd*injector_flow(Po, P, T_l, rho_liq_mix, P_sat, s_liq_mix, h_liq_mix);
+mdot_out_mix = A_inj*Cd*injector_flow(x_inj, P, hesson_fit);
 mdot_out_liq = (1 - x_inj)*mdot_out_mix;
 mdot_out_vap = x_inj*mdot_out_mix;
 % passing straight liquid properties
@@ -1864,16 +1842,14 @@ for i = 1:N_full + 1
             
         end
         
-        
-        
         % jakob number
-        Ja_T = Cp_l * rho_l * deltaT_sup/(rho_tg * h_lv);
+        Ja_T = Cp_l * rho_l * C_dTs * deltaT_sup/(rho_tg * h_lv);
         
         % bubble radius rate of change
         rdot = C_rdot * Ja_T^2 * alpha_l ./ r_q(i,:);
         
         % radius of new bubbles
-        r_nuc = C_r_nuc * 2*sigma*T_s/(rho_tg * h_lv * deltaT_sup);
+        r_nuc = C_r_nuc * 2*sigma*T_s/(rho_tg * h_lv * C_dTs * deltaT_sup);
         
         % length of liquid node volume [m]
         %         L_l = V_l_star(i) / (pi * 0.25 * D^2);
@@ -1884,6 +1860,10 @@ for i = 1:N_full + 1
         
         % surface area of node[m^2]
         A_l = pi * D * L_l;% + pi * 0.25 * D^2;
+        
+        if i == 1
+            A_l = A_l + 0.25*pi*D^2;
+        end
         
         switch constants.nuc_model
             
@@ -1906,7 +1886,7 @@ for i = 1:N_full + 1
                 nuc_density = N_ns_star * ( 0.5 / r_dep )^2;
                 
                 % nucleation frequency [Hz]
-                nuc_freq = 1e4 * deltaT_sup^n_nuc_freq;
+                nuc_freq = 1e4 * C_dTs * deltaT_sup^n_nuc_freq;
                 
                 % nucleation rate [Hz]
                 nuc_rate = C_nuc_rate * nuc_density * nuc_freq * A_l;
@@ -1980,7 +1960,6 @@ for i = 1:N_full + 1
     
     % preallocate
     birth_int_s = zeros(1,N_ab*2);
-    death_int_s = birth_int_s;
     
     for k = 1:N_ab*2
         birth_int_s(k) = (r_nuc/r_m).^((k-1)/p) * spec_nuc_rate;
@@ -2001,7 +1980,6 @@ for i = 1:N_full + 1
         P2 = P;
         
         liquid_height = V_l_star/(pi*D^2/4);
-        
         
         P1 = P2 + rho_l*g*liquid_height;
         
@@ -2069,8 +2047,15 @@ for i = 1:N_full + 1
         
     end
     
+    if abs(coal_birth_s(V_moment_index) - coal_death_s(V_moment_index))/coal_birth_s(V_moment_index) > 1e-6
+        
+%         if mom(i,V_moment_index) > 1e-6
+        disp('coalescence isn''t conserving mass')
+        keyboard
+%         end
+    end
     
-    dmom_dt_s = birth_int_s(:) - death_int_s(:) + growth_int_s(:) + coal_birth_s(:) - coal_death_s(:);
+    dmom_dt_s = birth_int_s(:) + growth_int_s(:) + coal_birth_s(:) - coal_death_s(:);
     
     r_sp = r_s;
     
@@ -2079,13 +2064,9 @@ for i = 1:N_full + 1
             A1(1,:) = ones(1,N_ab);
             A2(1,:) = zeros(1,N_ab);
         elseif j == 1
-            %                 A1(2,:) = zeros(1,N_ab);
-            %                 A2(2,:) = ones(1,N_ab);
             A1(2,:) = (p-1)/p * r_sp.^(1/p);
             A2(2,:) = (1/p) * r_sp.^(1/p - 1);
         else
-            %                 A1(j+1,:) = (1 - j)*r_sp.^j;
-            %                 A2(j+1,:) = j*r_sp.^(j);
             A1(j+1,:) = (1 - j/p) * r_sp.^(j/p);
             A2(j+1,:) = (j/p) * r_sp.^(j/p);
         end
@@ -2203,8 +2184,7 @@ Qdot_tg = Qdot_gw;
 
 % not sure if this is correct... should it include a rhodot term?
 % probably!!!
-Vdot_bub = sum( mdot_bub )/ rho_tg_sat;
-
+Vdot_bub = (sum( mdot_bub ) - mdot_out_vap)/ rho_tg_sat;
 
 % this isn't actually Udot, but Udot without the P*Vdot term (hence the i)
 
@@ -2216,13 +2196,12 @@ Udot_tgi = Qdot_tg - sum( mdot_bub_tg )*(h_tg_sat) ;
 
 du_drho_l = dh_drho_l + P/rho_l^2  - 1/rho_l * dP_drho_l;
 
-
-
 Vdot_l = solve_for_Vdot(Udot_tgi, mdot_tg, m_tg, ...
     Udot_li, u_l, mdot_l, m_l, du_drho_l, Cv_l, dP_drho_l, V_l, ...
     dP_dT_l, V_tg, P, drho_dx_P_tg, drho_dP_x_tg, u_tg_v_sat, ...
     u_tg_l_sat, x_tg, ...
-    du_dT_sat_tg_v, du_dT_sat_tg_l, dP_dT_tg_sat, rho_tg_v, u_tg, guesses, Vdot_bub);
+    du_dT_sat_tg_v, du_dT_sat_tg_l, dP_dT_tg_sat, ...
+    rho_tg_v, u_tg, guesses, Vdot_bub);
 
 if Vdot_l == pi
     disp('vdot error')
@@ -2236,13 +2215,13 @@ Udot_tg = Udot_tgi - P*Vdot_tg;
 
 Udot_l = Udot_li - P*Vdot_l;
 
-% rhodot_tg = mdot_tg/V_tg - m_tg/V_tg^2 * Vdot_tg;
-
 rhodot_l = mdot_l/V_l - m_l/V_l^2 * Vdot_l;
 
-% Tdot_tg = ( ( Udot_tg - u_tg*mdot_tg )/m_tg - du_drho_tg*rhodot_tg )/Cv_tg;
-
 Tdot_l = ( ( Udot_l - u_l*mdot_l )/m_l - du_drho_l*rhodot_l )/Cv_l;
+
+% if abs(Tdot_l) < 1e-1 && Tdot_l > 0
+%     keyboard
+% end
 
 % mass of wall exposed to liquid
 m_lw = tank_wall_mass(V_l,D,rho_w,t_w);
@@ -2270,6 +2249,7 @@ Tdot_gw = (Qdot_agw - Qdot_gw + Qdot_wc + cv_w*mdot_gw*(T_lw - T_gw))/(m_gw*cv_w
 % rate of change of temperature of liquid wall
 Tdot_lw = (Qdot_alw - Qdot_lw - Qdot_wc)/(m_lw*cv_w);
 
+
 % all derivatives
 % 1 = m_tg
 % 2 = U_tg
@@ -2288,6 +2268,17 @@ dy = [mdot_tg;
     Tdot_lw;
     dw_dt';
     dg_dt'];
+
+% correct for negative stuff
+if ~isempty(ind_negative) && sum( dy(ind_negative) < 0 ) > 0
+    % we have negative dydt where y < 0!
+    for i = 1:length(ind_negative)
+        if dy(ind_negative(i)) < 0
+            dy(ind_negative(i)) = 0;
+        end
+    end
+end
+    
 
 if nargout == 1
     

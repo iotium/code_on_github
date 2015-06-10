@@ -1,7 +1,7 @@
 % calculate system P based on m_tg, U_tg, m_l, T_l
 % used for non-saturated liquid, saturated ullage
 % should work for 0D or 1D
-function P = get_P_from_mU_mT(m_tg, U_tg, m_l, T_l, V_tank, V_node, V_bubi, PDT, guesses)
+function P = get_P_from_mU_mT(m_tg, U_tg, m_l, T_l, V_tank, V_node, V_bubi, fluid, PDT, guesses)
 
 
 test_val = eqns_to_solve(guesses.P);
@@ -24,7 +24,7 @@ end
         
         %          rho_tg = refpropm('D', 'P', P/1e3, 'U', U_tg/m_tg, 'N2O');
         
-        [rho_tg_l, rho_tg_v, u_tg_l, u_tg_v] = n2o_fits_for_getting_P(P);
+        [rho_tg_l, rho_tg_v, u_tg_l, u_tg_v] = fits_for_getting_P(P, fluid);
         u_tg = U_tg/m_tg;
         x = (u_tg - u_tg_l)/(u_tg_v - u_tg_l);
         alpha = 1/( 1 + rho_tg_v/rho_tg_l * (1 - x)/x );
