@@ -69,18 +69,22 @@ clock_plot = clock;
 
 constants.C_coalescence = 1e0;
 constants.C_rdot = 2.5*pi;
-constants.C_u_rise = 3;
-constants.C_nuc_rate = 5e2;
+constants.C_u_rise = 5;
+constants.C_nuc_rate = 1e3;
 constants.n_nuc_freq = 3;
 constants.C_r_nuc = 1;
 constants.C_dTs = 1;
-constants.coalescence_switch = 'on';
+constants.C_x_inj = 1;
+constants.coalescence_switch = 'off';
 save_filename = 'bubble_sim_data.mat';
-d_inj = 0.053 * 0.0254;
+d_inj = 0.059 * 0.0254;
 A_inj = pi/4 * (d_inj^2);
 %     A_inj = 1.8e-8;
 specified_case = 9;
 
+constants.f_feedline = 0.05;
+constants.L_feedline = 5*0.0254;
+constants.D_feedline = 0.19*0.0254;
 
 if specified_case == 0
     % N2O test 2 from my data
@@ -142,6 +146,9 @@ N_dim = 6 + N_mom*N_nodes;
 
 hesson_fit = load('hesson_fit');
 constants.hesson_fit = hesson_fit;
+
+bubble_rise_velocity_fit = load('CO2_bubble_rise_velocity_fit');
+constants.bubble_rise_velocity_fit = bubble_rise_velocity_fit;
 
 if strcmp(fluid,'N2O')
     load N2O_PDT_table
@@ -429,7 +436,7 @@ f = zeros(N_dim,1);
 constants.min_flag = 0;
 constants.peak_flag = 0;
 
-f_cutoff_norm = 1e-3; % supposed to be filter cutoff f / (1/2 sample f)
+f_cutoff_norm = 1e-2; % supposed to be filter cutoff f / (1/2 sample f)
 % so it's basically = 2*dt*f_cutoff
 filter_order = 3;
 [b_filter,a_filter] = butter(filter_order, f_cutoff_norm, 'low');
@@ -719,7 +726,7 @@ while running == 1;
                 
                 if min(y_new) < 0
                     disp('negative part of y')
-                    keyboard
+%                     keyboard
                 end
                 
                 %                 mom_part = ((N_dim - N_mom + 1):N_dim);
@@ -947,7 +954,7 @@ while running == 1;
     %         keyboard
     %     end
     
-    %{00
+    %{
     
     % 1 = m_tg
     % 2 = U_tg
@@ -1766,40 +1773,47 @@ h_lv = h_tg_sat - h_l_sat;
 % superheat = T - T_sat
 deltaT_sup = T_l - T_s;
 
-if abs(constants.outerloop_superheat - deltaT_sup)/deltaT_sup > 5e-2
-    fprintf('superheat of outer loop and diff eqns differs. \n outer: %4.4g, inner: %4.4g\n', constants.outerloop_superheat, deltaT_sup)
-end
+% if abs(constants.outerloop_superheat - deltaT_sup)/deltaT_sup > 5e-2
+%     fprintf('superheat of outer loop and diff eqns differs. \n outer: %4.4g, inner: %4.4g\n', constants.outerloop_superheat, deltaT_sup)
+% end
 
 % mass flow rate out via injector
 
 % passing 2-phase properties
 % x = rho_tg_sat/rho_l / (1/V_bubi(1) + rho_tg_sat/rho_l - 1);
-x_inj = V_bubi(1)/(V_bubi(1) + rho_l/rho_tg_sat*(1 - V_bubi(1)));
+x_out = constants.C_x_inj * V_bubi(1)/(V_bubi(1) + rho_l/rho_tg_sat*(1 - V_bubi(1)));
 
 % if x_inj < 0.05
 %     x_inj = x_inj + 0.05;
 % end
 
 rho_liq_mix = rho_l*(1-V_bubi(1)) + rho_tg_sat*V_bubi(1);
-s_liq_mix = s_l * (1-x_inj) + s_tg_sat * x_inj;
-h_liq_mix = h_l * (1-x_inj) + h_tg_sat * x_inj;
+s_liq_mix = s_l * (1-x_out) + s_tg_sat * x_out;
+h_liq_mix = h_l * (1-x_out) + h_tg_sat * x_out;
 
-mdot_out_mix = A_inj*Cd*injector_flow(x_inj, P, hesson_fit);
-mdot_out_liq = (1 - x_inj)*mdot_out_mix;
-mdot_out_vap = x_inj*mdot_out_mix;
+
+
+
+
+% mdot_out_mix = A_inj*Cd*injector_flow(x_inj, P, hesson_fit);
+
+mdot_out_mix = A_inj*Cd*injector_flow(x_out, P, hesson_fit, rho_liq_mix, h_liq_mix, fluid, constants);
+mdot_out_liq = (1 - x_out)*mdot_out_mix;
+mdot_out_vap = x_out*mdot_out_mix;
 % passing straight liquid properties
 % from bottom node
 % mdot_out = A_inj*Cd*injector_flow(Po, P, T_l, rho_l, P_sat, s_l, h_l);
 
 % bulk flow velocity out the bottom
-u_bulk = 0;%mdot_out_mix / rho_liq_mix / (0.25 * pi * D^2);
+u_bulk = mdot_out_mix / rho_liq_mix / (0.25 * pi * D^2);
 
 % rise velocity due to buoyancy
 % u_rise = sqrt( 2.14*sigma./( rho_l*(2*abs(r_q) ) + 0.505*g*( 2*abs(r_q) ) ) );
 % u_rise = 4 * 0.71*sqrt(g*2*abs(r_q));
 % u_rise = 2*g*rho_l*r_q.^2./(9*sigma);
 
-u_rise = constants.C_u_rise * bubble_rise_velocity(r_q, T_tg);
+% u_rise = constants.C_u_rise * bubble_rise_velocity(r_q, T_tg);
+u_rise = constants.C_u_rise * constants.bubble_rise_velocity(log(r_q), T
 
 
 duw_dx = zeros(size(w_q));

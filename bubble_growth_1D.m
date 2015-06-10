@@ -69,18 +69,22 @@ clock_plot = clock;
 
 constants.C_coalescence = 1e0;
 constants.C_rdot = 2.5*pi;
-constants.C_u_rise = 3;
-constants.C_nuc_rate = 5e2;
+constants.C_u_rise = 5;
+constants.C_nuc_rate = 1e3;
 constants.n_nuc_freq = 3;
 constants.C_r_nuc = 1;
 constants.C_dTs = 1;
-constants.coalescence_switch = 'on';
+constants.C_x_inj = 1;
+constants.coalescence_switch = 'off';
 save_filename = 'bubble_sim_data.mat';
-d_inj = 0.053 * 0.0254;
+d_inj = 0.059 * 0.0254;
 A_inj = pi/4 * (d_inj^2);
 %     A_inj = 1.8e-8;
 specified_case = 9;
 
+constants.f_feedline = 0.05;
+constants.L_feedline = 5*0.0254;
+constants.D_feedline = 0.19*0.0254;
 
 if specified_case == 0
     % N2O test 2 from my data
@@ -143,13 +147,19 @@ N_dim = 6 + N_mom*N_nodes;
 hesson_fit = load('hesson_fit');
 constants.hesson_fit = hesson_fit;
 
+
+
 if strcmp(fluid,'N2O')
     load N2O_PDT_table
+    bubble_rise_velocity_fit = load('N2O_bubble_rise_velocity_fit');
 elseif strcmp(fluid,'CO2')
     load CO2_PDT_table
+    bubble_rise_velocity_fit = load('CO2_bubble_rise_velocity_fit');
 else
     error('fluid string incorrect. try N2O or CO2')
 end
+constants.bubble_rise_velocity_fit = bubble_rise_velocity_fit.fittedmodel;
+
 
 % need this code for using qinterp2:
 Tvec_table = PDT.T;
@@ -429,7 +439,7 @@ f = zeros(N_dim,1);
 constants.min_flag = 0;
 constants.peak_flag = 0;
 
-f_cutoff_norm = 1e-3; % supposed to be filter cutoff f / (1/2 sample f)
+f_cutoff_norm = 1e-2; % supposed to be filter cutoff f / (1/2 sample f)
 % so it's basically = 2*dt*f_cutoff
 filter_order = 3;
 [b_filter,a_filter] = butter(filter_order, f_cutoff_norm, 'low');
@@ -1517,6 +1527,8 @@ N_ab = constants.N_ab; % number of abscissas
 % (2*N = number of moments, going from 0 to 2N-1)
 N_mom = 2*N_ab;
 hesson_fit = constants.hesson_fit;
+bubble_rise_velocity_fit = constants.bubble_rise_velocity_fit;
+
 p = constants.ADQMOM_p;
 
 % retrieve derivatives calculated with backwards differencing
@@ -1774,33 +1786,41 @@ deltaT_sup = T_l - T_s;
 
 % passing 2-phase properties
 % x = rho_tg_sat/rho_l / (1/V_bubi(1) + rho_tg_sat/rho_l - 1);
-x_inj = V_bubi(1)/(V_bubi(1) + rho_l/rho_tg_sat*(1 - V_bubi(1)));
+x_out = constants.C_x_inj * V_bubi(1)/(V_bubi(1) + rho_l/rho_tg_sat*(1 - V_bubi(1)));
 
 % if x_inj < 0.05
 %     x_inj = x_inj + 0.05;
 % end
 
 rho_liq_mix = rho_l*(1-V_bubi(1)) + rho_tg_sat*V_bubi(1);
-s_liq_mix = s_l * (1-x_inj) + s_tg_sat * x_inj;
-h_liq_mix = h_l * (1-x_inj) + h_tg_sat * x_inj;
+s_liq_mix = s_l * (1-x_out) + s_tg_sat * x_out;
+h_liq_mix = h_l * (1-x_out) + h_tg_sat * x_out;
 
-mdot_out_mix = A_inj*Cd*injector_flow(x_inj, P, hesson_fit);
-mdot_out_liq = (1 - x_inj)*mdot_out_mix;
-mdot_out_vap = x_inj*mdot_out_mix;
+% mdot_out_mix = A_inj*Cd*injector_flow(x_inj, P, hesson_fit);
+
+mdot_out_mix = A_inj*Cd*injector_flow(x_out, P, hesson_fit, rho_liq_mix, h_liq_mix, fluid, constants);
+mdot_out_liq = (1 - x_out)*mdot_out_mix;
+mdot_out_vap = x_out*mdot_out_mix;
 % passing straight liquid properties
 % from bottom node
 % mdot_out = A_inj*Cd*injector_flow(Po, P, T_l, rho_l, P_sat, s_l, h_l);
 
 % bulk flow velocity out the bottom
-u_bulk = 0;%mdot_out_mix / rho_liq_mix / (0.25 * pi * D^2);
+u_bulk = mdot_out_mix / rho_liq_mix / (0.25 * pi * D^2);
 
 % rise velocity due to buoyancy
 % u_rise = sqrt( 2.14*sigma./( rho_l*(2*abs(r_q) ) + 0.505*g*( 2*abs(r_q) ) ) );
 % u_rise = 4 * 0.71*sqrt(g*2*abs(r_q));
 % u_rise = 2*g*rho_l*r_q.^2./(9*sigma);
 
-u_rise = constants.C_u_rise * bubble_rise_velocity(r_q, T_tg);
+% u_rise = constants.C_u_rise * bubble_rise_velocity(r_q, T_tg);
+u_rise = constants.C_u_rise * exp( bubble_rise_velocity_fit(log(r_q), T_tg*ones(size(r_q)) ));
 
+u_rise(r_q < 1e-6) = 0;
+
+if sum(isnan(u_rise(:))) > 0
+    keyboard
+end
 
 duw_dx = zeros(size(w_q));
 dug_dx = duw_dx;

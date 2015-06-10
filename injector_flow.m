@@ -1,10 +1,36 @@
 % function G_out = injector_flow(Po, P, T_liq, rho_liq, Psat_liq, s_liq, h_liq, fluid)
 
-function G_out = injector_flow(x_in, P_in, hesson_fit)
+function G_out = injector_flow(x_out, P, hesson_fit, rho_out, h_out, fluid, constants)
 
 % load hesson_fit
 
-G_out = hesson_fit.fitresult(P_in, x_in);
+f_feedline = constants.f_feedline;
+L_feedline = constants.L_feedline;
+D_feedline = constants.D_feedline;
+A_inj = constants.A_inj;
+Cd = constants.Cd;
+
+G_guess = hesson_fit.fitresult(P, x_out);
+
+G = fzero(@(G) error_fn(G), G_guess);
+
+
+    function E = error_fn(G)
+        u_feedline = G*Cd*A_inj / (rho_out * pi/4* D_feedline^2);
+
+        dP_feedline = 0.5 * rho_out * u_feedline^2 * f_feedline * L_feedline/D_feedline;
+
+        P_inj = P - dP_feedline;
+
+        x_inj = refpropm('Q','H',h_out,'P',(P - dP_feedline)/1e3,fluid);
+
+        G_out = hesson_fit.fitresult(P_inj, x_inj);
+        
+        E = (G - G_out)./G_out;
+
+    end
+
+end
 
 % dyer flow model
 
