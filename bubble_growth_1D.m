@@ -67,7 +67,7 @@ clock_plot = clock;
 
 % close all
 
-constants.C_coalescence = 1e3;
+constants.C_coalescence = 1e0;
 constants.C_rdot = (3/(2*pi));%2.5*pi;
 constants.C_u_rise = 3;%5
 constants.C_nuc_rate = 1e1;%1e2;
@@ -1866,6 +1866,10 @@ for i = 1:N_full + 1
         Ja_T = Cp_l * rho_l * C_dTs * deltaT_sup/(rho_tg * h_lv);
         
         % bubble radius rate of change
+        
+        % growth rate for a bubble at rest in an infinite fluid
+        % simplified model: plesset & zwick
+        % more complicated: scriven
         rdot_rest_plesset = C_rdot * Ja_T^2 * alpha_l ./ r_q(i,:); % bubble at rest
         
         beta_47 = sqrt(0.5*Ja_T./(1 + (Cp_l - Cp_tg)/Cp_l * rho_tg/rho_l * Ja_T));
@@ -1876,6 +1880,7 @@ for i = 1:N_full + 1
         
         rdot_rest = rdot_rest_scriven;
                 
+        % bubble rising in the fluid. from legendre 1998
         rdot_rise = Ja_T * sqrt( 2 * alpha_l * (u_rise(i,:) + 1e-3)./(pi * r_q(i,:) ) ); % rising in the liquid
                 
         rdot = max(rdot_rest, rdot_rise);
@@ -2000,7 +2005,17 @@ for i = 1:N_full + 1
     birth_int_s = zeros(1,N_ab*2);
     
     for k = 1:N_ab*2
+        % if nucleation happens only at r_nuc
         birth_int_s(k) = (r_nuc/r_m).^((k-1)/p) * spec_nuc_rate;
+        
+        % now if it's spread out a bit (gaussian)
+%         s_nuc = 2*r_nuc;
+% %         birth_int_s(k) = spec_nuc_rate * r_m*integral(@(rs) rs.^k .* ...
+% %             (1/(s_nuc*sqrt(2*pi))).*exp( - ((r_m*rs) - r_nuc).^2./(2*s_nuc^2)), 0, 25*r_nuc/r_m);
+%     
+%         rs = linspace(0,r_nuc/r_m + 5*s_nuc/r_m,1000);
+%         birth_int_s(k) = spec_nuc_rate * r_m * trapz(rs, rs.^((k-1)/p) .* ...
+%             (1/(s_nuc*sqrt(2*pi))).*exp( - ((r_m*rs) - r_nuc).^2./(2*s_nuc^2)));
     end
     
     % birth and death due to coalescence
