@@ -69,8 +69,8 @@ fsolve_options = optimset('display','off');
 
 if specified_case == 0
             % can play with this one
-        Ti = 243;           % [K] initial temperature
-        fill_level = 0.80;        % [] initial fill_level ratio (by volume)
+        Ti = 283;           % [K] initial temperature
+        fill_level = 0.90;        % [] initial fill_level ratio (by volume)
         %         E = 2.1e4;          % [] heat transfer multiplier
         V_tank = 1.80e-4;   % [m^3] tank volume
         L_tank = 0.356;     % [m] tank length
@@ -505,7 +505,7 @@ V_l = m_l/rho_l;
 V_tg = m_tg/rho_tg;
 
 % HT from wall to liquid
-Qdot_lw = Qdot('lw',T_l,T_lw,rho_l,m_l,D);
+Qdot_lw = 100*Qdot('lw',T_l,T_lw,rho_l,m_l,D);
 
 % HT into gas from wall
 Qdot_gw = Qdot('gw',T_tg,T_gw,rho_tg,m_tg,D);

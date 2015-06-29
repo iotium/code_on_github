@@ -39,7 +39,7 @@ constants.fluid = fluid;
 
 ADQMOM = 'off';
 
-N_nodes = 40;
+N_nodes = 20;
 
 N_mom = 4;
 IC_moments = gamma_dist_moments( 5e-10, 1e-3, N_mom, p);
@@ -53,13 +53,13 @@ IC_moments = gamma_dist_moments( 5e-10, 1e-3, N_mom, p);
 % 30%
 % IC_moments = exp([21.3164 13.2875 5.3121 -2.6353 -10.5581 -18.4594]');
 
-alpha_ic = 1e-8;
+alpha_ic = 1e-12;
 
 N_ab = N_mom/2;
 constants.N_ab = N_ab; % number of abscissas
 % (2*N = number of moments, going from 0 to 2N-1)
 
-constants.phi = 1e-1;
+constants.phi = 0.05;
 
 clock_save = clock;
 clock_start = clock;
@@ -67,24 +67,24 @@ clock_plot = clock;
 
 % close all
 
-constants.C_coalescence = 1e0;
-constants.C_rdot = 2.5*pi;
-constants.C_u_rise = 5;
-constants.C_nuc_rate = 1e3;
+constants.C_coalescence = 1e3;
+constants.C_rdot = (3/(2*pi));%2.5*pi;
+constants.C_u_rise = 3;%5
+constants.C_nuc_rate = 1e1;%1e2;
 constants.n_nuc_freq = 3;
 constants.C_r_nuc = 1;
 constants.C_dTs = 1;
 constants.C_x_inj = 1;
-constants.coalescence_switch = 'off';
+constants.coalescence_switch = 'on';
 save_filename = 'bubble_sim_data.mat';
-d_inj = 0.059 * 0.0254;
+d_inj = 0.053 * 0.0254;
 A_inj = pi/4 * (d_inj^2);
 %     A_inj = 1.8e-8;
 specified_case = 9;
 
-constants.f_feedline = 0.05;
-constants.L_feedline = 5*0.0254;
-constants.D_feedline = 0.19*0.0254;
+constants.f_feedline = 0.0;
+constants.L_feedline = 5 * 0.0254;
+constants.D_feedline = (.375 - 2*0.049) * 0.0254;
 
 if specified_case == 0
     % N2O test 2 from my data
@@ -1747,8 +1747,8 @@ drho_dT_l_sat = drho_dT_P + drho_dP_T * dP_dT_tg_sat;
 
 % properties needed for Vdot calculation (vapor)
 [u_tg_v_sat, rho_tg_v, drho_dP_T, drho_dT_P, dh_dT_P, dh_dP_T,...
-    T_s, h_tg_sat, s_tg_sat] = ...
-    refpropm('UDRW(*THS', 'P', P/1e3, 'Q', 1, fluid);
+    T_s, h_tg_sat, s_tg_sat, Cp_tg] = ...
+    refpropm('UDRW(*THSC', 'P', P/1e3, 'Q', 1, fluid);
 drho_dP_T = drho_dP_T * 1e-3;
 dh_dP_T = dh_dP_T * 1e-3;
 
@@ -1866,8 +1866,20 @@ for i = 1:N_full + 1
         Ja_T = Cp_l * rho_l * C_dTs * deltaT_sup/(rho_tg * h_lv);
         
         % bubble radius rate of change
-        rdot = C_rdot * Ja_T^2 * alpha_l ./ r_q(i,:);
+        rdot_rest_plesset = C_rdot * Ja_T^2 * alpha_l ./ r_q(i,:); % bubble at rest
         
+        beta_47 = sqrt(0.5*Ja_T./(1 + (Cp_l - Cp_tg)/Cp_l * rho_tg/rho_l * Ja_T));
+        
+        beta_rdot = beta_47 + sqrt(12/pi)*beta_47.^2;
+        
+        rdot_rest_scriven = 2*beta_rdot.^2*alpha_l./r_q(i,:);
+        
+        rdot_rest = rdot_rest_scriven;
+                
+        rdot_rise = Ja_T * sqrt( 2 * alpha_l * (u_rise(i,:) + 1e-3)./(pi * r_q(i,:) ) ); % rising in the liquid
+                
+        rdot = max(rdot_rest, rdot_rise);
+
         % radius of new bubbles
         r_nuc = C_r_nuc * 2*sigma*T_s/(rho_tg * h_lv * C_dTs * deltaT_sup);
         
@@ -1903,7 +1915,13 @@ for i = 1:N_full + 1
                 N_ns_star = 1e-7 * r_c_star;
                 
                 % nucleation site density [1/m^2]
-                nuc_density = N_ns_star * ( 0.5 / r_dep )^2;
+                nuc_density = N_ns_star * ( 0.5 / r_dep )^2; % original expression
+                
+                % other ones I've tried
+%                 nuc_density = N_ns_star * ( 0.5 / r_nuc )^2;
+%                 nuc_density = 1e-4 * ( 0.5 / r_nuc )^2;
+
+
                 
                 % nucleation frequency [Hz]
                 nuc_freq = 1e4 * C_dTs * deltaT_sup^n_nuc_freq;
