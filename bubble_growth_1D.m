@@ -23,7 +23,7 @@ switch computer
         plot_stuff = 1;
         save_stuff = 1;
         save_periodically = 0;
-        save_parameters_only = 1;
+        save_parameters_only = 0;
         plot_periodically = 0;
         t_plot = 5;
         time_out = 1;
@@ -66,11 +66,13 @@ clock_start = clock;
 clock_plot = clock;
 
 % close all
+N_rw = 10;
+constants.N_rw = N_rw;
 
 constants.C_coalescence = 1e0;
 constants.C_rdot = (3/(2*pi));%2.5*pi;
-constants.C_u_rise = 3;%5
-constants.C_nuc_rate = 1e1;%1e2;
+constants.C_u_rise = 6;%5
+constants.C_nuc_rate = 5e0;%1e2;
 constants.n_nuc_freq = 3;
 constants.C_r_nuc = 1;
 constants.C_dTs = 1;
@@ -140,7 +142,7 @@ ode_solver = 'RKF'; % [] options:
 
 % 6 variables for liquid and vapor
 % then N_mom for each node (N_mom/2 abscissas, N_mom/2 weights)
-N_dim = 6 + N_mom*N_nodes;
+N_dim = 4 + 2*N_rw + N_mom*N_nodes;
 
 % fsolve_options = optimset('display','off');
 
@@ -375,9 +377,15 @@ x_tg = 1;
 T_l = Ti;
 % T_tg = Ti;
 
-y(:,1) = [m_tg; U_tg; Ti;   m_l; Ti; Ti];
+T_lw = Ti*ones(N_rw,1);
+T_gw = T_lw;
+
+y_i_basic = [m_tg; U_tg; T_gw;   m_l; Ti; T_lw];
 % y((N_dim - N_mom + 1):(N_dim), 1) = DQMOM_IC(:);
-y(7:(6+length(DQMOM_IC)), 1) = DQMOM_IC(:);
+y_i_DQMOM = DQMOM_IC(:);
+
+y = [y_i_basic; y_i_DQMOM];
+% y(7:(6+length(DQMOM_IC)), 1) = DQMOM_IC(:);
 
 
 % 1 = m_tg
@@ -815,8 +823,8 @@ while running == 1;
                 isempty(abs_err) +  ...
                 isnan(sum(err)) + ...
                 ~isreal(sum(y(:,n+1))) + ...
-                (y(5,n+1) > T_cr) + ...
                 error_flag;
+%                 (y(5,n+1) > T_cr) + ...
             
             
             % 1 = m_tg
@@ -1348,6 +1356,21 @@ else
         
         P_exp = load_experimental_data(t);
         
+        T_l = y(4+N_rw,:);
+        m_l = y(3+N_rw,:);
+        
+        m_tg = y(1,:);
+        
+        T_lw_in = y(5+N_rw,:);
+        T_gw_in = y(3,:);
+        
+%         m_tg = y(1);
+% U_tg = y(2);
+% T_gw = y(3 : 2+N_rw);
+% m_l = y(3+N_rw);
+% T_l = y(4+N_rw);
+% T_lw = y(5+N_rw : 4+2*N_rw);
+        
         
         %
         figure(1)
@@ -1367,7 +1390,7 @@ else
         
         figure(2)
         hold on
-        plot(t,y(5,:),'k-',t,T_s,'r:')
+        plot(t,T_l,'k-',t,T_s,'r:')
         legend('Liquid','T_{sat}(P) = T_{tg}')
         ylabel('Temperature')
         xlabel('Time [s]')
@@ -1375,7 +1398,7 @@ else
         
         figure(3)
         hold on
-        plot(t,y(6,:),'k-',t,y(3,:),'b--')
+        plot(t,T_lw_in,'k-',t,T_gw_in,'b--')
         title('wall temp')
         xlabel('Time [s]')
         legend('liquid','vapor')
@@ -1383,7 +1406,7 @@ else
         
         figure(4)
         hold on
-        plot(t,y(4,:),'k-',t,y(1,:),'b--',t,m_bub,'k:',t, m_out ,'r--', t, y(4,:) + y(1,:) + m_bub + m_out, 'g--')
+        plot(t,m_l,'k-',t,m_tg,'b--',t,m_bub,'k:',t, m_out ,'r--', t, m_l + m_tg + m_bub + m_out, 'g--')
         title('Mass')
         xlabel('Time [s]')
         legend('Liquid','Vapor','Bubbles','Out through injector','Sum')
@@ -1513,6 +1536,8 @@ C_hamaker = constants.C_hamaker;
 
 n_nuc_freq = constants.n_nuc_freq;
 
+N_rw = constants.N_rw;
+
 phi = constants.phi;
 C_rdot = constants.C_rdot;
 C_nuc_rate = constants.C_nuc_rate;
@@ -1587,10 +1612,10 @@ end
 % ...
 % 1st ab. for 1st node
 
-N_nodes = (length(y) - 6) / N_mom;
+N_nodes = (length(y) - (4 + 2*N_rw)) / N_mom;
 
 % indices of the weights
-i_w = 6 + [1:(N_nodes*N_ab)];
+i_w = (4 + 2*N_rw) + [1:(N_nodes*N_ab)];
 
 w_q = y(i_w);
 
@@ -1605,15 +1630,12 @@ g_q = y(i_g);
 % reshape so each ROW is one node
 g_q = reshape(g_q, N_ab, N_nodes)';
 
-% old format:
 m_tg = y(1);
 U_tg = y(2);
-T_gw = y(3);
-m_l = y(4);
-T_l = y(5);
-T_lw = y(6);
-% w_q = y(7:6+N);
-% g_q = y(7+N:6+2*N);
+T_gw = y(3 : 2+N_rw);
+m_l = y(3+N_rw);
+T_l = y(4+N_rw);
+T_lw = y(5+N_rw : 4+2*N_rw);
 
 if isnan(sum(y)) || ~isreal(sum(y))
     disp('problem: nans or imaginary y')
@@ -1883,7 +1905,8 @@ for i = 1:N_full + 1
         % bubble rising in the fluid. from legendre 1998
         rdot_rise = Ja_T * sqrt( 2 * alpha_l * (u_rise(i,:) + 1e-3)./(pi * r_q(i,:) ) ); % rising in the liquid
                 
-        rdot = max(rdot_rest, rdot_rise);
+%         rdot = max(rdot_rest, rdot_rise);
+rdot = rdot_rest + rdot_rise;
 
         % radius of new bubbles
         r_nuc = C_r_nuc * 2*sigma*T_s/(rho_tg * h_lv * C_dTs * deltaT_sup);
@@ -2148,7 +2171,7 @@ for i = 1:N_full + 1
     dg_dt(ind_node) = b_q - dug_dx(i,:)';
     
     % these have units of (m^3/(m^3*s)) ie (volume/time)/(volume of mix)
-    birth_term = birth_int_s(V_moment_index)*r_m^(3);
+    birth_term(i) = birth_int_s(V_moment_index)*r_m^(3);
     growth_term = growth_int_s(V_moment_index)*r_m^(3);
     %     death_term = death_int_s(4)*r_m^3;
     
@@ -2184,8 +2207,8 @@ for i = 1:N_full + 1
     
     % mdot into bubbles from liquid
     %     mdot_bub_l(i) = V_l_star(i) * 4/3*pi * rho_tg_sat * (birth_term + growth_term);
-    mdot_bub_l(i) = node_level(i) * V_node * 4/3 * pi * rho_tg_sat * (birth_term + growth_term);
-    
+    mdot_bub_l(i) = node_level(i) * V_node * 4/3 * pi * rho_tg_sat * (birth_term(i) + growth_term);
+        
     if i == 1 || i == N_nodes
         mdot_bub_l(i) = mdot_bub_l(i)/2;
     end
@@ -2223,14 +2246,15 @@ mdot_tg = sum( -mdot_bub_tg );
 mdot_l = - sum(mdot_bub_l) - mdot_out_liq;
 
 % HT from wall to liquid
-% Qdot_lw = Qdot('lw',T_l,T_lw,rho_l,m_l,D);
-Qdot_lw = 0;
+Qdot_lw = Qdot('lw',T_l,T_lw(1),rho_l,m_l,D);
+
+% Qdot_lw = 0;
 % net HT into liquid
 Qdot_l = Qdot_lw;
 
 % HT into gas from wall
-% Qdot_gw = Qdot('gw',T_tg,T_gw,rho_tg,m_tg,D);
-Qdot_gw = 0;
+Qdot_gw = Qdot('gw',T_tg,T_gw(1),rho_tg,m_tg,D);
+% Qdot_gw = 0;
 % net HT into gas
 Qdot_tg = Qdot_gw;
 
@@ -2283,10 +2307,10 @@ m_lw = tank_wall_mass(V_l,D,rho_w,t_w);
 m_gw = tank_wall_mass(V_tg,D,rho_w,t_w);
 
 % HT from air to gas wall
-Qdot_agw = Qdot('agw',T_air,T_gw,rho_tg,m_tg,D);
+Qdot_agw = Qdot('agw',T_air,T_gw(end),rho_tg,m_tg,D);
 
 % HT from air to liquid wall
-Qdot_alw = Qdot('alw',T_air,T_lw,rho_l,m_l,D);
+Qdot_alw = Qdot('alw',T_air,T_lw(end),rho_l,m_l,D);
 
 % conduction from liquid wall to gas wall
 L_tank = 4*V_tank/(pi*D^2);
@@ -2301,6 +2325,9 @@ Tdot_gw = (Qdot_agw - Qdot_gw + Qdot_wc + cv_w*mdot_gw*(T_lw - T_gw))/(m_gw*cv_w
 
 % rate of change of temperature of liquid wall
 Tdot_lw = (Qdot_alw - Qdot_lw - Qdot_wc)/(m_lw*cv_w);
+
+Tdot_lw = wall_conduction(T_lw, Qdot_lw, Qdot_alw, constants);
+Tdot_gw = wall_conduction(T_gw, Qdot_gw, Qdot_agw, constants);
 
 
 % all derivatives

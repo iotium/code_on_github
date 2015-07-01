@@ -1,0 +1,40 @@
+function Tdot = wall_conduction(T, q_in, q_out, constants)
+% T comes in without ghost points
+% q_in is heat flux from inner wall into the tank
+% q_out is heat flux from ambient into wall
+
+% this is
+
+k = contsants.k_w;
+rho = constants.rho_w;
+cv = constants.cv_w;
+N_r = constants.N_rw;
+D = constants.D;
+r_i = D/2;
+t_w = constants.t_w;
+r_o = r_i + t_w;
+
+r = [r_i:N_r:r_o];
+dr = mean(diff(r));
+
+alpha = k/(rho*cv); % thermal diffusivity
+
+T = [0; T(:); 0]; % add ghost points
+r = [0; r(:); 0]; 
+
+T(1) = T(3) - 2*dr/k*q_in;
+T(end) = T(end-2) + 2*dr/k*q_out;
+
+% planar conduction
+A = diag(-2/(dr^2)*ones(N_r,1)) ...
+    + diag( ( 1/dr^2) * ones(N_r-1,1), +1 ) ...
+    + diag( ( 1/dr^2) * ones(N_r-1,1), -1 );
+
+% % make it cylindrical
+A = A  ...
+    + diag( (-1/(2*dr) ) ./r(1:end-1), +1 ) ...
+    + diag( (1/(2*dr) ) ./r(2:end), -1 );
+
+A = alpha*A;
+    
+Tdot = A*T;
