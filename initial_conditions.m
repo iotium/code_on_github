@@ -169,11 +169,11 @@ switch specified_case
         %         A_inj = 3.15e-7;       % [m^2] injector area
         Po = 1e5;           % [Pa] external pressure
         T_air = 293;        % [K] air temperature
-        rho_w = 1360;       % [kg/m^3] density of wall material (polycarb)
-        cv_w = 1250;        % [J/kg.K] specific heat of wall (polycarb)
-        t_w = 0.0254*1/4;   % [m] wall thickness
+        rho_w = 800;       % [kg/m^3] density of wall material (polycarb)
+        cv_w = 500;        % [J/kg.K] specific heat of wall (polycarb)
+        t_w = 0.0254*0.551;   % [m] wall thickness
         D = sqrt(4/pi*V_tank/L_tank);
         % [m] tank diameter
-        k_w = 0.195;  
+        k_w = 16.3;  
         
 end

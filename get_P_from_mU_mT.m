@@ -34,6 +34,12 @@ end
         
         rho_l = qinterp2(PDT.T, PDT.P, PDT.D_liq, T_l, P/1e3);
         
+        % if rho_l is NaN, it means we went outside the bounds of PDT, so 
+        % instead extrapolate it using interp2 (slower than qinterp2)
+        if isnan(rho_l)
+            rho_l = interp2(PDT.T, PDT.P, PDT.D_liq, T_l, P/1e3, 'spline');
+        end
+        
         V_tg = m_tg/rho_tg;
         V_l = m_l./rho_l;
         
@@ -50,9 +56,10 @@ end
         
         F = (V_tg + V_l + V_bub - V_tank)/V_tank;
         
-%         if isnan(F) || ~isreal(F)
-%             disp('problem in sol')
-%         end
+        if isnan(F) || ~isreal(F)
+            disp('problem in solution of P equations')
+            keyboard
+        end
     end
 
 end

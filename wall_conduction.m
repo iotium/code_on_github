@@ -23,6 +23,8 @@ alpha = k/(rho*cv); % thermal diffusivity
 T = [0; T(:); 0]; % add ghost points
 r = [0; r(:); 0]; 
 
+% define ghost point values based on heat transfer
+% (make the heat flux in/out of wall match k*dT_dr)
 T(1) = T(3) - 2*dr/k*q_in;
 T(end) = T(end-2) + 2*dr/k*q_out;
 
@@ -40,4 +42,5 @@ A = alpha*A;
     
 Tdot = A*T;
 
+% remove ghost points
 Tdot = Tdot(2:end-1);
