@@ -175,5 +175,22 @@ switch specified_case
         D = sqrt(4/pi*V_tank/L_tank);
         % [m] tank diameter
         k_w = 16.3;  
+    case 10
+        % CO2 test #91 with glass gauge
+        Ti = 18.5+273.15;           % [K] initial temperature
+        fill_level = 0.82;        % [] initial fill_level ratio (by volume)
+        %         E = 2.1e4;          % [] heat transfer multiplier
+        V_tank = 1.233e-3;   % [m^3] tank volume
+        L_tank = 25.25*0.0254;     % [m] tank length
+        Cd = 1;         % [] injector Cd
+        %         A_inj = 3.15e-7;       % [m^2] injector area
+        Po = 1e5;           % [Pa] external pressure
+        T_air = 293;        % [K] air temperature
+        rho_w = 800;       % [kg/m^3] density of wall material (polycarb)
+        cv_w = 500;        % [J/kg.K] specific heat of wall (polycarb)
+        t_w = 0.0254*0.551;   % [m] wall thickness
+        D = sqrt(4/pi*V_tank/L_tank);
+        % [m] tank diameter
+        k_w = 16.3;  
         
 end

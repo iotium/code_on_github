@@ -2,6 +2,8 @@
 
 function [rho_l, rho_v, u_l, u_v] = fits_for_getting_P(P, fluid)
 
+% take P in 
+
 if strcmp(fluid, 'N2O')
 
 P_cr = 7245000;

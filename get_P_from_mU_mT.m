@@ -1,7 +1,8 @@
 % calculate system P based on m_tg, U_tg, m_l, T_l
 % used for non-saturated liquid, saturated ullage
 % should work for 0D or 1D
-function P = get_P_from_mU_mT(m_tg, U_tg, m_l, T_l, V_tank, V_node, V_bubi, fluid, PDT, guesses)
+function P = get_P_from_mU_mT(m_tg, U_tg, m_l, T_l, V_tank, ...
+    V_node, V_bubi, fluid, PDT, constants, guesses)
 
 
 test_val = eqns_to_solve(guesses.P);
@@ -22,22 +23,37 @@ end
 
     function F = eqns_to_solve(P)
         
-        %          rho_tg = refpropm('D', 'P', P/1e3, 'U', U_tg/m_tg, 'N2O');
+        if strcmp(constants.property_source,'PDT')
+            
+            [rho_tg_l, rho_tg_v, u_tg_l, u_tg_v] = fits_for_getting_P(P, fluid);
+            
+        elseif strcmp(constants.property_source,'refprop')
+            
+            [rho_tg_l, rho_tg_v, u_tg_v] = refpropm('+-U','P',P/1e3,'Q',1,fluid);
+            u_tg_l = refpropm('U','P',P/1e3,'Q',0,fluid);
+            
+        end
         
-        [rho_tg_l, rho_tg_v, u_tg_l, u_tg_v] = fits_for_getting_P(P, fluid);
         u_tg = U_tg/m_tg;
         x = (u_tg - u_tg_l)/(u_tg_v - u_tg_l);
         alpha = 1/( 1 + rho_tg_v/rho_tg_l * (1 - x)/x );
         rho_tg = alpha*rho_tg_v + (1 - alpha)*rho_tg_l;
         
-%         rho_l = get_D_from_TP(T_l, P, guesses);
         
-        rho_l = qinterp2(PDT.T, PDT.P, PDT.D_liq, T_l, P/1e3);
-        
-        % if rho_l is NaN, it means we went outside the bounds of PDT, so 
-        % instead extrapolate it using interp2 (slower than qinterp2)
-        if isnan(rho_l)
-            rho_l = interp2(PDT.T, PDT.P, PDT.D_liq, T_l, P/1e3, 'spline');
+        if strcmp(constants.property_source,'PDT')
+              
+            rho_l = qinterp2(PDT.T, PDT.P, PDT.D_liq, T_l, P/1e3);
+            
+            % if rho_l is NaN, it means we went outside the bounds of PDT, so
+            % instead extrapolate it using interp2 (slower than qinterp2)
+            if isnan(rho_l)
+                rho_l = interp2(PDT.T, PDT.P, PDT.D_liq, T_l, P/1e3, 'spline');
+            end
+            
+        elseif strcmp(constants.property_source,'refprop')
+            
+            rho_l = get_D_from_TP(T_l, P, guesses, fluid);
+            
         end
         
         V_tg = m_tg/rho_tg;
@@ -48,7 +64,7 @@ end
         else
             
             node_level = get_node_levels(V_l, V_bubi, V_node, guesses.node_level);
-%             V_bub = sum(node_level.*V_bubi*V_node);
+            %             V_bub = sum(node_level.*V_bubi*V_node);
             V_bub = sum_over_nodes(V_bubi, node_level, V_node);
             
         end

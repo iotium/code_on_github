@@ -34,6 +34,9 @@ switch computer
         
 end
 
+
+% constants.property_source = 'PDT';
+constants.property_source = 'refprop';
 constants.nuc_model = 'SJ';
 constants.ADQMOM_p = 1;
 p = constants.ADQMOM_p;
@@ -45,7 +48,7 @@ ADQMOM = 'off';
 N_nodes = 80;
 constants.N_nodes = N_nodes;
 
-N_mom = 8;
+N_mom = 4;
 IC_moments = gamma_dist_moments( 5e-10, 1e-3, N_mom, p);
 
 % 10%
@@ -73,13 +76,13 @@ clock_plot = clock;
 N_rw = 20;
 constants.N_rw = N_rw;
 
-constants.C_qdot_lw = 1e-3;
-constants.C_coalescence = 1e0;
+constants.C_qdot_lw = 1e-5;
+constants.C_coalescence = 1e-2;
 constants.C_rdot = (3/(2*pi));%2.5*pi;
-constants.C_u_rise = 1;%5
-constants.C_nuc_rate = 1e1;%1e2;
+constants.C_u_rise = 1;
+constants.C_nuc_rate = 1e1;
 constants.n_nuc_freq = 3;
-constants.C_r_nuc = 1;
+constants.C_r_nuc = 2;
 constants.C_dTs = 1;
 constants.C_x_inj = 1;
 constants.coalescence_switch = 'on';
@@ -87,7 +90,7 @@ save_filename = 'bubble_sim_data.mat';
 d_inj = 0.056 * 0.0254;
 A_inj = pi/4 * (d_inj^2);
 %     A_inj = 1.8e-8;
-specified_case = 9;
+specified_case = 10;
 
 constants.f_feedline = 0.0;
 constants.L_feedline = 5 * 0.0254;
@@ -157,10 +160,12 @@ constants.hesson_fit = hesson_fit;
 
 
 if strcmp(fluid,'N2O')
-    load N2O_PDT_table
+    PDT = load('N2O_PDT_table','PDT');
+    PDT = PDT.PDT;
     bubble_rise_velocity_fit = load('N2O_bubble_rise_velocity_fit');
 elseif strcmp(fluid,'CO2')
-    load CO2_PDT_table
+    PDT = load('CO2_PDT_table','PDT');
+    PDT = PDT.PDT;
     bubble_rise_velocity_fit = load('CO2_bubble_rise_velocity_fit');
 else
     error('fluid string incorrect. try N2O or CO2')
@@ -188,23 +193,6 @@ ti = 0;
 n = 1;              % [] counter
 
 t = 0;
-
-%
-[rho_l, rho_tg, P] = refpropm('+-P','T',Ti,'Q',0.5,fluid);
-[u_tg] = refpropm('U', 'T', Ti ,'Q', 1, fluid);
-P = P*1e3;
-rho_tg_sat = rho_tg;
-% P = 1e3*refpropm('P','T',Ti,'Q',0,fluid);
-%
-% [rho_tg_l, rho_tg_v, ~, u_tg_v] = n2o_fits_for_getting_P(P);
-% u_tg = u_tg_v;
-% % rho_l = rho_tg_l;
-% rho_tg = rho_tg_v;
-%
-% rho_l = qinterp2(PDT.T, PDT.P, PDT.D_liq, Ti, P/1e3);
-
-
-T_s = Ti;
 
 if strcmp(ADQMOM, 'off')
     p = 1;
@@ -256,6 +244,32 @@ end
 
 V_bubi = 4/3*pi*mom(:,V_moment_index);
 
+
+% [P] = refpropm('P','T',Ti-0.01,'Q',0.5,fluid);
+% 
+% % [rho_tg, P] = refpropm('-P','T',Ti+0.05,'Q',0.5,fluid);
+% % [rho_l] = refpropm('+','T',Ti,'Q',0.5,fluid);
+% % [u_tg] = refpropm('U', 'T', Ti +0.05,'Q', 1, fluid);
+% P = P*1e3;
+% 
+% rho_l = qinterp2(PDT.T, PDT.P, PDT.D_liq, Ti, P/1e3);
+% 
+% [~, rho_tg, ~, u_tg] = fits_for_getting_P(P, fluid);
+% 
+% rho_tg_sat = rho_tg;
+
+% P = 1e3*refpropm('P','T',Ti,'Q',0,fluid);
+%
+% [rho_tg_l, rho_tg_v, ~, u_tg_v] = n2o_fits_for_getting_P(P);
+% u_tg = u_tg_v;
+% % rho_l = rho_tg_l;
+% rho_tg = rho_tg_v;
+%
+% rho_l = qinterp2(PDT.T, PDT.P, PDT.D_liq, Ti, P/1e3);
+
+
+T_s = Ti;
+
 V_l = fill_level*V_tank;
 
 node_level = get_node_levels(V_l, V_bubi, V_node, V_l/V_node);
@@ -277,12 +291,42 @@ V_tg = V_tank - V_l_star;
 
 % V_l = V_l_star.*(1 - V_bubi);
 
-m_l = V_l*rho_l;
-m_tg = V_tg*rho_tg;
+guesses.rho_l = refpropm('D','T',Ti,'Q',0,fluid);
+
+Pi = converge_on_IC(Ti, V_tg, V_l, ...
+    V_tank, V_node, V_bubi, PDT, guesses, constants, fluid);
+
+if strcmp(constants.property_source,'PDT')
+
+    rho_l = qinterp2(PDT.T, PDT.P, PDT.D_liq, Ti, Pi/1e3);
+
+    % if rho_l is NaN, it means we went outside the bounds of PDT, so
+    % instead extrapolate it using interp2 (slower than qinterp2)
+    if isnan(rho_l)
+        rho_l = interp2(PDT.T, PDT.P, PDT.D_liq, Ti, Pi/1e3, 'spline');
+    end
+
+    [~, rho_tg, ~, u_tg] = fits_for_getting_P(Pi, fluid);
+
+
+elseif strcmp(constants.property_source,'refprop')
+
+    rho_l = get_D_from_TP(Ti, Pi, guesses, fluid);
+
+    [rho_tg, u_tg] = refpropm('DU','P',Pi/1e3,'Q',1,fluid);
+
+end
+
+P = Pi;
+rho_tg_sat = rho_tg;
+
+m_tg = rho_tg * V_tg;
+m_l = rho_l * V_l;
 
 U_tg = m_tg * u_tg;
-x_tg = 1;
 T_l = Ti;
+
+x_tg = 1;
 % T_tg = Ti;
 
 T_lw = Ti*ones(N_rw,1);
@@ -331,7 +375,7 @@ constants.g = 9.81;
 
 constants.C_hamaker = 1e-20;
 
-guesses.P = P;
+guesses.P = Pi;
 guesses.rho_tg = rho_tg;
 guesses.rho_l = rho_l;
 guesses.Vdot_l = 0;
@@ -566,7 +610,6 @@ while running == 1;
     
     error_OK = 0;
     
-    
     while error_OK == 0
         % solving differential equations
         % i = counter for
@@ -604,13 +647,14 @@ while running == 1;
                 
                 % check to see if we're taking a step that'll cause errors
                 error_conditions = (T_l_new < 220) + (T_l_new > 305) ...
-                    + (T_l_new > T_l(n) + 0.25) + (T_l_new < T_l(n) - 5)...
-                    + (max(r_q_new(:)) > 0.1);
+                    + (T_l_new > (T_l(n) + 0.25)) + (T_l_new < (T_l(n) - 5))...
+                    + (max(r_q_new(:)) > 0.1) + (min(y_new) < 0);
                 
                 if error_conditions > 0
                     disp('we''re taking a bad step')
                     f = ones(size(f));
                     error_flag = 1;
+                    break
                 else
                     
                     
@@ -639,6 +683,28 @@ while running == 1;
         %         k = [k1, k2, k3, k4, k5, k6];
         
         y(:,n+1) = y(:,n) + (k*b);
+        
+        if error_flag == 0
+            
+            variables = unpack_y(y(:,n+1), constants);
+            
+            T_l_new = variables.T_l;
+            g_q_new = variables.g_q;
+            w_q_new = variables.w_q;
+            
+            r_q_new = g_q_new./w_q_new;
+            
+            % check to see if we're taking a step that'll cause errors
+            error_conditions = (T_l_new < 220) + (T_l_new > 305) ...
+                + (T_l_new > (T_l(n) + 0.25)) + (T_l_new < (T_l(n) - 5))...
+                + (max(r_q_new(:)) > 0.1) + (min(y_new) < 0);
+            
+            if error_conditions > 0
+                disp('we''re taking a bad step')
+                f = ones(size(f));
+                error_flag = 1;
+            end
+        end
         
         if adaptive == 1
             % using adaptive scheme, need to check error
@@ -675,7 +741,7 @@ while running == 1;
             % abs and rel err are both full of non-finite values
             % isnan checks for nan's
             % isreal checks for imaginary numbers
-            error_conditions = isempty(rel_err) + ...
+            error_conditions2 = isempty(rel_err) + ...
                 isempty(abs_err) +  ...
                 isnan(sum(err)) + ...
                 ~isreal(sum(y(:,n+1))) + ...
@@ -683,7 +749,7 @@ while running == 1;
             
             % if any of those fail, set rel_err large so that the step gets
             % recomuputed
-            if error_conditions > 0
+            if error_conditions2 > 0
                 rel_err = 1;
             end
             
@@ -870,8 +936,8 @@ while running == 1;
             set(gca,'yscale','log')
             legend('number density','volume density','SMD')
             
-%             % wall temperature profiles
-%             plot([1:length(T_lw)], T_lw,'k-',[1:length(T_gw)],T_gw,'b')
+            %             % wall temperature profiles
+            %             plot([1:length(T_lw)], T_lw,'k-',[1:length(T_gw)],T_gw,'b')
             
             
             
@@ -953,273 +1019,204 @@ else
     disp('no stop reason assigned')
 end
 %% plotting and output
-if nargout > 0
-    %     P_LRO = P(end);
-    %     T_LRO = T_l(end);
-    %     t_LRO = t(end);
-    %     varargout{1} = P_LRO/P(1);
-    %     varargout{2} = T_LRO/T_l(1);
-    %     varargout{3} = t_LRO;
-    %
-    %     if nargout > 3
-    %         varargout{4} = P;
-    %         varargout{5} = T_l;
-    %         varargout{6} = t;
-    %     end
+
+if save_stuff == 1
     
-    % if exist('n_min','var')
-    %     varargout{1} = t(n_min);
-    % varargout{3} = P(n_min);
-    %
-    % else
-    %
-    %     varargout{1} = NaN;
-    %     varargout{3} = NaN;
-    % end
-    %
-    % if exist('n_peak','var')
-    %
-    % varargout{2} = t(n_peak);
-    % varargout{4} = P(n_peak);
-    % else
-    %
-    % varargout{2} = NaN;
-    % varargout{4} = NaN;
-    % end
-    
-    varargout{1} = t;
-    varargout{2} = P;
-    fill_level_f = fill_level(end);
-    
-    varargout{3} = fill_level_f;
-    
-else
-    
-    % 1 = m_tg
-    % 2 = U_tg
-    % 3 = T_gw
-    % 4 = m_l
-    % 5 = T_l
-    % 6 = T_lw
-    % 7:(N + 6) = weights
-    % N+7 : 2N+6 = weighted abscissas
-    
-    
-    %     w_q = y(7:(N_ab+6),:);
-    %     g_q = y(N_ab+7:(2*N_ab+6),:);
-    %
-    %     r_q = g_q./w_q;
-    %     for j = 1:n
-    %         for i = 1:2*N_ab
-    %             mom(i,j) = sum( r_q(:,j).^(i-1) .* w_q(:,j) );
-    %         end
-    %     end
-    %
-    %     V_bubi = 4/3*pi*mom(4,:);
-    %     A_bubi = 4*pi*mom(3,:);
-    
-    %     V_bub = V_bubi.*V_l_star;
-    %     A_bub = A_bubi.*V_l_star;
-    
-    if save_stuff == 1
+    if save_parameters_only == 1
         
-        if save_parameters_only == 1
-            
-            if ~exist('n_min','var')
-                n_min = 1;
-            end
-            
-            if ~exist('n_peak','var')
-                n_peak = 1;
-            end
-            t_min = t(n_min);
-            t_peak = t(n_peak);
-            t_LRO = t(end);
-            P_min = P(n_min);
-            P_peak = P(n_peak);
-            P_LRO = P(end);
-            alpha_f = V_bubi(end);
-            fill_level_f = fill_level(end);
-            P_lin = (P_LRO - P_peak)/(t_LRO - t_peak)*(t - t_peak) + P_peak;
-            P_dev = mean( abs(P(n_peak:end) - P_lin(n_peak:end)) );
-            
-            save(save_filename,'t_min','t_peak','t_LRO'...
-                ,'P_min','P_peak','P_LRO'...
-                ,'alpha_f','fill_level_f','P_dev','-v7.3')
-            
-        else
-            
-            save(save_filename,'-v7.3')
-            
+        if ~exist('n_min','var')
+            n_min = 1;
         end
         
-    end
-    
-    
-    
-    if plot_stuff == 1
+        if ~exist('n_peak','var')
+            n_peak = 1;
+        end
+        t_min = t(n_min);
+        t_peak = t(n_peak);
+        t_LRO = t(end);
+        P_min = P(n_min);
+        P_peak = P(n_peak);
+        P_LRO = P(end);
+        alpha_f = V_bubi(end);
+        fill_level_f = fill_level(end);
+        P_lin = (P_LRO - P_peak)/(t_LRO - t_peak)*(t - t_peak) + P_peak;
+        P_dev = mean( abs(P(n_peak:end) - P_lin(n_peak:end)) );
         
-        m_out = cumtrapz(t, mdot_out_liq + mdot_out_vap);
-        mh_out = cumtrapz(t, (mdot_out_liq.*h_l + mdot_out_vap.*h_tg_sat));
+        save(save_filename,'t_min','t_peak','t_LRO'...
+            ,'P_min','P_peak','P_LRO'...
+            ,'alpha_f','fill_level_f','P_dev','-v7.3')
         
-        P_exp = load_experimental_data(t);
+    else
         
-        T_l = y(4+N_rw,:);
-        m_l = y(3+N_rw,:);
-        
-        m_tg = y(1,:);
-        
-        T_lw_in = y(5+N_rw,:);
-        T_gw_in = y(3,:);
-        
-        %         m_tg = y(1);
-        % U_tg = y(2);
-        % T_gw = y(3 : 2+N_rw);
-        % m_l = y(3+N_rw);
-        % T_l = y(4+N_rw);
-        % T_lw = y(5+N_rw : 4+2*N_rw);
-        
-        
-        %
-        figure(1)
-        hold on
-        plot(t,P/1e6,'k-')
-        plot(t,P_exp/1e6,'k--')
-        legend('model','experiment')
-        xlabel('Time [s]')
-        ylabel('Pressure [MPa]')
-        %         hold on
-        %         if exist('t_peak','var')
-        %             plot(t_min, P(n_min)/1e6, 'ko')
-        %             plot(t_peak, P(n_peak)/1e6, 'ks')
-        %         end
-        
-        title('pressure')
-        
-        figure(2)
-        hold on
-        plot(t,T_l,'k-',t,T_s,'r:')
-        legend('Liquid','T_{sat}(P) = T_{tg}')
-        ylabel('Temperature')
-        xlabel('Time [s]')
-        title('temperatures')
-        
-        figure(3)
-        hold on
-        plot(t,T_lw_in,'k-',t,T_gw_in,'b--')
-        title('wall temp')
-        xlabel('Time [s]')
-        legend('liquid','vapor')
-        title('wall temp')
-        
-        figure(4)
-        hold on
-        plot(t,m_l,'k-',t,m_tg,'b--',t,m_bub,'k:',t, m_out ,'r--', t, m_l + m_tg + m_bub + m_out, 'g--')
-        title('Mass')
-        xlabel('Time [s]')
-        legend('Liquid','Vapor','Bubbles','Out through injector','Sum')
-        title('masses')
-        
-        figure(5)
-        hold on
-        plot(t, x_tg)
-        xlabel('Time [s]')
-        ylabel('vapor mass fraction []')
-        title('ullage vapor mass fraction')
-        
-        
-        figure(6)
-        hold on
-        plot(t, fill_level)
-        xlabel('Time [s]')
-        ylabel('fill level [%]')
-        title('fill level')
-        
-        
-        %         figure(7)
-        %         hold on
-        %         plot(t, A_bub,'k')
-        %         xlabel('Time [s]')
-        %         ylabel('A/V [1/m]')
-        %         title('interfacial area per volume')
-        
-        figure(8)
-        hold on
-        plot(t, V_bub./V_l_star, 'k', t, gas_holdup_injector)
-        xlabel('Time [s]')
-        ylabel('gas holdup')
-        title('gas holdup')
-        legend('mean','bottom of tank')
-        
-        %         figure(9)
-        %         hold on
-        %         plot(t, 6*V_bub./A_bub, 'k')
-        %         xlabel('Time [s]')
-        %         ylabel('sauter mean diameter [m]')
-        %         set(gca,'yscale','log')
-        %         title('sauter mean diameter')
-        
-        %         figure(10)
-        %         hold on
-        %         plot(t, r_q)
-        %         xlabel('Time [s]')
-        %         ylabel('abscissas [m]')
-        %         set(gca,'yscale','log')
-        %         title('abscissas')
-        
-        %         figure(11)
-        %         hold on
-        %         plot(t, w_q)
-        %         xlabel('Time [s]')
-        %         ylabel('weights [?]')
-        %         set(gca,'yscale','log')
-        %         title('weights')
-        
-        figure(12)
-        hold on
-        plot(t, V_l, 'k', t, V_tg, 'k:', t, V_bub, 'k--', t, V_l+V_tg+V_bub,'k-.')
-        xlabel('Time [s]')
-        ylabel('volume [m^3]')
-        title('volumes')
-        legend('liquid (pure)','ullage','bubbles','sum')
-        
-        figure(13)
-        hold on
-        plot(t, n_bubi, 'k')
-        xlabel('Time [s]')
-        ylabel('number/m^3')
-        title('bubble number density')
-        
-        figure(14)
-        hold on
-        plot(t, mh_out, 'k', t, U_liq, 'k:', t, U_tg, 'k--', t, U_bub, 'k-.', t, (mh_out + U_liq + U_tg + U_bub), 'b')
-        xlabel('Time [s]')
-        ylabel('energy [J]')
-        legend('out the injector','liquid','vapor','bubbles','sum')
-        
-        figure(15)
-        hold on
-        plot(t, [0; diff(t(:))], 'k')
-        xlabel('Time [s]')
-        ylabel('dt [s]')
-        title('time step')
-        set(gca,'yscale','log')
-        
-        figure(16)
-        hold on
-        plot(t, ind_max_rel_err)
-        xlabel('Time [s]')
-        ylabel('index []')
-        title('index of max relative error')
-        
-        
+        save(save_filename,'-v7.3')
         
     end
     
-    beep
+end
+
+
+
+if plot_stuff == 1
+    
+    m_out = cumtrapz(t, mdot_out_liq + mdot_out_vap);
+    mh_out = cumtrapz(t, (mdot_out_liq.*h_l + mdot_out_vap.*h_tg_sat));
+    
+    [P_exp, T_lw_out_exp] = load_experimental_data(t);
+    
+    T_l = y(4+N_rw,:);
+    m_l = y(3+N_rw,:);
+    
+    m_tg = y(1,:);
+    
+    T_lw_in = y(5+N_rw,:);
+    T_gw_in = y(3,:);
+    T_lw_out = y(4+2*N_rw,:);
+    
+    %         m_tg = y(1);
+    % U_tg = y(2);
+    % T_gw = y(3 : 2+N_rw);
+    % m_l = y(3+N_rw);
+    % T_l = y(4+N_rw);
+    % T_lw = y(5+N_rw : 4+2*N_rw);
+    
+    
+    %
+    figure(1)
+    hold on
+    plot(t,P/1e6,'k-')
+    plot(t,P_exp/1e6,'k--')
+    legend('model','experiment')
+    xlabel('Time [s]')
+    ylabel('Pressure [MPa]')
+    %         hold on
+    %         if exist('t_peak','var')
+    %             plot(t_min, P(n_min)/1e6, 'ko')
+    %             plot(t_peak, P(n_peak)/1e6, 'ks')
+    %         end
+    
+    title('pressure')
+    
+    figure(2)
+    hold on
+    plot(t,T_l,'k-',t,T_s,'r:')
+    legend('Liquid','T_{sat}(P) = T_{tg}')
+    ylabel('Temperature')
+    xlabel('Time [s]')
+    title('temperatures')
+    
+    figure(3)
+    hold on
+    plot(t,T_lw_in,'k-',t,T_gw_in,'b--',t,T_lw_out,'r-.',t,T_lw_out_exp+273.15,'k:')
+    title('wall temp')
+    xlabel('Time [s]')
+    legend('liquid','vapor','outside liquid','experimental outside liquid')
+    title('wall temp')
+    
+    figure(4)
+    hold on
+    plot(t,m_l,'k-',t,m_tg,'b--',t,m_bub,'k:',t, m_out ,'r--', t, m_l + m_tg + m_bub + m_out, 'g--')
+    title('Mass')
+    xlabel('Time [s]')
+    legend('Liquid','Vapor','Bubbles','Out through injector','Sum')
+    title('masses')
+    
+    figure(5)
+    hold on
+    plot(t, x_tg)
+    xlabel('Time [s]')
+    ylabel('vapor mass fraction []')
+    title('ullage vapor mass fraction')
+    
+    
+    figure(6)
+    hold on
+    plot(t, fill_level)
+    xlabel('Time [s]')
+    ylabel('fill level [%]')
+    title('fill level')
+    
+    
+    %         figure(7)
+    %         hold on
+    %         plot(t, A_bub,'k')
+    %         xlabel('Time [s]')
+    %         ylabel('A/V [1/m]')
+    %         title('interfacial area per volume')
+    
+    figure(8)
+    hold on
+    plot(t, V_bub./V_l_star, 'k', t, gas_holdup_injector)
+    xlabel('Time [s]')
+    ylabel('gas holdup')
+    title('gas holdup')
+    legend('mean','bottom of tank')
+    
+    %         figure(9)
+    %         hold on
+    %         plot(t, 6*V_bub./A_bub, 'k')
+    %         xlabel('Time [s]')
+    %         ylabel('sauter mean diameter [m]')
+    %         set(gca,'yscale','log')
+    %         title('sauter mean diameter')
+    
+    %         figure(10)
+    %         hold on
+    %         plot(t, r_q)
+    %         xlabel('Time [s]')
+    %         ylabel('abscissas [m]')
+    %         set(gca,'yscale','log')
+    %         title('abscissas')
+    
+    %         figure(11)
+    %         hold on
+    %         plot(t, w_q)
+    %         xlabel('Time [s]')
+    %         ylabel('weights [?]')
+    %         set(gca,'yscale','log')
+    %         title('weights')
+    
+    figure(12)
+    hold on
+    plot(t, V_l, 'k', t, V_tg, 'k:', t, V_bub, 'k--', t, V_l+V_tg+V_bub,'k-.')
+    xlabel('Time [s]')
+    ylabel('volume [m^3]')
+    title('volumes')
+    legend('liquid (pure)','ullage','bubbles','sum')
+    
+    figure(13)
+    hold on
+    plot(t, n_bubi, 'k')
+    xlabel('Time [s]')
+    ylabel('number/m^3')
+    title('bubble number density')
+    
+    figure(14)
+    hold on
+    plot(t, mh_out, 'k', t, U_liq, 'k:', t, U_tg, 'k--', t, U_bub, 'k-.', t, (mh_out + U_liq + U_tg + U_bub), 'b')
+    xlabel('Time [s]')
+    ylabel('energy [J]')
+    legend('out the injector','liquid','vapor','bubbles','sum')
+    
+    figure(15)
+    hold on
+    plot(t, [0; diff(t(:))], 'k')
+    xlabel('Time [s]')
+    ylabel('dt [s]')
+    title('time step')
+    set(gca,'yscale','log')
+    
+    figure(16)
+    hold on
+    plot(t, ind_max_rel_err)
+    xlabel('Time [s]')
+    ylabel('index []')
+    title('index of max relative error')
+    
     
     
 end
+
+beep
 
 toc
 
@@ -1321,7 +1318,7 @@ V_moment_index = constants.V_moment_index;
 
 % bubble volume per unit volume of liquid/bubble mixture (hence the i)
 % (can also view this as the vapor volume fraction aka gas holdup)
-V_bubi = 4/3*pi*mom(:,V_moment_index); 
+V_bubi = 4/3*pi*mom(:,V_moment_index);
 
 if sum(imag(V_bubi)) > 0
     disp('V_bubi went imaginary')
@@ -1334,7 +1331,8 @@ end
 
 % get system pressure
 % (assumes pressure is same throughout tank, with no gravity head)
-P = get_P_from_mU_mT(m_tg, U_tg, m_l, T_l, V_tank, V_node, V_bubi, fluid, PDT, guesses);
+P = get_P_from_mU_mT(m_tg, U_tg, m_l, T_l, V_tank, V_node, ...
+    V_bubi, fluid, PDT, constants, guesses);
 
 if (P == pi) || isnan(P)
     disp('P error')
@@ -1345,15 +1343,30 @@ end
 
 % get density of liquid and ullage based on temperature and pressure
 
-% rho_l = get_D_from_TP(T_l, P, guesses);
 
-rho_l = qinterp2(PDT.T, PDT.P, PDT.D_liq, T_l, P/1e3);
-
-% if rho_l is NaN, it means we went outside the bounds of PDT, so
-% instead extrapolate it using interp2 (slower than qinterp2)
-if isnan(rho_l)
-    rho_l = interp2(PDT.T, PDT.P, PDT.D_liq, T_l, P/1e3, 'spline');
+if strcmp(constants.property_source,'PDT')
+    
+    rho_l = qinterp2(PDT.T, PDT.P, PDT.D_liq, T_l, P/1e3);
+    
+    % if rho_l is NaN, it means we went outside the bounds of PDT, so
+    % instead extrapolate it using interp2 (slower than qinterp2)
+    if isnan(rho_l)
+        rho_l = interp2(PDT.T, PDT.P, PDT.D_liq, T_l, P/1e3, 'spline');
+    end
+    
+    [rho_tg_l, rho_tg_v, u_tg_l, u_tg_v] = fits_for_getting_P(P, fluid);
+    
+    
+elseif strcmp(constants.property_source,'refprop')
+    
+    rho_l = get_D_from_TP(T_l, P, guesses, fluid);
+    
+    [rho_tg_l, rho_tg_v, u_tg_v] = refpropm('+-U','P',P/1e3,'Q',1,fluid);
+    u_tg_l = refpropm('U','P',P/1e3,'Q',0,fluid);
+    
+    
 end
+
 
 % rho_tg = qqinterp2(PDT.T, PDT.P, PDT.D_vap, T_tg, P, 'linear');
 
@@ -1362,12 +1375,22 @@ end
 % get saturation properties for ullage
 % at some point should include a switch here to take into account times
 % when the ullage is just superheated vapor (not saturated, not metastable)
-[rho_tg_l, rho_tg_v, u_tg_l, u_tg_v] = fits_for_getting_P(P, fluid);
+% [rho_tg_l, rho_tg_v, u_tg_l, u_tg_v] = fits_for_getting_P(P, fluid);
 
 u_tg = U_tg/m_tg;
 x_tg = (u_tg - u_tg_l)/(u_tg_v - u_tg_l);
 alpha = 1/( 1 + rho_tg_v/rho_tg_l * (1 - x_tg)/x_tg );
 rho_tg = alpha*rho_tg_v + (1 - alpha)*rho_tg_l;
+
+% if constants.step == 1
+%     fprintf('1 - x_tg = %0.3g\n',1 - x_tg)
+% end
+
+% if x_tg > 1
+% %     keyboard
+%     disp('x_tg > 1')
+%     x_tg = 1;
+% end
 
 % total liquid volume (not including bubbles)
 V_l = m_l./rho_l;
@@ -1503,9 +1526,11 @@ u_rise = constants.C_u_rise * exp( bubble_rise_velocity_fit(log(r_q), T_tg*ones(
 
 u_rise(N_full+2:end,:) = 0;
 
+% have to do this because the velocity fit is bad in this region
 u_rise(r_q < 1e-6) = 0;
 
-if sum(isnan(u_rise(:))) > 0
+if sum(sum(isnan(u_rise(1:N_full+1,:)))) > 0
+    disp('nans in u_rise')
     keyboard
 end
 
@@ -1516,46 +1541,46 @@ for i = 1:N_full + 1
     % fluxes in and out of node
     % backwards differencing
     
-%     1st order
-        if i > 1
-              % top node
-            if i == N_full + 1 && node_level(i) < 0.5
-                duw_dx(i,:) = ( (u_rise(i,:) - u_bulk).*w_q(i,:) - (u_rise(i-1,:) - u_bulk).*w_q(i-1,:) )/((0.5 + node_level(i))*L_node);
-                dug_dx(i,:) = ( (u_rise(i,:) - u_bulk).*g_q(i,:) - (u_rise(i-1,:) - u_bulk).*g_q(i-1,:) )/((0.5 + node_level(i))*L_node);
-           else
-                duw_dx(i,:) = ( (u_rise(i,:) - u_bulk).*w_q(i,:) - (u_rise(i-1,:) - u_bulk).*w_q(i-1,:) )/L_node;
-                dug_dx(i,:) = ( (u_rise(i,:) - u_bulk).*g_q(i,:) - (u_rise(i-1,:) - u_bulk).*g_q(i-1,:) )/L_node;
-            end
+    %     1st order
+    if i > 1
+        % top node
+        if i == N_full + 1 && node_level(i) < 0.5
+            duw_dx(i,:) = ( (u_rise(i,:) - u_bulk).*w_q(i,:) - (u_rise(i-1,:) - u_bulk).*w_q(i-1,:) )/((0.5 + node_level(i))*L_node);
+            dug_dx(i,:) = ( (u_rise(i,:) - u_bulk).*g_q(i,:) - (u_rise(i-1,:) - u_bulk).*g_q(i-1,:) )/((0.5 + node_level(i))*L_node);
         else
-            duw_dx(i,:) = ( u_rise(i,:) - u_bulk).*w_q(i,:)/L_node;
-            dug_dx(i,:) = ( u_rise(i,:) - u_bulk).*g_q(i,:)/L_node;
+            duw_dx(i,:) = ( (u_rise(i,:) - u_bulk).*w_q(i,:) - (u_rise(i-1,:) - u_bulk).*w_q(i-1,:) )/L_node;
+            dug_dx(i,:) = ( (u_rise(i,:) - u_bulk).*g_q(i,:) - (u_rise(i-1,:) - u_bulk).*g_q(i-1,:) )/L_node;
         end
+    else
+        duw_dx(i,:) = ( u_rise(i,:) - u_bulk).*w_q(i,:)/L_node;
+        dug_dx(i,:) = ( u_rise(i,:) - u_bulk).*g_q(i,:)/L_node;
+    end
     
-%     % 2nd order
-%     if i > 1
-%         % top node
-%             if i > 2
-%             % normal points (need 2 beneath)
-%             duw_dx(i,:) = ( 1.5*(u_rise(i,:) - u_bulk).*w_q(i,:) ...
-%                 - 2*(u_rise(i-1,:) - u_bulk).*w_q(i-1,:) ...
-%                 + 0.5*(u_rise(i-2,:) - u_bulk).*w_q(i-2,:))/(2*L_node);
-%             
-%             dug_dx(i,:) = ( 1.5*(u_rise(i,:) - u_bulk).*g_q(i,:) ...
-%                 - 2*(u_rise(i-1,:) - u_bulk).*g_q(i-1,:) ...
-%                 + 0.5*(u_rise(i-2,:) - u_bulk).*g_q(i-2,:))/(2*L_node);
-%             
-%             else
-%                 % one above the bottom - use 1st order
-%                 duw_dx(i,:) = ( (u_rise(i,:) - u_bulk).*w_q(i,:) - (u_rise(i-1,:) - u_bulk).*w_q(i-1,:) )/L_node;
-%                 dug_dx(i,:) = ( (u_rise(i,:) - u_bulk).*g_q(i,:) - (u_rise(i-1,:) - u_bulk).*g_q(i-1,:) )/L_node;
-%             end
-%             
-%         
-%     else
-%         % bottom node
-%         duw_dx(i,:) = ( u_rise(i,:) - u_bulk).*w_q(i,:)/L_node;
-%         dug_dx(i,:) = ( u_rise(i,:) - u_bulk).*g_q(i,:)/L_node;
-%     end
+    %     % 2nd order
+    %     if i > 1
+    %         % top node
+    %             if i > 2
+    %             % normal points (need 2 beneath)
+    %             duw_dx(i,:) = ( 1.5*(u_rise(i,:) - u_bulk).*w_q(i,:) ...
+    %                 - 2*(u_rise(i-1,:) - u_bulk).*w_q(i-1,:) ...
+    %                 + 0.5*(u_rise(i-2,:) - u_bulk).*w_q(i-2,:))/(2*L_node);
+    %
+    %             dug_dx(i,:) = ( 1.5*(u_rise(i,:) - u_bulk).*g_q(i,:) ...
+    %                 - 2*(u_rise(i-1,:) - u_bulk).*g_q(i-1,:) ...
+    %                 + 0.5*(u_rise(i-2,:) - u_bulk).*g_q(i-2,:))/(2*L_node);
+    %
+    %             else
+    %                 % one above the bottom - use 1st order
+    %                 duw_dx(i,:) = ( (u_rise(i,:) - u_bulk).*w_q(i,:) - (u_rise(i-1,:) - u_bulk).*w_q(i-1,:) )/L_node;
+    %                 dug_dx(i,:) = ( (u_rise(i,:) - u_bulk).*g_q(i,:) - (u_rise(i-1,:) - u_bulk).*g_q(i-1,:) )/L_node;
+    %             end
+    %
+    %
+    %     else
+    %         % bottom node
+    %         duw_dx(i,:) = ( u_rise(i,:) - u_bulk).*w_q(i,:)/L_node;
+    %         dug_dx(i,:) = ( u_rise(i,:) - u_bulk).*g_q(i,:)/L_node;
+    %     end
     
     %
     % % central differencing
@@ -1585,20 +1610,31 @@ end
 for i = 1:N_full + 1
     
     % if superheated, then calculate bubble stuff
-    if deltaT_sup > 1e-4
+    
+    
+    if sum(abs(imag([r_q(i,:); w_q(i,:)]))) > 0
+        fprintf('imaginary abscissas or weights. moments:')
+        fprintf('%0.6g\t',mom)
+        fprintf('\n')
         
-        if sum(abs(imag([r_q(i,:); w_q(i,:)]))) > 0
-            fprintf('imaginary abscissas or weights. moments:')
-            fprintf('%0.6g\t',mom)
-            fprintf('\n')
-            
-        end
-        
+    end
+    
+    %         T_sat = 19.6426*(P/1e3)^0.2499 + 122.3663;
+    
+    % depth from surface
+    depth = (i < N_full)*(i - N_full)*L_node + node_level(N_full+1)*L_node;
+    dP_depth = rho_l*g*depth;
+    dT_sat_depth = 19.6426*( ((P + dP_depth)/1e3)^0.2499 - (P/1e3)^0.2499 );
+    
+    deltaT_sup_node = deltaT_sup - dT_sat_depth;
+    
+    
+    if deltaT_sup_node > 1e-4
         % jakob number
-        Ja_T = Cp_l * rho_l * C_dTs * deltaT_sup/(rho_tg * h_lv);
+        Ja_T = Cp_l * rho_l * C_dTs * deltaT_sup_node/(rho_tg * h_lv);
         
         % radius of new bubbles
-        r_nuc = C_r_nuc * 2*sigma*T_s/(rho_tg * h_lv * C_dTs * deltaT_sup);
+        r_nuc = C_r_nuc * 2*sigma*T_s/(rho_tg * h_lv * C_dTs * deltaT_sup_node);
         
         % bubble radius rate of change
         
@@ -1621,10 +1657,10 @@ for i = 1:N_full + 1
         % bubble rising in the fluid. from legendre 1998
         rdot_rise = Ja_T * sqrt( 2 * alpha_l * (u_rise(i,:) + 1e-6)./(pi * r_q(i,:) ) ); % rising in the liquid
         
-%                 rdot = max(rdot_rest, rdot_rise);
+        %                 rdot = max(rdot_rest, rdot_rise);
         rdot = rdot_rest + rdot_rise;
         
-
+        
         
         % length of liquid node volume [m]
         %         L_l = V_l_star(i) / (pi * 0.25 * D^2);
@@ -1667,7 +1703,7 @@ for i = 1:N_full + 1
                 
                 
                 % nucleation frequency [Hz]
-                nuc_freq = 1e4 * C_dTs * deltaT_sup^n_nuc_freq;
+                nuc_freq = 1e4 * C_dTs * deltaT_sup_node^n_nuc_freq;
                 
                 % nucleation rate [Hz]
                 nuc_rate = C_nuc_rate * nuc_density * nuc_freq * A_l;
@@ -1768,26 +1804,19 @@ for i = 1:N_full + 1
         % if nucleation happens only at r_nuc
         birth_int_s_delta = (r_nuc/r_m).^((k-1)/p) * spec_nuc_rate;
         
+        %         % exponential distribution
+        %         r_a = 125*r_nuc;
+        %
+        %         birth_int_s_exp = (r_a/r_m)^((k-1)/p) * spec_nuc_rate * exp( r_nuc/r_a ) ...
+        %             * gamma(1+((k-1)/p)) * gammainc(r_nuc/r_a, 1+((k-1)/p), 'upper');
+        %
+        % uniform distribution
+        %         dr = 100*r_nuc;
+        %         birth_int_s_uni = (1/r_m)^((k-1)/p) * spec_nuc_rate/dr * 1/( (k-1)/p + 1)*...
+        %             ( (r_nuc + dr)^( (k-1)/p + 1) - r_nuc^( (k-1)/p + 1) );
         
-        r_a = 1e-4;
         
-        birth_int_s_exp = (r_a/r_m)^((k-1)/p) * spec_nuc_rate * exp( r_nuc/r_a ) ...
-            * gamma(1+((k-1)/p)) * gammainc(r_nuc/r_a, 1+((k-1)/p), 'upper');
-        
-        
-        
-%         a = 1e-9;
-        
-%         r = linspace(r_nuc,5*r_nuc/a,100);
-        
-%         birth_int_s_exp = 1e14*r_nuc/a*spec_nuc_rate*exp(r_nuc/a) * ...
-%             trapz(r, (r/r_m).^( (k-1)/p) .* exp( -r/a));
-        
-%         if constants.step == 1 && i == 1
-%         fprintf('ratio exp/delta = %0.4g\n',birth_int_s_exp/birth_int_s_delta)
-%         end
-        
-        birth_int_s(k) = birth_int_s_exp;
+        birth_int_s(k) = birth_int_s_delta;
         
         % now if it's spread out a bit (gaussian)
         %         s_nuc = r_nuc;
@@ -1807,6 +1836,9 @@ for i = 1:N_full + 1
     % only bother if I've turned it on
     if strcmp(constants.coalescence_switch,'on')
         
+        % most of this is from prince and blanch (1990)
+        % buoyancy and turbulence driven
+        
         nu_t = 0.0536*D^1.77/rho_l;
         U_max = ( (1 - 0.75*V_bubi(i))/(1 - V_bubi(i)) )*V_bubi(i) * D^2/(48*nu_t);
         mean_shear = 0.53*U_max/(0.5*D);
@@ -1825,6 +1857,8 @@ for i = 1:N_full + 1
         
         for k = 1:N_ab*2
             for l = 1:N_ab
+                
+                
                 % radius and diameter of bubble i and bubble j
                 % that was the original indices, had to change when I
                 % went to a 1D model. now it's really l and j
@@ -1854,12 +1888,15 @@ for i = 1:N_full + 1
                 rb_eq = ( (1./rbi + 1./rbj)/2 ).^-1;
                 
                 % contanct time
-                t_cont = 0.1*rb_eq.^(2/3) ./ turb_diss.^(1/3); % prince + blanch, 1990
+                % prince + blanch, 1990, in turn from Levich, 1962
+                % note I added the 0.1 factor in front. P+B say this is
+                % really just an order of magnitude (if that) estimate
+                %                  t_cont = 0.1*rb_eq.^(2/3) ./ turb_diss.^(1/3);
                 
                 % kamp & chesters, 2001
-                %                 rho_c = rho_l;
-                %                 C_vm = 0.8;
-                %                 t_cont = sqrt( rho_c*C_vm/(3*sigma) * ( 2*dbi*dbj/(dbi + dbj))^3 );
+                rho_c = rho_l;
+                C_vm = 0.8;
+                t_cont = sqrt( rho_c*C_vm/(3*sigma) * ( 2*dbi.*dbj./(dbi + dbj)).^3 );
                 
                 % film initial and final thicknesses
                 film_i = 1e-4;
@@ -2022,7 +2059,7 @@ else
     
 end
 % if constants.step == 1
-%     disp(num2str(q_lw_NB))
+%     disp(num2str(q_lw))
 % end
 
 A_l = 4*V_l/D + pi/4*D^2;
@@ -2143,6 +2180,11 @@ if ~isempty(ind_negative) && sum( dy(ind_negative) < 0 ) > 0
         end
     end
 end
+
+
+% if constants.t > 0.0007
+%     keyboard
+% end
 
 
 if nargout == 1
