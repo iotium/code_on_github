@@ -45,7 +45,7 @@ constants.fluid = fluid;
 
 ADQMOM = 'off';
 
-N_nodes = 80;
+N_nodes = 100;
 constants.N_nodes = N_nodes;
 
 N_mom = 4;
@@ -77,12 +77,12 @@ N_rw = 20;
 constants.N_rw = N_rw;
 
 constants.C_qdot_lw = 1e-5;
-constants.C_coalescence = 1e-2;
+constants.C_coalescence = 2e-2;
 constants.C_rdot = (3/(2*pi));%2.5*pi;
-constants.C_u_rise = 1;
-constants.C_nuc_rate = 1e1;
+constants.C_u_rise = 1e0;
+constants.C_nuc_rate = 6e5;
 constants.n_nuc_freq = 3;
-constants.C_r_nuc = 2;
+constants.C_r_nuc = 1;
 constants.C_dTs = 1;
 constants.C_x_inj = 1;
 constants.coalescence_switch = 'on';
@@ -140,7 +140,7 @@ t_end = 1e3;         % [s] end time (if LRO doesn't happen first)
 LRO_tol = 1e-1;     % [s] tolerance for resolving the LRO point
 dT_sup_tol = 1e-14;
 
-ode_solver = 'RKF'; % [] options:
+ode_solver = 'DP'; % [] options:
 % 'RKF' for runge-kutta-fehlberg
 % 'euler' for 1st order euler
 % 'RK4' for 4th order runge-kutta
@@ -157,8 +157,6 @@ N_dim = 4 + 2*N_rw + N_mom*N_nodes;
 hesson_fit = load('hesson_fit');
 constants.hesson_fit = hesson_fit;
 
-
-
 if strcmp(fluid,'N2O')
     PDT = load('N2O_PDT_table','PDT');
     PDT = PDT.PDT;
@@ -172,7 +170,6 @@ else
 end
 constants.bubble_rise_velocity_fit = bubble_rise_velocity_fit.fittedmodel;
 
-
 % need this code for using qinterp2:
 Tvec_table = PDT.T;
 Pvec_table = PDT.P;
@@ -180,7 +177,6 @@ Pvec_table = PDT.P;
 [Tgrid_table, Pgrid_table] = meshgrid(Tvec_table, Pvec_table);
 PDT.T = Tgrid_table;
 PDT.P = Pgrid_table;
-
 
 %% initialize things
 
@@ -246,16 +242,16 @@ V_bubi = 4/3*pi*mom(:,V_moment_index);
 
 
 % [P] = refpropm('P','T',Ti-0.01,'Q',0.5,fluid);
-% 
+%
 % % [rho_tg, P] = refpropm('-P','T',Ti+0.05,'Q',0.5,fluid);
 % % [rho_l] = refpropm('+','T',Ti,'Q',0.5,fluid);
 % % [u_tg] = refpropm('U', 'T', Ti +0.05,'Q', 1, fluid);
 % P = P*1e3;
-% 
+%
 % rho_l = qinterp2(PDT.T, PDT.P, PDT.D_liq, Ti, P/1e3);
-% 
+%
 % [~, rho_tg, ~, u_tg] = fits_for_getting_P(P, fluid);
-% 
+%
 % rho_tg_sat = rho_tg;
 
 % P = 1e3*refpropm('P','T',Ti,'Q',0,fluid);
@@ -297,24 +293,24 @@ Pi = converge_on_IC(Ti, V_tg, V_l, ...
     V_tank, V_node, V_bubi, PDT, guesses, constants, fluid);
 
 if strcmp(constants.property_source,'PDT')
-
+    
     rho_l = qinterp2(PDT.T, PDT.P, PDT.D_liq, Ti, Pi/1e3);
-
+    
     % if rho_l is NaN, it means we went outside the bounds of PDT, so
     % instead extrapolate it using interp2 (slower than qinterp2)
     if isnan(rho_l)
         rho_l = interp2(PDT.T, PDT.P, PDT.D_liq, Ti, Pi/1e3, 'spline');
     end
-
+    
     [~, rho_tg, ~, u_tg] = fits_for_getting_P(Pi, fluid);
-
-
+    
+    
 elseif strcmp(constants.property_source,'refprop')
-
+    
     rho_l = get_D_from_TP(Ti, Pi, guesses, fluid);
-
+    
     [rho_tg, u_tg] = refpropm('DU','P',Pi/1e3,'Q',1,fluid);
-
+    
 end
 
 P = Pi;
@@ -625,8 +621,15 @@ while running == 1;
             if i == 1
                 
                 % f = f( t(n) , y(n) )
-                constants.step = 1;
-                f = diffeqns(y(:,n), constants, guesses, PDT);
+                
+                if n > 1
+                    % we calculated it at the end of last time step
+                    f = f_np1;
+                else
+                    % we haven't had a time step yet!
+                    constants.step = 1;
+                    f = diffeqns(y(:,n), constants, guesses, PDT);
+                end
             else
                 
                 % f for k(2) = f( t(n) + c(2)*h , y(n) + a(2,1)*k(1) )
@@ -645,12 +648,16 @@ while running == 1;
                 
                 r_q_new = g_q_new./w_q_new;
                 
-                % check to see if we're taking a step that'll cause errors
-                error_conditions = (T_l_new < 220) + (T_l_new > 305) ...
-                    + (T_l_new > (T_l(n) + 0.25)) + (T_l_new < (T_l(n) - 5))...
-                    + (max(r_q_new(:)) > 0.1) + (min(y_new) < 0);
+                V_bubi_new = 4/3*pi*sum( r_q_new.^((4-1)/p) .* w_q_new, 2 );
                 
-                if error_conditions > 0
+                % check to see if we're taking a step that'll cause errors
+                error_conditions = [(T_l_new < 220), (T_l_new > 305), ...
+                    (T_l_new > (T_l(n) + 0.25)),  (T_l_new < (T_l(n) - 5)),...
+                       (max(r_q_new(:)) > 0.1), (max(V_bubi_new) > 1)];
+                % (min(y_new) < 0), 
+                
+                if sum(error_conditions) > 0
+                    error_conditions(:)'
                     disp('we''re taking a bad step')
                     f = ones(size(f));
                     error_flag = 1;
@@ -685,6 +692,7 @@ while running == 1;
         y(:,n+1) = y(:,n) + (k*b);
         
         if error_flag == 0
+            % need to check the new y to make sure it's OK too
             
             variables = unpack_y(y(:,n+1), constants);
             
@@ -695,11 +703,12 @@ while running == 1;
             r_q_new = g_q_new./w_q_new;
             
             % check to see if we're taking a step that'll cause errors
-            error_conditions = (T_l_new < 220) + (T_l_new > 305) ...
-                + (T_l_new > (T_l(n) + 0.25)) + (T_l_new < (T_l(n) - 5))...
-                + (max(r_q_new(:)) > 0.1) + (min(y_new) < 0);
+            error_conditions = [(T_l_new < 220), (T_l_new > 305), ...
+                    (T_l_new > (T_l(n) + 0.25)),  (T_l_new < (T_l(n) - 5)),...
+                      (max(r_q_new(:)) > 0.1), (max(V_bubi_new) > 1)];
+                % (min(y_new) < 0), 
             
-            if error_conditions > 0
+            if sum(error_conditions) > 0
                 disp('we''re taking a bad step')
                 f = ones(size(f));
                 error_flag = 1;
@@ -829,17 +838,17 @@ while running == 1;
         
     end
     
-    
-    [~, debug_data] = diffeqns(y(:,n+1), constants, guesses, PDT);
+    constants.step = 1;
+    [f_np1, debug_data] = diffeqns(y(:,n+1), constants, guesses, PDT);
     
     m_tg(n+1) = debug_data.m_tg;
     U_tg(n+1) = debug_data.U_tg;
     m_l(n+1) = debug_data.m_l;
     T_l(n+1) = debug_data.T_l;
-    g_q = debug_data.g_q;
-    r_q = debug_data.r_q;
-    mom = debug_data.mom;
-    w_q = debug_data.w_q;
+    g_q(:,:,n+1) = debug_data.g_q;
+    r_q(:,:,n+1) = debug_data.r_q;
+    mom(:,:,n+1) = debug_data.mom;
+    w_q(:,:,n+1) = debug_data.w_q;
     V_bubi(:,n+1) = debug_data.V_bubi;
     T_s(n+1) = debug_data.T_s;
     P(n+1) = debug_data.P;
@@ -868,17 +877,24 @@ while running == 1;
     Vdot_bub(n+1) = debug_data.Vdot_bub;
     T_lw(:,n+1) = debug_data.T_lw;
     T_gw(:,n+1) = debug_data.T_gw;
-    u_rise = debug_data.u_rise;
+    u_rise(:,:,n+1) = debug_data.u_rise;
     N_bubi(:,n+1) = debug_data.N_bubi;
     N_full(n+1) = debug_data.N_full;
     
+    %     fprintf('r_q = ')
+    %     fprintf('%4.6g,\t', r_q(1:6,1))
+    %     fprintf('\n')
+    %
+    %     fprintf('w_q = ')
+    %     fprintf('%4.6g,\t ', w_q(1:6,1))
+    %     fprintf('\n')
     
-    CFL = h*max(u_rise(:))/L_node;
-    
-    if CFL > 1
-        disp('CFL > 1')
-    end
-    
+    %     CFL = h*max(u_rise(:))/L_node;
+    %
+    %     if CFL > 1
+    %         disp('CFL > 1')
+    %     end
+    %
     if max(r_q(:)) > 0.99
         disp('r_q is getting too big')
         keyboard
@@ -978,7 +994,7 @@ while running == 1;
     
     gas_holdup_next = gas_holdup(end) + (gas_holdup(end) - gas_holdup(end-1));
     
-    if gas_holdup_next > 0.80
+    if gas_holdup_next > 0.90
         running = 0;
         %         disp('alpha -> 0.8')
         stop_reason = 'alpha got big';
@@ -992,6 +1008,7 @@ while running == 1;
         time_since_save = etime(clock_now, clock_save);
         if time_since_save >= t_save;
             if save_stuff == 1
+                disp('saving')
                 save(save_filename,'-v7.3')
             end
             clock_save = clock;
@@ -1423,12 +1440,18 @@ V_tg = m_tg/rho_tg;
     k_l, Cp_l, s_l, MW, mu_l] = ...
     refpropm('H!RUO#LCSMV','T',T_l,'D&',rho_l,fluid);
 
+
+
 [P_sat, s_liq_sat, h_liq_sat] = refpropm('PSH', 'T', T_l, 'Q', 0, fluid);
 
 dP_drho_l = 1e3./drho_dP_l;
 dP_dT_l = dP_dT_l*1e3;
 alpha_l = k_l./(rho_l .* Cp_l);
 P_sat = 1e3*P_sat;
+
+nu_l = mu_l/rho_l;
+
+Pr_l = nu_l/alpha_l;
 
 % a lot of these properties aren't needed until later, but by calculating
 % them here I can reduce the number of refprop calls. Note that the next
@@ -1516,18 +1539,69 @@ mdot_out_vap = x_out*mdot_out_mix;
 % bulk flow velocity out the bottom
 u_bulk = mdot_out_mix / rho_liq_mix / (0.25 * pi * D^2);
 
+Mo = g*mu_l^4*(rho_l - rho_tg_sat)/(rho_l^2*sigma^3);
+
+Ja = Cp_l * rho_l * deltaT_sup/(rho_tg_v * h_lv);
+
 % rise velocity due to buoyancy
 % u_rise = sqrt( 2.14*sigma./( rho_l*(2*abs(r_q) ) + 0.505*g*( 2*abs(r_q) ) ) );
 % u_rise = 4 * 0.71*sqrt(g*2*abs(r_q));
 % u_rise = 2*g*rho_l*r_q.^2./(9*sigma);
 
+
+% using fits compiled from complicated correlations
 % u_rise = constants.C_u_rise * bubble_rise_velocity(r_q, T_tg);
-u_rise = constants.C_u_rise * exp( bubble_rise_velocity_fit(log(r_q), T_tg*ones(size(r_q)) ));
+% u_rise = constants.C_u_rise * exp( bubble_rise_velocity_fit(log(r_q), T_tg*ones(size(r_q)) ));
+%
+% % have to do this because the velocity fit is bad in this region
+% u_rise(r_q < 1e-6) = 0;
+
+
+% fit from fan and tsuchiya
+%
+n_FT = 1.6;
+c_FT = 1.2;
+Kbo_FT = 10.2;
+Kb_FT = max([ Kbo_FT*Mo^-0.038, 12]);
+
+De = 2*r_q;
+
+De_ND = De*sqrt(rho_l*g/sigma);
+
+delta_rho = rho_l - rho_tg_sat;
+
+u_rise_ND = ( (Mo^-0.25/Kb_FT * ( delta_rho/rho_l )^(5/4) * De_ND.^2 ).^-n_FT ...
+    + ( 2*c_FT./De_ND + ( delta_rho/rho_l ) * De_ND/2 ).^(-n_FT/2) ).^(-1/n_FT);
+
+u_rise = u_rise_ND/(rho_l/(sigma*g))^(1/4);
+
+u_rise = constants.C_u_rise * u_rise;%.*(( (1 - V_bubi.^(5/3))./(1 - V_bubi).^2) * ones(size(u_rise(1,:))) ).^(-0.5);
 
 u_rise(N_full+2:end,:) = 0;
 
-% have to do this because the velocity fit is bad in this region
-u_rise(r_q < 1e-6) = 0;
+if constants.step == 1
+    
+    u_max = max(u_rise(:));
+    CFL = constants.h*u_max/L_node;
+    if CFL > 1
+        fprintf('CFL>1, = %0.3g\n', CFL);
+    end
+end
+
+Re_max = max(max(r_q(1:N_full+1,:).*u_rise(1:N_full+1,:)))*rho_l/mu_l;
+Re_min = min(min(r_q(1:N_full+1,:).*u_rise(1:N_full+1,:)))*rho_l/mu_l;
+
+Eo = g*(rho_l - rho_tg_sat)*r_q.^2*4/sigma;
+
+Eo_max = max(max(Eo(1:N_full+1,:)));
+Eo_min = min(min(Eo(1:N_full+1,:)));
+
+% if constants.step == 1 && constants.t > 0.001
+%     fprintf('Re: %0.2g - %0.2g, Eo: %0.2g - %0.2g, Mo: %0.2g, Ja: %0.2g\n', Re_min, Re_max, Eo_min, Eo_max, Mo, Ja)
+% end
+
+% u_rise(r_q < 1e-6) = 0;
+
 
 if sum(sum(isnan(u_rise(1:N_full+1,:)))) > 0
     disp('nans in u_rise')
@@ -1537,67 +1611,139 @@ end
 duw_dx = zeros(size(w_q));
 dug_dx = duw_dx;
 
+uw_vec = (u_rise - u_bulk).*w_q;
+ug_vec = (u_rise - u_bulk).*g_q;
+
 for i = 1:N_full + 1
     % fluxes in and out of node
-    % backwards differencing
     
-    %     1st order
-    if i > 1
-        % top node
-        if i == N_full + 1 && node_level(i) < 0.5
-            duw_dx(i,:) = ( (u_rise(i,:) - u_bulk).*w_q(i,:) - (u_rise(i-1,:) - u_bulk).*w_q(i-1,:) )/((0.5 + node_level(i))*L_node);
-            dug_dx(i,:) = ( (u_rise(i,:) - u_bulk).*g_q(i,:) - (u_rise(i-1,:) - u_bulk).*g_q(i-1,:) )/((0.5 + node_level(i))*L_node);
-        else
-            duw_dx(i,:) = ( (u_rise(i,:) - u_bulk).*w_q(i,:) - (u_rise(i-1,:) - u_bulk).*w_q(i-1,:) )/L_node;
-            dug_dx(i,:) = ( (u_rise(i,:) - u_bulk).*g_q(i,:) - (u_rise(i-1,:) - u_bulk).*g_q(i-1,:) )/L_node;
-        end
-    else
-        duw_dx(i,:) = ( u_rise(i,:) - u_bulk).*w_q(i,:)/L_node;
-        dug_dx(i,:) = ( u_rise(i,:) - u_bulk).*g_q(i,:)/L_node;
-    end
-    
-    %     % 2nd order
+    %     % 1st order backwards differencing
     %     if i > 1
     %         % top node
-    %             if i > 2
-    %             % normal points (need 2 beneath)
-    %             duw_dx(i,:) = ( 1.5*(u_rise(i,:) - u_bulk).*w_q(i,:) ...
-    %                 - 2*(u_rise(i-1,:) - u_bulk).*w_q(i-1,:) ...
-    %                 + 0.5*(u_rise(i-2,:) - u_bulk).*w_q(i-2,:))/(2*L_node);
-    %
-    %             dug_dx(i,:) = ( 1.5*(u_rise(i,:) - u_bulk).*g_q(i,:) ...
-    %                 - 2*(u_rise(i-1,:) - u_bulk).*g_q(i-1,:) ...
-    %                 + 0.5*(u_rise(i-2,:) - u_bulk).*g_q(i-2,:))/(2*L_node);
-    %
-    %             else
-    %                 % one above the bottom - use 1st order
-    %                 duw_dx(i,:) = ( (u_rise(i,:) - u_bulk).*w_q(i,:) - (u_rise(i-1,:) - u_bulk).*w_q(i-1,:) )/L_node;
-    %                 dug_dx(i,:) = ( (u_rise(i,:) - u_bulk).*g_q(i,:) - (u_rise(i-1,:) - u_bulk).*g_q(i-1,:) )/L_node;
-    %             end
-    %
-    %
-    %     else
-    %         % bottom node
-    %         duw_dx(i,:) = ( u_rise(i,:) - u_bulk).*w_q(i,:)/L_node;
-    %         dug_dx(i,:) = ( u_rise(i,:) - u_bulk).*g_q(i,:)/L_node;
-    %     end
-    
-    %
-    % % central differencing
-    %     if i > 1
-    %
-    %         if (i < N_full) || ( i == N_full && node_level(i+1) > 0.5 )
-    %             duw_dx(i,:) = ( (u_rise(i+1,:) - u_bulk).*w_q(i+1,:) - (u_rise(i-1,:) - u_bulk).*w_q(i-1,:) )/(2*L_node);
-    %             dug_dx(i,:) = ( (u_rise(i+1,:) - u_bulk).*g_q(i+1,:) - (u_rise(i-1,:) - u_bulk).*g_q(i-1,:) )/(2*L_node);
+    %         if i == N_full + 1 && node_level(i) < 0.5
+    %             duw_dx(i,:) = ( (u_rise(i,:) - u_bulk).*w_q(i,:) - (u_rise(i-1,:) - u_bulk).*w_q(i-1,:) )/((0.5 + node_level(i))*L_node);
+    %             dug_dx(i,:) = ( (u_rise(i,:) - u_bulk).*g_q(i,:) - (u_rise(i-1,:) - u_bulk).*g_q(i-1,:) )/((0.5 + node_level(i))*L_node);
     %         else
     %             duw_dx(i,:) = ( (u_rise(i,:) - u_bulk).*w_q(i,:) - (u_rise(i-1,:) - u_bulk).*w_q(i-1,:) )/L_node;
     %             dug_dx(i,:) = ( (u_rise(i,:) - u_bulk).*g_q(i,:) - (u_rise(i-1,:) - u_bulk).*g_q(i-1,:) )/L_node;
     %         end
-    %
     %     else
     %         duw_dx(i,:) = ( u_rise(i,:) - u_bulk).*w_q(i,:)/L_node;
     %         dug_dx(i,:) = ( u_rise(i,:) - u_bulk).*g_q(i,:)/L_node;
     %     end
+    
+    %     % central differencing (2nd order)
+    %         if i > 1
+    %
+    %             if (i < N_full) || ( i == N_full && node_level(i+1) > 0.5 )
+    %                 duw_dx(i,:) = ( (u_rise(i+1,:) - u_bulk).*w_q(i+1,:) - (u_rise(i-1,:) - u_bulk).*w_q(i-1,:) )/(2*L_node);
+    %                 dug_dx(i,:) = ( (u_rise(i+1,:) - u_bulk).*g_q(i+1,:) - (u_rise(i-1,:) - u_bulk).*g_q(i-1,:) )/(2*L_node);
+    %             else
+    %                 duw_dx(i,:) = ( (u_rise(i,:) - u_bulk).*w_q(i,:) - (u_rise(i-1,:) - u_bulk).*w_q(i-1,:) )/L_node;
+    %                 dug_dx(i,:) = ( (u_rise(i,:) - u_bulk).*g_q(i,:) - (u_rise(i-1,:) - u_bulk).*g_q(i-1,:) )/L_node;
+    %             end
+    %
+    %         else
+    %             duw_dx(i,:) = ( u_rise(i,:) - u_bulk).*w_q(i,:)/L_node;
+    %             dug_dx(i,:) = ( u_rise(i,:) - u_bulk).*g_q(i,:)/L_node;
+    %         end
+    %
+    %
+    %         % 2nd order backwards
+    %         if i > 1
+    %             % top node
+    %                 if i > 2
+    %                 % normal points (need 2 beneath)
+    %                 duw_dx(i,:) = ( 1.5*(u_rise(i,:) - u_bulk).*w_q(i,:) ...
+    %                     - 2*(u_rise(i-1,:) - u_bulk).*w_q(i-1,:) ...
+    %                     + 0.5*(u_rise(i-2,:) - u_bulk).*w_q(i-2,:))/(2*L_node);
+    %
+    %                 dug_dx(i,:) = ( 1.5*(u_rise(i,:) - u_bulk).*g_q(i,:) ...
+    %                     - 2*(u_rise(i-1,:) - u_bulk).*g_q(i-1,:) ...
+    %                     + 0.5*(u_rise(i-2,:) - u_bulk).*g_q(i-2,:))/(2*L_node);
+    %
+    %                 else
+    %                     % one above the bottom - use 1st order
+    %                     duw_dx(i,:) = ( (u_rise(i,:) - u_bulk).*w_q(i,:) - (u_rise(i-1,:) - u_bulk).*w_q(i-1,:) )/L_node;
+    %                     dug_dx(i,:) = ( (u_rise(i,:) - u_bulk).*g_q(i,:) - (u_rise(i-1,:) - u_bulk).*g_q(i-1,:) )/L_node;
+    %                 end
+    %
+    %
+    %         else
+    %             % bottom node
+    %             duw_dx(i,:) = ( u_rise(i,:) - u_bulk).*w_q(i,:)/L_node;
+    %             dug_dx(i,:) = ( u_rise(i,:) - u_bulk).*g_q(i,:)/L_node;
+    %         end
+    
+    
+    %     % using finite_diff (various possibilities)
+    %     if i > 1
+    %
+    %
+    %         if i == N_full + 1
+    %             for j = 1:N_ab
+    %                 duw_dx(i,j) = finite_diff(uw_vec(:,j), 1, N_full+1, i, L_node, 'backwards');
+    %                 dug_dx(i,j) = finite_diff(ug_vec(:,j), 1, N_full+1, i, L_node, 'backwards');
+    %             end
+    %         else
+    %
+    %             for j = 1:N_ab
+    %                 duw_dx(i,j) = finite_diff(uw_vec(:,j), 1, N_full+1, i, L_node, 'central');
+    %                 dug_dx(i,j) = finite_diff(ug_vec(:,j), 1, N_full+1, i, L_node, 'central');
+    %             end
+    %         end
+    %
+    %     else
+    %         % bottom node
+    %         duw_dx(i,:) = uw_vec(i,:)/L_node;
+    %         dug_dx(i,:) = ug_vec(i,:)/L_node;
+    %     end
+    %
+    %
+    
+    % 1st order upwind
+    
+    if i > 1 && i < N_full + 1
+        % interior grid points
+        
+        for j = 1:N_ab
+        
+            if u_rise(i,j) - u_bulk > 0
+                % rising: flux in is from -x
+                flux_in = w_q(i-1,j)*0.5*((u_rise(i,j) - u_bulk) + (u_rise(i-1,j) - u_bulk));
+                flux_out = w_q(i,j)*0.5*((u_rise(i+1,j) - u_bulk) + (u_rise(i,j) - u_bulk));
+                duw_dx(i,j) = -(flux_in - flux_out)/L_node;
+                
+                flux_in = g_q(i-1,j)*0.5*((u_rise(i,j) - u_bulk) + (u_rise(i-1,j) - u_bulk));
+                flux_out = g_q(i,j)*0.5*((u_rise(i+1,j) - u_bulk) + (u_rise(i,j) - u_bulk));
+                dug_dx(i,j) = -(flux_in - flux_out)/L_node;
+            else
+                % falling: flux in is from +x
+                flux_in = w_q(i+1,j)*0.5*((u_rise(i+1,j) - u_bulk) + (u_rise(i,j) - u_bulk));
+                flux_out = w_q(i,j)*0.5*((u_rise(i,j) - u_bulk) + (u_rise(i-1,j) - u_bulk));
+                duw_dx(i,j) = (flux_in - flux_out)/L_node;
+                
+                flux_in = g_q(i+1,j)*0.5*((u_rise(i+1,j) - u_bulk) + (u_rise(i,j) - u_bulk));
+                flux_out = g_q(i,j)*0.5*((u_rise(i,j) - u_bulk) + (u_rise(i-1,j) - u_bulk));
+                dug_dx(i,j) = (flux_in - flux_out)/L_node; 
+            end
+        
+        end
+        
+    else
+        
+        if i == 1
+            % bottom point
+            
+            duw_dx(i,:) = uw_vec(i,:)/L_node;
+            dug_dx(i,:) = ug_vec(i,:)/L_node;
+        else
+            % top point
+            duw_dx(i,:) = ( uw_vec(i,:) - uw_vec(i-1,:) )/(L_node);
+            dug_dx(i,:) = ( ug_vec(i,:) - ug_vec(i-1,:) )/(L_node);
+        end
+    end
+    
     
 end
 
@@ -1631,10 +1777,10 @@ for i = 1:N_full + 1
     
     if deltaT_sup_node > 1e-4
         % jakob number
-        Ja_T = Cp_l * rho_l * C_dTs * deltaT_sup_node/(rho_tg * h_lv);
+        Ja_T = Cp_l * rho_l * C_dTs * deltaT_sup_node/(rho_tg_v * h_lv);
         
         % radius of new bubbles
-        r_nuc = C_r_nuc * 2*sigma*T_s/(rho_tg * h_lv * C_dTs * deltaT_sup_node);
+        r_nuc = C_r_nuc * 2*sigma*T_s/(rho_tg_v * h_lv * C_dTs * deltaT_sup_node);
         
         % bubble radius rate of change
         
@@ -1644,7 +1790,7 @@ for i = 1:N_full + 1
         rdot_rest_plesset = C_rdot * Ja_T^2 * alpha_l ./ r_q(i,:); % bubble at rest
         
         % equation 47 from scriven
-        beta_47 = sqrt(0.5*Ja_T./(1 + (Cp_l - Cp_tg)/Cp_l * rho_tg/rho_l * Ja_T));
+        beta_47 = sqrt(0.5*Ja_T./(1 + (Cp_l - Cp_tg)/Cp_l * rho_tg_v/rho_l * Ja_T));
         
         % eq 47 + eq 49 from scriven
         beta_rdot = beta_47 + sqrt(12/pi)*beta_47.^2;
@@ -1683,7 +1829,20 @@ for i = 1:N_full + 1
                 % rate of nucleation (mostly from shin & jones, 1993)
                 
                 % departure diameter [m]
-                r_dep = 0.5 * 2.97e4 * (P/P_cr)^-1.09 * ( K_b * T_cr / (P_cr * MW) )^(1/3);
+                r_dep1 = 0.5 * 2.97e4 * (P/P_cr)^-1.09 * ( K_b * T_cr / (P_cr * MW) )^(1/3);
+                
+                Ja_wall = (T_lw(1) - (T_s + dT_sat_depth)) * rho_l * Cp_l/(rho_tg_v*h_lv);
+                
+                K_1 = (Ja_wall/Pr_l)*( g*rho_l*(rho_l-rho_tg_v)/mu_l^2 * (sigma/(g*(rho_l-rho_tg_v)))^(3/2) )^(-1);
+                
+                Eo_dep = ( 0.19*( 1.8 + 1e5*K_1)^(2/3) )^2;
+                
+                r_dep = 0.5 * (Eo_dep*sigma /(g*(rho_l - rho_tg_v)) )^0.5;
+                
+                %                 if (i == 1 && constants.step == 1) && constants.t > 0.1
+                %                     fprintf('r_dep/r_dep1 = %0.4g\n', r_dep/r_dep1)
+                %                 end
+                
                 % correlation from Jensen & Memmel, 1986
                 % gives values on the order of 10-20 microns
                 
@@ -1747,7 +1906,7 @@ for i = 1:N_full + 1
     else
         if deltaT_sup < -0.5
             disp('real subcooled')
-            keyboard
+%             keyboard
         end
         % no superheat -> no bubble growth or nucleation
         r_nuc = 0;
@@ -1758,7 +1917,7 @@ for i = 1:N_full + 1
     end
     
     % rdot term based on rho_dot
-    rdot_rhodot = -guesses.rhodot_tg_sat/rho_tg_sat * r_q(i,:)/3;
+    rdot_rhodot = 0;%-guesses.rhodot_tg_sat/rho_tg_sat * r_q(i,:)/3;
     
     % generat scaled abscissas for more accurate calculations
     % later on, _s will signify scaled (I think)
@@ -1791,11 +1950,6 @@ for i = 1:N_full + 1
     %         fprintf('spec nuc rate = %0.4g\n growth_int = %0.4g\n',spec_nuc_rate,growth_int_s(V_moment_index)*r_m^3)
     %     end
     
-    
-    % birth due to nucleation and
-    % death due to bubbles getting too large
-    % need to change death to be from reaching the free surface!
-    % also need to add fluxes between nodes!
     
     % preallocate
     birth_int_s = zeros(1,N_ab*2);
@@ -2101,12 +2255,12 @@ Vdot_l = solve_for_Vdot(Udot_tgi, mdot_tg, m_tg, ...
     du_dT_sat_tg_v, du_dT_sat_tg_l, dP_dT_tg_sat, ...
     rho_tg_v, u_tg, guesses, Vdot_bub);
 
-if Vdot_l == pi
-    disp('vdot error')
-    constants.error_detected = 1;
-    Vdot_l = guesses.Vdot_l;
-    keyboard
-end
+% if Vdot_l == pi
+%     disp('vdot error')
+%     constants.error_detected = 1;
+%     Vdot_l = guesses.Vdot_l;
+%     keyboard
+% end
 
 Vdot_tg = - Vdot_l - Vdot_bub;
 

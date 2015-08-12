@@ -177,7 +177,7 @@ switch specified_case
         k_w = 16.3;  
     case 10
         % CO2 test #91 with glass gauge
-        Ti = 18.5+273.15;           % [K] initial temperature
+        Ti = 20.5+273.15;           % [K] initial temperature
         fill_level = 0.82;        % [] initial fill_level ratio (by volume)
         %         E = 2.1e4;          % [] heat transfer multiplier
         V_tank = 1.233e-3;   % [m^3] tank volume

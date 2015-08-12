@@ -1,5 +1,6 @@
 
 function out = bdiff(in,j,n,t,adaptive)
+
 % n = current step
 % j = first step
 % in = vector of whatever to diff
