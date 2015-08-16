@@ -17,9 +17,13 @@ load their_data
 % P = glass_gauge236.p;
 % t = glass_gauge236.t;
 
-P = glass_gauge291.p;
-t = glass_gauge291.t;
-T_surface = glass_gauge291.T_surface;
+% P = glass_gauge291.p;
+% t = glass_gauge291.t;
+% T_surface = glass_gauge291.T_surface;
+
+P = glass_gauge289.p;
+t = glass_gauge289.t;
+T_surface = glass_gauge289.T_surface;
 
 % P_out = interp1(t/t(end), P, t_sim/t_sim(end));
 P_out = interp1(t, P, t_sim);
