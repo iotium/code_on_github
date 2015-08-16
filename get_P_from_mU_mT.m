@@ -13,7 +13,7 @@ if isnan(test_val) || (isinf(test_val) || ~isreal(test_val))
     
 else
     
-    [P, ~, exitflag] = fzero(@(P) eqns_to_solve(P), guesses.P);
+    [P, ~, exitflag] = fzero(@(P) eqns_to_solve(P), guesses.P, constants.fsolve_options);
     
     if (exitflag ~= 1)
         disp('something wrong in solving for P')
@@ -52,7 +52,7 @@ end
             
         elseif strcmp(constants.property_source,'refprop')
             
-            rho_l = get_D_from_TP(T_l, P, guesses, fluid);
+            rho_l = get_D_from_TP(T_l, P, guesses, constants, fluid);
             
         end
         

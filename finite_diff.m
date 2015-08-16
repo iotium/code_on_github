@@ -1,11 +1,11 @@
-function out = finite_diff(in,first_step,last_step,current_step,h, direction)
+function out = finite_diff(in, first_step, last_step, current_step, h, direction, max_order)
 % equispaced grids only!
 % n = current step
 % j = first step
 % in = vector of whatever to diff
 % h = time step
 
-max_order = 3;
+% max_order = 3;
 
 n = current_step;
 

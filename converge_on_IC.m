@@ -8,7 +8,7 @@ P_guess = 1e3*refpropm('P','T',Ti,'Q',0.5,fluid);
 
 guesses.P = P_guess;
 
-Pi = fzero(@equations_to_solve, P_guess);
+Pi = fzero(@equations_to_solve, P_guess, constants.fsolve_options);
 
     function E = equations_to_solve(P1)
         
@@ -27,7 +27,7 @@ Pi = fzero(@equations_to_solve, P_guess);
             
         elseif strcmp(constants.property_source,'refprop')
             
-            rho_l = get_D_from_TP(Ti, P1, guesses, fluid);
+            rho_l = get_D_from_TP(Ti, P1, guesses, constants, fluid);
             
             [rho_tg, u_tg] = refpropm('DU','P',P1/1e3,'Q',1,fluid);
             
