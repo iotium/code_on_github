@@ -67,7 +67,7 @@ N_ab = N_mom/2;
 constants.N_ab = N_ab; % number of abscissas
 % (2*N = number of moments, going from 0 to 2N-1)
 
-constants.phi = 0.0001;
+constants.phi = 0.1;
 
 clock_save = clock;
 clock_start = clock;
@@ -77,21 +77,22 @@ clock_plot = clock;
 N_rw = 20;
 constants.N_rw = N_rw;
 
-constants.C_qdot_lw = 1e-4;
+constants.C_qdot_lw = 5e-4;
 constants.C_coalescence = 2e-2;
 constants.C_rdot = 1;%(3/(2*pi));%2.5*pi;
 constants.C_u_rise = 1e0;
-constants.C_nuc_rate = 6e5;
+constants.C_nuc_rate = 6e4;
 constants.n_nuc_freq = 3;
 constants.C_r_nuc = 1;
 constants.C_dTs = 1;
 constants.C_x_inj = 1;
 constants.coalescence_switch = 'on';
 save_filename = 'bubble_sim_data.mat';
-d_inj = 0.056 * 0.0254;
+d_inj = 0.070 * 0.0254;
+% d_inj = 0.056 * 0.0254;
 A_inj = pi/4 * (d_inj^2);
 %     A_inj = 1.8e-8;
-specified_case = 10;
+specified_case = 11;
 
 constants.f_feedline = 0.0;
 constants.L_feedline = 5 * 0.0254;
@@ -511,7 +512,7 @@ while running == 1;
         fprintf(['t = %#4.4g, dt = %#4.4g, P = %#4.4g, alpha = %#4.4g, dT_sup = %#6.6g,' ...
             ' V_bub = %#4.4g, T_l = %#4.4g, m_l/m_li = %#4.4g,'...
             ' m_tg/m_tgi -1 = %#4.4g, fill_level%% = %#4.4g, Vdot_l = %#4.4g\n'],...
-            t(n), t(n) - t(max([1, n-1])), P(n)/6895, gas_holdup(n), deltaT_sup(n), ...
+            t(n), t(n) - t(max([1, n-1])), P(n)/1e6, gas_holdup(n), deltaT_sup(n), ...
             V_bub(n), T_l(n), m_l(n)/m_l(1), m_tg(n)/m_tg(1)-1, 100*fill_level(n), Vdot_l(n+1));
         
         %                 fprintf('y:\t \t \t \t');
@@ -898,7 +899,7 @@ while running == 1;
     %
     if max(r_q(:)) > 0.99
         disp('r_q is getting too big')
-        keyboard
+%         keyboard
     end
     
     
@@ -974,7 +975,10 @@ while running == 1;
     
     n = n + 1;
     
-    if dT_sup
+    if deltaT_sup(n) > 7.5
+        running = 0;
+        stop_reason = 'superheat got bigger than 7.5';
+    end
     
     if (sum(abs(imag(y(:,n)))) > 0) || (sum(isnan(y(:,n))) > 0)
         running = 0;
@@ -1331,7 +1335,7 @@ r_q = g_q./w_q;
 
 if min(r_q) < 0
     disp('negative abscissa')
-    keyboard
+%     keyboard
 end
 
 % get the moments from gauss quadrature
@@ -1359,7 +1363,8 @@ end
 
 if max(V_bubi) > 1
     disp('V_bubi > 1!!')
-    keyboard
+%     keyboard
+V_bubi(V_bubi>1) = 0.99;
 end
 
 % get system pressure
@@ -1371,7 +1376,7 @@ if (P == pi) || isnan(P)
     disp('P error')
     constants.error_detected = 1;
     P = guesses.P;
-    keyboard
+%     keyboard
 end
 
 % get density of liquid and ullage based on temperature and pressure
@@ -1573,34 +1578,65 @@ Ja = Cp_l * rho_l * deltaT_sup/(rho_tg_v * h_lv);
 % % have to do this because the velocity fit is bad in this region
 % u_rise(r_q < 1e-6) = 0;
 
-
-% fit from fan and tsuchiya
-%
-n_FT = 1.6;
-c_FT = 1.2;
-Kbo_FT = 10.2;
-Kb_FT = max([ Kbo_FT*Mo^-0.038, 12]);
-
-De = 2*r_q;
-
-De_ND = De*sqrt(rho_l*g/sigma);
+u_rise = zeros(size(r_q));
 
 delta_rho = rho_l - rho_tg_sat;
 
-u_rise_ND = ( (Mo^-0.25/Kb_FT * ( delta_rho/rho_l )^(5/4) * De_ND.^2 ).^-n_FT ...
-    + ( 2*c_FT./De_ND + ( delta_rho/rho_l ) * De_ND/2 ).^(-n_FT/2) ).^(-1/n_FT);
+for i = 1:N_full+1
+    
+    if V_bubi(i) > 0.3
+        Eprime = (1 - V_bubi(i)).^2;
+        Cd = 8*Eprime/3;
+        u_rise(i,:) = sqrt(8/3 * delta_rho * g * r_q(i,:)./(rho_l * Cd));
+    else
+        
+        
+        % fit from fan and tsuchiya
+        %
+        n_FT = 1.6;
+        c_FT = 1.2;
+        Kbo_FT = 10.2;
+        Kb_FT = max([ Kbo_FT*Mo^-0.038, 12]);
+        
+        De = 2*r_q(i,:);
+        
+        De_ND = De*sqrt(rho_l*g/sigma);
+        
+        
+        u_rise_ND = ( (Mo^-0.25/Kb_FT * ( delta_rho/rho_l )^(5/4) * De_ND.^2 ).^-n_FT ...
+            + ( 2*c_FT./De_ND + ( delta_rho/rho_l ) * De_ND/2 ).^(-n_FT/2) ).^(-1/n_FT);
+        
+        u_rise_FT = u_rise_ND/(rho_l/(sigma*g))^(1/4);
+        
+        % u_rise = constants.C_u_rise * u_rise;%.*(( (1 - V_bubi.^(5/3))./(1 - V_bubi).^2) * ones(size(u_rise(1,:))) ).^(-0.5);
+        
+        alpha_IZ = V_bubi(i)*ones(1,N_ab);
+        
+        mu_mix = mu_l*(1 - alpha_IZ).^(-2.5*(mu_tg + 0.4*mu_l)/(mu_tg + mu_l));
+        
+        Re_inf = rho_l * u_rise_FT .* 2 .* r_q(i,:)./mu_l;
+        
+        u_rise(i,:) = u_rise_FT.* (1 - alpha_IZ).*mu_l./mu_mix .* ...
+            (1 + 0.1*Re_inf.^0.75)./(1 + 0.1*Re_inf.^0.75.*( sqrt(1 - alpha_IZ).*mu_l./mu_mix).^(6/7));
+        
+        Re = rho_l*u_rise(i,:).*2.*r_q(i,:)./mu_mix;
+        
+        for j = 1:N_ab
+            
+            if Re(j) > 1e3
+                E = ( (1 + 17.67*(1 - V_bubi(i)).^(6/7) )./(18.67*(1 - V_bubi(i)))).^2;
+                Eo = g*delta_rho*4*pi*r_q(i,j).^2/sigma;
+                Cd = 2/3*E.*Eo;
+                u_rise(i,j) = sqrt(8/3 * delta_rho * g * r_q(i,j)./(rho_l * Cd));
+                
+            end
+            
+        end
+        
+    end
+    
+end
 
-u_rise_FT = u_rise_ND/(rho_l/(sigma*g))^(1/4);
-
-% u_rise = constants.C_u_rise * u_rise;%.*(( (1 - V_bubi.^(5/3))./(1 - V_bubi).^2) * ones(size(u_rise(1,:))) ).^(-0.5);
-alpha_IZ = V_bubi*ones(1,N_ab);
-
-mu_mix = mu_l*(1 - alpha_IZ).^(-2.5*(mu_tg + 0.4*mu_l)/(mu_tg + mu_l));
-
-Re_inf = rho_l * u_rise_FT .* 2 .* r_q./mu_l;
-
-u_rise = u_rise_FT.* (1 - alpha_IZ).*mu_l./mu_mix .* ...
-    (1 + 0.1*Re_inf.^0.75)./(1 + 0.1*Re_inf.^0.75.*( sqrt(1 - alpha_IZ).*mu_l./mu_mix).^(6/7));
 
 u_rise(N_full+2:end,:) = 0;
 
@@ -1608,8 +1644,8 @@ if constants.step == 1
     
     u_max = max(u_rise(:));
     CFL = constants.h*u_max/L_node;
-    if CFL > 1
-        fprintf('CFL>1, = %0.3g\n', CFL);
+    if CFL > 0.5
+        fprintf('CFL>0.5, = %0.3g\n', CFL);
     end
 end
 
@@ -1630,7 +1666,7 @@ Eo_min = min(min(Eo(1:N_full+1,:)));
 
 if sum(sum(isnan(u_rise(1:N_full+1,:)))) > 0
     disp('nans in u_rise')
-    keyboard
+%     keyboard
 end
 
 duw_dx = zeros(size(w_q));
@@ -1678,52 +1714,52 @@ for i = 1:N_full + 1
     
     %
     
-% %     1st order upwind
-%     if i > 1 && i < N_full
-% %         interior grid points
-%         
-%         for j = 1:N_ab
-%             
-%             if u_rise(i,j) - u_bulk > 0
-%                 rising: flux in is from -x
-%                 flux_bot = w_q(i-1,j)*0.5*(u_vec(i,j) + u_vec(i-1,j));
-%                 flux_top = w_q(i,j)*0.5*(u_vec(i+1,j) + u_vec(i,j));
-%                 duw_dx(i,j) = (flux_top - flux_bot)/L_node;
-%                 
-%                 flux_bot = g_q(i-1,j)*0.5*(u_vec(i,j) + u_vec(i-1,j));
-%                 flux_top = g_q(i,j)*0.5*(u_vec(i+1,j) + u_vec(i,j));
-%                 dug_dx(i,j) = (flux_top - flux_bot)/L_node;
-%             else
-%                 falling: flux in is from +x
-%                 flux_top = w_q(i+1,j)*0.5*(u_vec(i+1,j) + u_vec(i,j));
-%                 flux_bot = w_q(i,j)*0.5*(u_vec(i,j) + u_vec(i-1,j));
-%                 duw_dx(i,j) = (flux_top - flux_bot)/L_node;
-%                 
-%                 flux_top = g_q(i+1,j)*0.5*(u_vec(i+1,j) + u_vec(i,j));
-%                 flux_bot = g_q(i,j)*0.5*(u_vec(i,j) + u_vec(i-1,j));
-%                 dug_dx(i,j) = (flux_top - flux_bot)/L_node;
-%             end
-%             
-%         end
-%         
-%     else
-%         
-%         if i == 1
-%             bottom point
-%             
-%             duw_dx(i,:) = uw_vec(i,:)/L_node;
-%             dug_dx(i,:) = ug_vec(i,:)/L_node;
-%                         duw_dx(i,:) = (uw_vec(i+1,:) - uw_vec(i,:))/L_node;
-%                         dug_dx(i,:) = (ug_vec(i+1,:) - ug_vec(i,:))/L_node;
-%         else
-%             top 2 points
-%                         duw_dx(i,:) = ( uw_vec(i,:) - uw_vec(i-1,:) )/(L_node);
-%                         dug_dx(i,:) = ( ug_vec(i,:) - ug_vec(i-1,:) )/(L_node);
-%             duw_dx(i,:) = zeros(size(uw_vec(i,:)));
-%             dug_dx(i,:) = zeros(size(ug_vec(i,:)));
-%         end
-%     end
-%     
+    % %     1st order upwind
+    %     if i > 1 && i < N_full
+    % %         interior grid points
+    %
+    %         for j = 1:N_ab
+    %
+    %             if u_rise(i,j) - u_bulk > 0
+    %                 rising: flux in is from -x
+    %                 flux_bot = w_q(i-1,j)*0.5*(u_vec(i,j) + u_vec(i-1,j));
+    %                 flux_top = w_q(i,j)*0.5*(u_vec(i+1,j) + u_vec(i,j));
+    %                 duw_dx(i,j) = (flux_top - flux_bot)/L_node;
+    %
+    %                 flux_bot = g_q(i-1,j)*0.5*(u_vec(i,j) + u_vec(i-1,j));
+    %                 flux_top = g_q(i,j)*0.5*(u_vec(i+1,j) + u_vec(i,j));
+    %                 dug_dx(i,j) = (flux_top - flux_bot)/L_node;
+    %             else
+    %                 falling: flux in is from +x
+    %                 flux_top = w_q(i+1,j)*0.5*(u_vec(i+1,j) + u_vec(i,j));
+    %                 flux_bot = w_q(i,j)*0.5*(u_vec(i,j) + u_vec(i-1,j));
+    %                 duw_dx(i,j) = (flux_top - flux_bot)/L_node;
+    %
+    %                 flux_top = g_q(i+1,j)*0.5*(u_vec(i+1,j) + u_vec(i,j));
+    %                 flux_bot = g_q(i,j)*0.5*(u_vec(i,j) + u_vec(i-1,j));
+    %                 dug_dx(i,j) = (flux_top - flux_bot)/L_node;
+    %             end
+    %
+    %         end
+    %
+    %     else
+    %
+    %         if i == 1
+    %             bottom point
+    %
+    %             duw_dx(i,:) = uw_vec(i,:)/L_node;
+    %             dug_dx(i,:) = ug_vec(i,:)/L_node;
+    %                         duw_dx(i,:) = (uw_vec(i+1,:) - uw_vec(i,:))/L_node;
+    %                         dug_dx(i,:) = (ug_vec(i+1,:) - ug_vec(i,:))/L_node;
+    %         else
+    %             top 2 points
+    %                         duw_dx(i,:) = ( uw_vec(i,:) - uw_vec(i-1,:) )/(L_node);
+    %                         dug_dx(i,:) = ( ug_vec(i,:) - ug_vec(i-1,:) )/(L_node);
+    %             duw_dx(i,:) = zeros(size(uw_vec(i,:)));
+    %             dug_dx(i,:) = zeros(size(ug_vec(i,:)));
+    %         end
+    %     end
+    %
     % Roe
     if i > 1 && i < N_full
         % interior grid points
@@ -1829,7 +1865,7 @@ end
 
 if deltaT_sup > 15
     disp('real superheat!')
-    keyboard
+%     keyboard
 end
 
 
@@ -2156,7 +2192,7 @@ for i = 1:N_full + 1
         
         %         if mom(i,V_moment_index) > 1e-6
         disp('coalescence isn''t conserving mass')
-        keyboard
+%         keyboard
         %         end
     end
     
@@ -2173,7 +2209,7 @@ for i = 1:N_full + 1
             A2(2,:) = (1/p) * r_sp.^(1/p - 1);
         else
             A1(j+1,:) = (1 - j/p) * r_sp.^(j/p);
-            A2(j+1,:) = (j/p) * r_sp.^(j/p);
+            A2(j+1,:) = (j/p) * r_sp.^(j/p - 1);
         end
     end
     
@@ -2186,7 +2222,8 @@ for i = 1:N_full + 1
     
     a_q = alpha_q(1:N_ab);
     b_q_s = alpha_q(N_ab+1:end);
-    b_q = b_q_s.*r_q(i,:)'; % go from scaled b (ie b*) back to the real thing
+    %     b_q = b_q_s.*r_q(i,:)'; % go from scaled b (ie b*) back to the real thing
+    b_q = b_q_s * r_m;
     
     % have to put this in the right place
     % for i = 1, it should be 1, 2, ... N_ab
@@ -2288,17 +2325,10 @@ n_lw = 1 - 0.3*Pr^0.3;
 q_20 = 20e3;
 
 if T_lw(1) > T_s
-    
     q_lw = ( ( (T_lw(1) - T_s)*h_20_lw )^(1/n_lw) / q_20 ) ^(n_lw/(1 - n_lw));
-    
 else
-    
     q_lw = 0;
-    
 end
-% if constants.step == 1
-%     disp(num2str(q_lw))
-% end
 
 A_l = 4*V_l/D + pi/4*D^2;
 Qdot_lw = C_qdot_lw * q_lw*A_l;
@@ -2312,11 +2342,6 @@ Qdot_gw = Qdot('gw',T_tg,T_gw(1),rho_tg,m_tg,D);
 % Qdot_gw = 0;
 % net HT into gas
 Qdot_tg = Qdot_gw;
-
-% if constants.t > 3
-%     keyboard
-% end
-
 
 % not sure if this is correct... should it include a rhodot term?
 % probably!!!
@@ -2355,10 +2380,6 @@ Udot_l = Udot_li - P*Vdot_l;
 rhodot_l = mdot_l/V_l - m_l/V_l^2 * Vdot_l;
 
 Tdot_l = ( ( Udot_l - u_l*mdot_l )/m_l - du_drho_l*rhodot_l )/Cv_l;
-
-% if abs(Tdot_l) < 1e-1 && Tdot_l > 0
-%     keyboard
-% end
 
 % mass of wall exposed to liquid
 m_lw = tank_wall_mass(V_l,D,rho_w,t_w);
@@ -2418,11 +2439,6 @@ if ~isempty(ind_negative) && sum( dy(ind_negative) < 0 ) > 0
         end
     end
 end
-
-
-% if constants.t > 0.0007
-%     keyboard
-% end
 
 
 if nargout == 1
