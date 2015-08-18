@@ -1,0 +1,45 @@
+function [P_out, T_surface_out, LL_out] = load_experimental_data(t_sim)
+
+load their_data
+
+% P = N2O_11.p;
+% t = N2O_11.t;
+% 
+% P = N2O_2.p;
+% t = N2O_2.t;
+
+% P = quartz24.p;
+% t = quartz24.t;
+
+% P = quartz48.p;
+% t = quartz48.t;
+% t_LL =quartz48.t_LL;
+% LL = quartz48.LL;
+
+% P = glass_gauge236.p;
+% t = glass_gauge236.t;
+% t_LL = glass_gauge236.t_LL;
+% LL = glass_gauge236.LL;
+
+% P = glass_gauge291.p;
+% t = glass_gauge291.t;
+% T_surface = glass_gauge291.T_surface;
+% t_LL = glass_gauge291.t_LL;
+% LL = glass_gauge291.LL;
+
+P = glass_gauge257.p;
+t = glass_gauge257.t;
+T_surface = glass_gauge257.T_surface;
+t_LL = glass_gauge257.t_LL;
+LL = glass_gauge257.LL;
+
+P = glass_gauge289.p;
+t = glass_gauge289.t;
+T_surface = glass_gauge289.T_surface;
+t_LL = glass_gauge289.t_LL;
+LL = glass_gauge289.LL;
+
+% P_out = interp1(t/t(end), P, t_sim/t_sim(end));
+P_out = interp1(t, P, t_sim);
+T_surface_out = interp1(t, T_surface, t_sim);
+LL_out = interp1(t_LL, LL, t_sim);

@@ -157,7 +157,7 @@ switch specified_case
         t_w = 0.0254*1/4;   % [m] wall thickness
         D = sqrt(4/pi*V_tank/L_tank);
         % [m] tank diameter
-        k_w = 0.195;   
+        k_w = 0.195;
     case 9
         % CO2 test #236 with glass gauge
         Ti = 18.5+273.15;           % [K] initial temperature
@@ -174,7 +174,7 @@ switch specified_case
         t_w = 0.0254*0.551;   % [m] wall thickness
         D = sqrt(4/pi*V_tank/L_tank);
         % [m] tank diameter
-        k_w = 16.3;  
+        k_w = 16.3;
     case 10
         % CO2 test #291 with glass gauge
         Ti = 20.5+273.15;           % [K] initial temperature
@@ -191,7 +191,7 @@ switch specified_case
         t_w = 0.0254*0.551;   % [m] wall thickness
         D = sqrt(4/pi*V_tank/L_tank);
         % [m] tank diameter
-        k_w = 16.3;  
+        k_w = 16.3;
     case 11
         % N2O test #289 with glass gauge
         Ti = 19+273.15;           % [K] initial temperature
@@ -208,6 +208,23 @@ switch specified_case
         t_w = 0.0254*0.551;   % [m] wall thickness
         D = sqrt(4/pi*V_tank/L_tank);
         % [m] tank diameter
-        k_w = 16.3;  
+        k_w = 16.3;
+    case 12
+        % CO2 test #257 with glass gauge
+        Ti = 17.6+273.15;           % [K] initial temperature
+        fill_level = 0.825;        % [] initial fill_level ratio (by volume)
+        %         E = 2.1e4;          % [] heat transfer multiplier
+        V_tank = 1.233e-3;   % [m^3] tank volume
+        L_tank = 25.25*0.0254;     % [m] tank length
+        Cd = 1;         % [] injector Cd
+        %         A_inj = 3.15e-7;       % [m^2] injector area
+        Po = 1e5;           % [Pa] external pressure
+        T_air = 293;        % [K] air temperature
+        rho_w = 800;       % [kg/m^3] density of wall material (polycarb)
+        cv_w = 500;        % [J/kg.K] specific heat of wall (polycarb)
+        t_w = 0.0254*0.551;   % [m] wall thickness
+        D = sqrt(4/pi*V_tank/L_tank);
+        % [m] tank diameter
+        k_w = 16.3;
         
 end

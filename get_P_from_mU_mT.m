@@ -74,7 +74,7 @@ end
         
         if isnan(F) || ~isreal(F)
             disp('problem in solution of P equations')
-            keyboard
+%             keyboard
         end
     end
 

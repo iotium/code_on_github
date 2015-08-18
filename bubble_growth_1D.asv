@@ -1,4 +1,4 @@
-function varargout = bubble_growth(varargin)
+function varargout = bubble_growth_1D(varargin)
 
 tic
 % close all
@@ -33,33 +33,35 @@ switch computer
         max_comp_time = 120*60;
         
 end
-
-
+current_dir = pwd;
+results_save_dir = 'C:\Users\jonah\compiled research\model_results';
 % constants.property_source = 'PDT';
 constants.fsolve_options = optimset('TolX',1e-12,'Display','off');
 constants.property_source = 'refprop';
 constants.nuc_model = 'SJ';
 constants.ADQMOM_p = 1;
 p = constants.ADQMOM_p;
-fluid = 'N2O';
+fluid = 'CO2';
 constants.fluid = fluid;
 
 ADQMOM = 'off';
 
+if nargin == 0
+
 N_nodes = 50;
+N_mom = 6;
+rel_tol = 1e-4;     % [] max relative error allowed in adaptive scheme
+
+else
+    inputs = varargin{1};
+    N_nodes = inputs.N_nodes;
+    N_mom = inputs.N_mom;
+    rel_tol = inputs.rel_tol;
+end
+
 constants.N_nodes = N_nodes;
 
-N_mom = 6;
 IC_moments = gamma_dist_moments( 5e-10, 1e-3, N_mom, p);
-
-% 10%
-% IC_moments = exp([21.9729 13.3408 4.7871 -3.7236 -12.2013 -20.6546]');
-
-% 20%
-% IC_moments = exp([21.6316 13.3547 5.1438 -3.0327 -11.1808  -19.3057]');
-
-% 30%
-% IC_moments = exp([21.3164 13.2875 5.3121 -2.6353 -10.5581 -18.4594]');
 
 alpha_ic = 1e-12;
 
@@ -77,8 +79,8 @@ clock_plot = clock;
 N_rw = 20;
 constants.N_rw = N_rw;
 
-constants.C_qdot_lw = 5e-4;
-constants.C_coalescence = 2e-2;
+constants.C_qdot_lw = 2e-5;
+constants.C_coalescence = [1 5e-6 5e-2]; % collision efficiency, laminar shear, turbulence
 constants.C_rdot = 1;%(3/(2*pi));%2.5*pi;
 constants.C_u_rise = 1e0;
 constants.C_nuc_rate = 6e4;
@@ -86,13 +88,13 @@ constants.n_nuc_freq = 3;
 constants.C_r_nuc = 1;
 constants.C_dTs = 1;
 constants.C_x_inj = 1;
-constants.coalescence_switch = 'on';
-save_filename = 'bubble_sim_data.mat';
-d_inj = 0.070 * 0.0254;
+constants.coalescence_switch = 'off';
+save_filename = 'bubble_sim_data';
+d_inj = 0.066 * 0.0254;
 % d_inj = 0.056 * 0.0254;
 A_inj = pi/4 * (d_inj^2);
 %     A_inj = 1.8e-8;
-specified_case = 11;
+specified_case = 12;
 
 constants.f_feedline = 0.0;
 constants.L_feedline = 5 * 0.0254;
@@ -133,7 +135,6 @@ constants.V_node = V_node;
 % initialize program parameters
 h = 1e-12;           % [s] initial time step
 running = 1;        % [] switch, 1 = program running, 0 = program stopped
-rel_tol = 1e-4;     % [] max relative error allowed in adaptive scheme
 abs_tol = 1e9;     % [] max absolute error allowed in adaptive scheme
 min_error = 1e-4;   % [] min error (relative to error_tol) before step size is increased
 h_max = 1;       % [s] max allowable time step
@@ -653,7 +654,7 @@ while running == 1;
                 V_bubi_new = 4/3*pi*sum( r_q_new.^((4-1)/p) .* w_q_new, 2 );
                 
                 % check to see if we're taking a step that'll cause errors
-                error_conditions = [(T_l_new < 220), (T_l_new > 305), ...
+                error_conditions = [isnan(sum(y_new(:))), (T_l_new < 220), (T_l_new > 305), ...
                     (T_l_new > (T_l(n) + 0.25)),  (T_l_new < (T_l(n) - 5)),...
                     (max(r_q_new(:)) > 0.2), (max(V_bubi_new) > 1)];
                 % (min(y_new) < 0),
@@ -705,7 +706,7 @@ while running == 1;
             r_q_new = g_q_new./w_q_new;
             
             % check to see if we're taking a step that'll cause errors
-            error_conditions = [(T_l_new < 220), (T_l_new > 305), ...
+            error_conditions = [isnan(sum(y_new(:))), (T_l_new < 220), (T_l_new > 305), ...
                 (T_l_new > (T_l(n) + 0.25)),  (T_l_new < (T_l(n) - 5)),...
                 (max(r_q_new(:)) > 0.2), (max(V_bubi_new) > 1)];
             % (min(y_new) < 0),
@@ -1045,6 +1046,7 @@ end
 %% plotting and output
 
 if save_stuff == 1
+    cd(results_save_dir)
     
     if save_parameters_only == 1
         
@@ -1071,8 +1073,17 @@ if save_stuff == 1
             ,'alpha_f','fill_level_f','P_dev','-v7.3')
         
     else
-        
-        save(save_filename,'-v7.3')
+        file_exists = 1;
+        file_num = 1;
+        while file_exists
+            save_filename_numbered = [save_filename num2str(file_num)];
+            if ~exist(save_filename_numbered,'file')
+                save(save_filename_numbered,'-v7.3')
+                file_exists = 0;
+                cd(current_dir);
+            end
+            file_num = file_num+1;
+        end
         
     end
     
@@ -1085,7 +1096,7 @@ if plot_stuff == 1
     m_out = cumtrapz(t, mdot_out_liq + mdot_out_vap);
     mh_out = cumtrapz(t, (mdot_out_liq.*h_l + mdot_out_vap.*h_tg_sat));
     
-    [P_exp, T_lw_out_exp] = load_experimental_data(t);
+    [P_exp, T_lw_out_exp, LL_exp] = load_experimental_data(t, specified_case);
     
     T_l = y(4+N_rw,:);
     m_l = y(3+N_rw,:);
@@ -1154,10 +1165,11 @@ if plot_stuff == 1
     
     figure(6)
     hold on
-    plot(t, fill_level)
+    plot(t, fill_level, 'k', t, LL_exp, 'b')
     xlabel('Time [s]')
     ylabel('fill level [%]')
     title('fill level')
+    legend('Model','Experiment')
     
     
     %         figure(7)
@@ -1364,7 +1376,7 @@ end
 if max(V_bubi) > 1
     disp('V_bubi > 1!!')
 %     keyboard
-V_bubi(V_bubi>1) = 0.99;
+    V_bubi(V_bubi>1) = 0.99;
 end
 
 % get system pressure
@@ -2139,7 +2151,7 @@ for i = 1:N_full + 1
                 dbj = 2*rbj;
                 
                 % theta for laminar shear
-                qLS = 4/3*(rbi + rbj).^3*mean_shear;
+                qLS = C_coalescence(2) * 4/3*(rbi + rbj).^3*mean_shear;
                 
                 % rise velocity for bubble i and j
                 u_ri = sqrt( (2.14*sigma/(rho_l*dbi)) + 0.505*g*dbi);
@@ -2152,7 +2164,7 @@ for i = 1:N_full + 1
                 qB = Sij.*abs(u_ri - u_rj);
                 
                 % theta for turbulence
-                qT = 0.089*pi*(dbi + dbj).^2 .* turb_diss.^(1/3) .* sqrt(dbi.^(2/3) + dbj.^(2/3));
+                qT = C_coalescence(3) * 0.089*pi*(dbi + dbj).^2 .* turb_diss.^(1/3) .* sqrt(dbi.^(2/3) + dbj.^(2/3));
                 
                 % bubble radius
                 rb_eq = ( (1./rbi + 1./rbj)/2 ).^-1;
@@ -2176,7 +2188,7 @@ for i = 1:N_full + 1
                 t_coal = sqrt( rb_eq.^3 * rho_l/(16 * sigma) ) .* log( film_i ./ film_f);
                 
                 % coalescence kernel
-                beta = C_coalescence.*(qT + qB + qLS).*exp( - t_coal ./ t_cont);
+                beta = C_coalescence(1)*(qT + qB + qLS).*exp( - t_coal ./ t_cont);
                 
                 
                 coal_birth_s(k) = coal_birth_s(k) + sum( 0.5 * w_q(i,l) * w_q(i,:) .* ( abs(r_s(l))^3 + abs(r_s).^3 ).^((k-1)/(3*p)) .* beta );
@@ -2430,6 +2442,11 @@ dy = [mdot_tg;
     dw_dt';
     dg_dt'];
 
+if ~sum(isreal(dy(:))) || sum(isnan(dy(:)))
+    disp('complex or nans in derivatives')
+    error_flag = 1;
+end
+
 % correct for negative stuff
 if ~isempty(ind_negative) && sum( dy(ind_negative) < 0 ) > 0
     % we have negative dydt where y < 0!
@@ -2494,11 +2511,10 @@ else
     debug_data.u_rise = u_rise;
     debug_data.N_bubi = N_bubi;
     debug_data.N_full = N_full;
+%     debug_data.diff_eqns_error_flag = error_flag;
     
     varargout{2} = debug_data;
 end
 
 
-if ~sum(isreal(dy(:))) || sum(isnan(dy(:)))
-    disp('complex or nans in derivatives')
-end
+
