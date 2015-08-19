@@ -25,12 +25,12 @@ switch computer
         t_save = 3*60; % save interval in seconds
         plot_stuff = 1;
         save_stuff = 1;
-        save_periodically = 1;
+        save_periodically = 0;
         save_parameters_only = 0;
         plot_periodically = 0;
         t_plot = 5;
         time_out = 1;
-        max_comp_time = 120*60;
+        max_comp_time = 6*60*60;
         
 end
 current_dir = pwd;
@@ -48,15 +48,23 @@ ADQMOM = 'off';
 
 if nargin == 0
 
-N_nodes = 50;
+N_nodes = 1600;
 N_mom = 4;
-rel_tol = 1e-4;     % [] max relative error allowed in adaptive scheme
+rel_tol = 1e-3;     % [] max relative error allowed in adaptive scheme
+constants.C_qdot_lw = 2e-4;
+constants.C_coalescence = [0 5e-6 5e-2]; % collision efficiency, laminar shear, turbulence
+constants.C_nuc_rate = 6e4;
 
 else
     inputs = varargin{1};
     N_nodes = inputs.N_nodes;
     N_mom = inputs.N_mom;
     rel_tol = inputs.rel_tol;
+    
+    constants.C_qdot_lw = inputs.C_qdot_lw;
+constants.C_coalescence = inputs.C_coalescence;
+constants.C_nuc_rate = inputs.C_nuc_rate;
+
 end
 
 constants.N_nodes = N_nodes;
@@ -79,16 +87,17 @@ clock_plot = clock;
 N_rw = 20;
 constants.N_rw = N_rw;
 
-constants.C_qdot_lw = 2e-4;
-constants.C_coalescence = [1 5e-6 5e-2]; % collision efficiency, laminar shear, turbulence
 constants.C_rdot = 1;%(3/(2*pi));%2.5*pi;
 constants.C_u_rise = 1e0;
-constants.C_nuc_rate = 6e4;
 constants.n_nuc_freq = 3;
 constants.C_r_nuc = 1;
 constants.C_dTs = 1;
 constants.C_x_inj = 1;
+if constants.C_coalescence(1) == 0
 constants.coalescence_switch = 'off';
+else
+    constants.coalescence_switch = 'on';
+end
 save_filename = 'bubble_sim_data';
 d_inj = 0.0708 * 0.0254;
 % d_inj = 0.056 * 0.0254;
@@ -1076,7 +1085,7 @@ if save_stuff == 1
         file_exists = 1;
         file_num = 1;
         while file_exists
-            save_filename_numbered = [save_filename num2str(file_num)];
+            save_filename_numbered = [save_filename num2str(file_num) '.mat'];
             if ~exist(save_filename_numbered,'file')
                 save(save_filename_numbered,'-v7.3')
                 file_exists = 0;
@@ -2082,20 +2091,22 @@ for i = 1:N_full + 1
     % preallocate
     birth_int_s = zeros(1,N_ab*2);
     
+    if deltaT_sup_node > 1e-4
+    
     for k = 1:N_ab*2
         % if nucleation happens only at r_nuc
         birth_int_s_delta = (r_nuc/r_m).^((k-1)/p) * spec_nuc_rate;
         
-        %         % exponential distribution
-        %         r_a = 125*r_nuc;
-        %
-        %         birth_int_s_exp = (r_a/r_m)^((k-1)/p) * spec_nuc_rate * exp( r_nuc/r_a ) ...
-        %             * gamma(1+((k-1)/p)) * gammainc(r_nuc/r_a, 1+((k-1)/p), 'upper');
-        %
-        % uniform distribution
-        %         dr = 100*r_nuc;
-        %         birth_int_s_uni = (1/r_m)^((k-1)/p) * spec_nuc_rate/dr * 1/( (k-1)/p + 1)*...
-        %             ( (r_nuc + dr)^( (k-1)/p + 1) - r_nuc^( (k-1)/p + 1) );
+%                 % exponential distribution
+%                 r_a = 10*r_nuc;
+%         
+%                 birth_int_s_exp = (r_a/r_m)^((k-1)/p) * spec_nuc_rate * exp( r_nuc/r_a ) ...
+%                     * gamma(1+((k-1)/p)) * gammainc(r_nuc/r_a, 1+((k-1)/p), 'upper');
+%         %
+%         uniform distribution
+%                 dr = 100*r_nuc;
+%                 birth_int_s_uni = (1/r_m)^((k-1)/p) * spec_nuc_rate/dr * 1/( (k-1)/p + 1)*...
+%                     ( (r_nuc + dr)^( (k-1)/p + 1) - r_nuc^( (k-1)/p + 1) );
         
         
         birth_int_s(k) = birth_int_s_delta;
@@ -2108,6 +2119,8 @@ for i = 1:N_full + 1
         %         rs = linspace(0,r_nuc/r_m + 5*s_nuc/r_m,1000);
         %         birth_int_s(k) = spec_nuc_rate * r_m * trapz(rs, rs.^((k-1)/p) .* ...
         %             (1/(s_nuc*sqrt(2*pi))).*exp( - ((r_m*rs) - r_nuc).^2./(2*s_nuc^2)));
+    end
+    
     end
     
     % birth and death due to coalescence
