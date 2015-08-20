@@ -1,5 +1,5 @@
 function varargout = bubble_growth_1D(varargin)
-
+% test for github
 tic
 % close all
 warning('off','MATLAB:nearlySingularMatrix')
