@@ -18,6 +18,7 @@ switch computer
         save_parameters_only = 1;
         time_out = 1;
         max_comp_time = 60*60;
+        results_save_dir = pwd;
         
         
     case {'MACI64','PCWIN64'}
@@ -31,10 +32,14 @@ switch computer
         t_plot = 5;
         time_out = 1;
         max_comp_time = 6*60*60;
+        if strcmp(computer,'PCWIN64')
+            results_save_dir = 'C:\Users\jonah\compiled research\model_results';
+        else
+            results_save_dir = '/Users/jez/School/stanford/compiled research/tank modeling/model_results_data_files';
+        end
         
 end
 current_dir = pwd;
-results_save_dir = 'C:\Users\jonah\compiled research\model_results';
 % constants.property_source = 'PDT';
 constants.fsolve_options = optimset('TolX',1e-12,'Display','off');
 constants.property_source = 'refprop';
@@ -48,7 +53,7 @@ ADQMOM = 'off';
 
 if nargin == 0
 
-N_nodes = 1600;
+N_nodes = 50;
 N_mom = 4;
 rel_tol = 1e-3;     % [] max relative error allowed in adaptive scheme
 constants.C_qdot_lw = 2e-4;
@@ -62,8 +67,8 @@ else
     rel_tol = inputs.rel_tol;
     
     constants.C_qdot_lw = inputs.C_qdot_lw;
-constants.C_coalescence = inputs.C_coalescence;
-constants.C_nuc_rate = inputs.C_nuc_rate;
+    constants.C_coalescence = inputs.C_coalescence;
+    constants.C_nuc_rate = inputs.C_nuc_rate;
 
 end
 
@@ -1802,7 +1807,10 @@ for i = 1:N_full + 1
                 phi_RL = abs(u_RL);
             end
             
-            flux_top = 0.5*A_ip12*(w_q(i,j) + w_q(i+1,j)) - 0.5*(phi_RL*dw);
+%             flux_top = 0.5*A_ip12*(w_q(i,j) + w_q(i+1,j)) - 0.5*(phi_RL*dw);
+            
+            flux_top = 0.5*(uw_vec(i,j) + uw_vec(i+1,j)) - 0.5*(phi_RL*dw);
+
             
             % w flux through bottom
             u_RL = ( sqrt(w_q(i,j))*u_vec(i,j) + sqrt(w_q(i-1,j))*u_vec(i-1,j))...
@@ -1819,8 +1827,10 @@ for i = 1:N_full + 1
                 phi_RL = abs(u_RL);
             end
             
-            flux_bot = 0.5*A_im12*(w_q(i-1,j) + w_q(i,j)) - 0.5*(phi_RL*dw);
+%             flux_bot = 0.5*A_im12*(w_q(i-1,j) + w_q(i,j)) - 0.5*(phi_RL*dw);
             
+            flux_bot = 0.5*(uw_vec(i-1,j) + uw_vec(i,j)) - 0.5*(phi_RL*dw);
+
             duw_dx(i,j) = (flux_top - flux_bot)/L_node;
             
             
@@ -1840,7 +1850,10 @@ for i = 1:N_full + 1
                 phi_RL = abs(u_RL);
             end
             
-            flux_top = 0.5*A_ip12*(g_q(i,j) + g_q(i+1,j)) - 0.5*(phi_RL*dg);
+%             flux_top = 0.5*A_ip12*(g_q(i,j) + g_q(i+1,j)) - 0.5*(phi_RL*dg);
+            
+            flux_top = 0.5*(ug_vec(i,j) + ug_vec(i+1,j)) - 0.5*(phi_RL*dg);
+
             
             % g flux through bottom
             u_RL = ( sqrt(g_q(i,j))*u_vec(i,j) + sqrt(g_q(i-1,j))*u_vec(i-1,j))...
@@ -1857,7 +1870,10 @@ for i = 1:N_full + 1
                 phi_RL = abs(u_RL);
             end
             
-            flux_bot = 0.5*A_im12*(g_q(i-1,j) + g_q(i,j)) - 0.5*(phi_RL*dg);
+%             flux_bot = 0.5*A_im12*(g_q(i-1,j) + g_q(i,j)) - 0.5*(phi_RL*dg);
+            
+            flux_bot = 0.5*(ug_vec(i-1,j) + ug_vec(i,j)) - 0.5*(phi_RL*dg);
+
             
             dug_dx(i,j) = (flux_top - flux_bot)/L_node;
         end
