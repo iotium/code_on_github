@@ -53,9 +53,9 @@ ADQMOM = 'off';
 
 if nargin == 0
 
-N_nodes = 50;
+N_nodes = 200;
 N_mom = 4;
-rel_tol = 1e-3;     % [] max relative error allowed in adaptive scheme
+rel_tol = 5e-4;     % [] max relative error allowed in adaptive scheme
 constants.C_qdot_lw = 2e-4;
 constants.C_coalescence = [0 5e-6 5e-2]; % collision efficiency, laminar shear, turbulence
 constants.C_nuc_rate = 6e4;
@@ -128,20 +128,20 @@ if specified_case == 0
     rho_w = 1360;       % [kg/m^3] density of wall material (polycarb)
     cv_w = 1250;        % [J/kg.K] specific heat of wall (polycarb)
     t_w = 0.0254*1/4;   % [m] wall thickness
-    D = sqrt(4/pi*V_tank/L_tank);
+    D_tank = sqrt(4/pi*V_tank/L_tank);
     % [m] tank diameter
     k_w = 0.195;          % [W/m.K] thermal conductivity of wall
 else
     
     [Ti, fill_level, V_tank, L_tank, ...
-        Cd, Po, T_air, rho_w, cv_w, t_w, D, k_w] = initial_conditions(specified_case);
+        Cd, Po, T_air, rho_w, cv_w, t_w, D_tank, k_w] = initial_conditions(specified_case);
     
 end
 
 % divide the whole tank into nodes
 % L_node = L_tank*(1 + 20*alpha_ic)*fill_level/(N_nodes - 0.5);
 L_node = L_tank/(N_nodes-1); % use N -1 if there are points on the boundaries
-V_node = pi*0.25*D^2*L_node;
+V_node = pi*0.25*D_tank^2*L_node;
 
 constants.L_node = L_node;
 constants.V_node = V_node;
@@ -367,7 +367,7 @@ y = [y_i_basic; y_i_DQMOM];
 [P_cr, T_cr] = refpropm('PT', 'C', 0, '', 0, fluid);
 P_cr = P_cr*1e3;
 
-constants.D = D;
+constants.D_tank = D_tank;
 constants.t_w = t_w;
 constants.rho_w = rho_w;
 constants.cv_w = cv_w;
@@ -412,7 +412,7 @@ f = zeros(N_dim,1);
 constants.min_flag = 0;
 constants.peak_flag = 0;
 
-f_cutoff_norm = 1e-2; % supposed to be filter cutoff f / (1/2 sample f)
+f_cutoff_norm = 1e-1; % supposed to be filter cutoff f / (1/2 sample f)
 % so it's basically = 2*dt*f_cutoff
 filter_order = 3;
 [b_filter,a_filter] = butter(filter_order, f_cutoff_norm, 'low');
@@ -441,9 +441,14 @@ while running == 1;
         
         guesses.rhodot_tg_sat = bdiff(rho_tg_sat_filtered, starti, n, t, adaptive);
         
+        LL_filtered = filtfilt(b_filter, a_filter, L_tank*V_l_star/V_tank);
+        
+        guesses.dLL_dt = bdiff(LL_filtered, starti, n, t, adaptive);
+        
     else
         
         guesses.rhodot_tg_sat = 0;
+        guesses.dLL_dt = 0;
     end
     
     Vdot_bub(n+1) = bdiff(V_bub, starti, n, t, adaptive);
@@ -502,10 +507,10 @@ while running == 1;
     end
     
     
-    mdot_l = f(4);
+%     mdot_l = f(4);
     %     rhodot_l = mdot_l/V_l(n) - m_l(n)/V_l(n)^2*Vdot_l(n);
     
-    mdot_tg = f(1);
+%     mdot_tg = f(1);
     %     rhodot_tg = mdot_tg/V_tg(n) - m_tg(n)/V_tg(n)^2*Vdot_tg(n);
     
     
@@ -623,6 +628,8 @@ while running == 1;
     
     error_OK = 0;
     
+    try
+    
     while error_OK == 0
         % solving differential equations
         % i = counter for
@@ -639,13 +646,17 @@ while running == 1;
                 
                 % f = f( t(n) , y(n) )
                 
-                if n > 1
+                if n > 1 && ~isnan(f_np1(1))
                     % we calculated it at the end of last time step
                     f = f_np1;
                 else
                     % we haven't had a time step yet!
                     constants.step = 1;
-                    f = diffeqns(y(:,n), constants, guesses, PDT);
+                    try
+                        f = diffeqns(y(:,n), constants, guesses, PDT);
+                    catch
+                        error_flag = 1;
+                    end
                 end
             else
                 
@@ -687,8 +698,12 @@ while running == 1;
                         %                     keyboard
                     end
                     
+                    try
                     f = diffeqns(y_new, ...
                         constants, guesses, PDT);
+                    catch
+                        error_flag = 1;
+                    end
                     
                 end
             end
@@ -855,8 +870,25 @@ while running == 1;
         
     end
     
+    catch
+        y(:,n+1) = y(:,n);
+        ind_max_rel_err(n+1) = 1;
+        stop_reason = 'error in calling differential eqns';
+        running = 0;
+    end
+        
+    
     constants.step = 1;
+    
+    try
+    
     [f_np1, debug_data] = diffeqns(y(:,n+1), constants, guesses, PDT);
+    
+    catch
+        
+        f_np1 = f;
+        f_np1(1) = nan;
+    end
     
     m_tg(n+1) = debug_data.m_tg;
     U_tg(n+1) = debug_data.U_tg;
@@ -897,6 +929,11 @@ while running == 1;
     u_rise(:,:,n+1) = debug_data.u_rise;
     N_bubi(:,n+1) = debug_data.N_bubi;
     N_full(n+1) = debug_data.N_full;
+    mdot_tg(n+1) = debug_data.mdot_tg;
+    mdot_bub_l(:,n+1) = debug_data.mdot_bub_l;
+    mdot_bub_tg(:,n+1) = debug_data.mdot_bub_tg;
+    mdot_l(n+1) = debug_data.mdot_l;
+    
     
     %     fprintf('r_q = ')
     %     fprintf('%4.6g,\t', r_q(1:6,1))
@@ -1257,7 +1294,7 @@ if plot_stuff == 1
     
     figure(16)
     hold on
-    plot(t, ind_max_rel_err)
+    plot(t, ind_max_rel_err(1:length(t)))
     xlabel('Time [s]')
     ylabel('index []')
     title('index of max relative error')
@@ -1274,7 +1311,7 @@ toc
 function varargout = diffeqns(y, constants, guesses, PDT)
 
 % retrieve constants
-D = constants.D;
+D_tank = constants.D_tank;
 t_w = constants.t_w;
 rho_w = constants.rho_w;
 cv_w = constants.cv_w;
@@ -1302,15 +1339,17 @@ C_dTs = constants.C_dTs;
 C_qdot_lw = constants.C_qdot_lw;
 
 L_node = constants.L_node;
-V_node = 0.25*pi*D^2*L_node;
+V_node = 0.25*pi*D_tank^2*L_node;
 N_nodes = constants.N_nodes;
 fluid = constants.fluid;
 N_ab = constants.N_ab; % number of abscissas
 N_mom = 2*N_ab;
 hesson_fit = constants.hesson_fit;
-bubble_rise_velocity_fit = constants.bubble_rise_velocity_fit;
+% bubble_rise_velocity_fit = constants.bubble_rise_velocity_fit;
 
 p = constants.ADQMOM_p;
+
+u_LL = guesses.dLL_dt;
 
 % retrieve derivatives calculated with backwards differencing
 % Pdot = derivatives(1);
@@ -1584,8 +1623,8 @@ mdot_out_vap = x_out*mdot_out_mix;
 % mdot_out = A_inj*Cd*injector_flow(Po, P, T_l, rho_l, P_sat, s_l, h_l);
 
 % bulk flow velocity out the bottom
-u_bulk = mdot_out_mix / rho_l / (0.25 * pi * D^2);
-u_bulk = 0;
+u_bulk = mdot_out_mix / rho_l / (0.25 * pi * D_tank^2);
+% u_bulk = 0;
 
 Mo = g*mu_l^4*(rho_l - rho_tg_sat)/(rho_l^2*sigma^3);
 
@@ -1698,12 +1737,16 @@ end
 duw_dx = zeros(size(w_q));
 dug_dx = duw_dx;
 
-u_vec = u_rise - u_bulk;
-uw_vec = (u_rise - u_bulk).*w_q;
-ug_vec = (u_rise - u_bulk).*g_q;
+u_vec = u_rise;
+uw_vec = (u_rise).*w_q;
+ug_vec = (u_rise).*g_q;
 
+% u_vec = u_rise - u_bulk;
+% uw_vec = (u_rise - u_bulk).*w_q;
+% ug_vec = (u_rise - u_bulk).*g_q;
 
-u_physical = max(abs(u_rise(:) - u_bulk));
+% u_physical = max(abs(u_rise(:) - u_bulk));
+u_physical = max(abs(u_rise(:)));
 CFL = u_physical * constants.h / L_node;
 
 if CFL > 0.9
@@ -1713,169 +1756,247 @@ end
 for i = 1:N_full + 1
     % fluxes in and out of node
     
-    %         % using finite_diff (various possibilities) - play around w/
-    %         forwards, backwards, central, and what order
-    %         max_order = 3;
-    %         if i > 1
+%             % using finite_diff (various possibilities) - play around w/
+% %             forwards, backwards, central, and what order
+%             max_order = 2;
+%             if i > 1
+%     
+%     
+%                 if i == N_full + 1
+%                     for j = 1:N_ab
+%                         duw_dx(i,j) = finite_diff(uw_vec(:,j), 1, N_full+1, i, L_node, 'backwards', max_order);
+%                         dug_dx(i,j) = finite_diff(ug_vec(:,j), 1, N_full+1, i, L_node, 'backwards', max_order);
+%                     end
+%                 else
+%     
+%                     for j = 1:N_ab
+%                         duw_dx(i,j) = finite_diff(uw_vec(:,j), 1, N_full+1, i, L_node, 'backwards', max_order);
+%                         dug_dx(i,j) = finite_diff(ug_vec(:,j), 1, N_full+1, i, L_node, 'backwards', max_order);
+%                     end
+%                 end
+%     
+%             else
+%                 % bottom node
+%                 duw_dx(i,:) = uw_vec(i,:)/L_node;
+%                 dug_dx(i,:) = ug_vec(i,:)/L_node;
+%             end
+%     
     %
-    %
-    %             if i == N_full + 1
-    %                 for j = 1:N_ab
-    %                     duw_dx(i,j) = finite_diff(uw_vec(:,j), 1, N_full+1, i, L_node, 'backwards', max_order);
-    %                     dug_dx(i,j) = finite_diff(ug_vec(:,j), 1, N_full+1, i, L_node, 'backwards', max_order);
-    %                 end
-    %             else
-    %
-    %                 for j = 1:N_ab
-    %                     duw_dx(i,j) = finite_diff(uw_vec(:,j), 1, N_full+1, i, L_node, 'backwards', max_order);
-    %                     dug_dx(i,j) = finite_diff(ug_vec(:,j), 1, N_full+1, i, L_node, 'backwards', max_order);
-    %                 end
-    %             end
-    %
-    %         else
-    %             % bottom node
-    %             duw_dx(i,:) = uw_vec(i,:)/L_node;
-    %             dug_dx(i,:) = ug_vec(i,:)/L_node;
-    %         end
     
-    %
+%     %     1st order upwind
+%         if i > 1 && i < N_full
+%     %         interior grid points
+%     
+%             for j = 1:N_ab
+%     
+%                 if u_rise(i,j) - u_bulk > 0
+% %                     rising: flux in is from -x
+%                     flux_bot = w_q(i-1,j)*0.5*(u_vec(i,j) + u_vec(i-1,j));
+%                     flux_top = w_q(i,j)*0.5*(u_vec(i+1,j) + u_vec(i,j));
+%                     duw_dx(i,j) = (flux_top - flux_bot)/L_node;
+%     
+%                     flux_bot = g_q(i-1,j)*0.5*(u_vec(i,j) + u_vec(i-1,j));
+%                     flux_top = g_q(i,j)*0.5*(u_vec(i+1,j) + u_vec(i,j));
+%                     dug_dx(i,j) = (flux_top - flux_bot)/L_node;
+%                 else
+% %                     falling: flux in is from +x
+%                     flux_top = w_q(i+1,j)*0.5*(u_vec(i+1,j) + u_vec(i,j));
+%                     flux_bot = w_q(i,j)*0.5*(u_vec(i,j) + u_vec(i-1,j));
+%                     duw_dx(i,j) = (flux_top - flux_bot)/L_node;
+%     
+%                     flux_top = g_q(i+1,j)*0.5*(u_vec(i+1,j) + u_vec(i,j));
+%                     flux_bot = g_q(i,j)*0.5*(u_vec(i,j) + u_vec(i-1,j));
+%                     dug_dx(i,j) = (flux_top - flux_bot)/L_node;
+%                 end
+%     
+%             end
+%     
+%         else
+%     
+%             if i == 1
+% %                 bottom point
+%     
+%                 duw_dx(i,:) = uw_vec(i,:)/L_node;
+%                 dug_dx(i,:) = ug_vec(i,:)/L_node;
+% %                             duw_dx(i,:) = (uw_vec(i+1,:) - uw_vec(i,:))/L_node;
+% %                             dug_dx(i,:) = (ug_vec(i+1,:) - ug_vec(i,:))/L_node;
+%             else
+% %                 top 2 points
+% %                             duw_dx(i,:) = ( uw_vec(i,:) - uw_vec(i-1,:) )/(L_node);
+% %                             dug_dx(i,:) = ( ug_vec(i,:) - ug_vec(i-1,:) )/(L_node);
+%                 duw_dx(i,:) = zeros(size(uw_vec(i,:)));
+%                 dug_dx(i,:) = zeros(size(ug_vec(i,:)));
+%             end
+%         end
+%     %
+%     % Roe (1st order)
+%     if i > 1 && i < N_full
+%         % interior grid points
+%         sigma_o = 1;
+%         
+%         for j = 1:N_ab
+%             % w flux through top
+%             u_LR = ( sqrt(w_q(i+1,j))*u_vec(i+1,j) + sqrt(w_q(i,j))*u_vec(i,j))...
+%                 /(sqrt(w_q(i+1,j)) + sqrt(w_q(i,j)));
+%             
+%             du = u_vec(i+1,j) - u_vec(i,j);
+%             dw = w_q(i+1,j) - w_q(i,j);
+%             
+%             u_L = u_vec(i,j);
+%             u_R = u_vec(i+1,j);
+%             epsilon = sigma_o * max([0, u_LR - u_L, u_R - u_LR]);
+%             
+%             if abs(u_LR) < epsilon
+%                 u_LR = (u_LR^2 + epsilon^2)/(2*epsilon);
+%             end
+%             
+%             w_flux_top = 0.5*(uw_vec(i,j) + uw_vec(i+1,j)) - 0.5*(abs(u_LR)*dw);
+% 
+%             
+%                         
+%             % g flux through top
+%             u_LR = ( sqrt(g_q(i+1,j))*u_vec(i+1,j) + sqrt(g_q(i,j))*u_vec(i,j))...
+%                 /(sqrt(g_q(i+1,j)) + sqrt(g_q(i,j)));
+%             
+%             du = u_vec(i+1,j) - u_vec(i,j);
+%             dg = g_q(i+1,j) - g_q(i,j);
+%             
+%             u_L = u_vec(i,j);
+%             u_R = u_vec(i+1,j);
+%             epsilon = sigma_o * max([0, u_LR - u_L, u_R - u_LR]);
+%             
+%             if abs(u_LR) < epsilon
+%                 u_LR = (u_LR^2 + epsilon^2)/(2*epsilon);
+%             end
+%             
+%             g_flux_top = 0.5*(ug_vec(i,j) + ug_vec(i+1,j)) - 0.5*(abs(u_LR)*dg);
+% 
+%             
+%             % w flux through bottom
+%             u_LR = ( sqrt(w_q(i,j))*u_vec(i,j) + sqrt(w_q(i-1,j))*u_vec(i-1,j))...
+%                 /(sqrt(w_q(i,j)) + sqrt(w_q(i-1,j)));
+%             
+%             du = u_vec(i,j) - u_vec(i-1,j);
+%             dw = w_q(i,j) - w_q(i-1,j);
+%             
+%             u_L = u_vec(i-1,j);
+%             u_R = u_vec(i,j);
+%             epsilon = sigma_o * max([0, u_LR - u_L, u_R - u_LR]);
+%             
+%             if abs(u_LR) < epsilon
+%                 u_LR = (u_LR^2 + epsilon^2)/(2*epsilon);
+%             end
+% 
+%             w_flux_bot = 0.5*(uw_vec(i-1,j) + uw_vec(i,j)) - 0.5*(abs(u_LR)*dw);
+% 
+% 
+%             
+%             % g flux through bottom
+%             u_LR = ( sqrt(g_q(i,j))*u_vec(i,j) + sqrt(g_q(i-1,j))*u_vec(i-1,j))...
+%                 /(sqrt(g_q(i,j)) + sqrt(g_q(i-1,j)));
+%             
+%             du = u_vec(i,j) - u_vec(i-1,j);
+%             dg = g_q(i,j) - g_q(i-1,j);
+% 
+%             u_L = u_vec(i-1,j);
+%             u_R = u_vec(i,j);
+%             epsilon = sigma_o * max([0, u_LR - u_L, u_R - u_LR]);
+%             
+%             if abs(u_LR) < epsilon
+%                 u_LR = (u_LR^2 + epsilon^2)/(2*epsilon);
+%             end
+%                       
+%             g_flux_bot = 0.5*(ug_vec(i-1,j) + ug_vec(i,j)) - 0.5*(abs(u_LR)*dg);
+% 
+%    
+%             duw_dx(i,j) = (w_flux_top -w_flux_bot)/L_node;
+% 
+%             dug_dx(i,j) = (g_flux_top - g_flux_bot)/L_node;
+%         end
+%         
+%     else
+%         
+%         if i == 1
+%             % bottom point
+%             % there's flux out the top and nothing out the bottom
+%             duw_dx(i,:) = uw_vec(i,:)/L_node;
+%             dug_dx(i,:) = ug_vec(i,:)/L_node;
+%             
+%             %             duw_dx(i,:) = (uw_vec(i+1,:) - uw_vec(i,:))/L_node;
+%             %             dug_dx(i,:) = (ug_vec(i+1,:) - ug_vec(i,:))/L_node;
+%         else
+%             % top 2 points
+%             %             duw_dx(i,:) = ( uw_vec(i,:) - uw_vec(i-1,:) )/(L_node);
+%             %             dug_dx(i,:) = ( ug_vec(i,:) - ug_vec(i-1,:) )/(L_node);
+%             duw_dx(i,:) = zeros(size(uw_vec(i,:)));
+%             dug_dx(i,:) = zeros(size(ug_vec(i,:)));
+%         end
+%     end
     
-    % %     1st order upwind
-    %     if i > 1 && i < N_full
-    % %         interior grid points
-    %
-    %         for j = 1:N_ab
-    %
-    %             if u_rise(i,j) - u_bulk > 0
-    %                 rising: flux in is from -x
-    %                 flux_bot = w_q(i-1,j)*0.5*(u_vec(i,j) + u_vec(i-1,j));
-    %                 flux_top = w_q(i,j)*0.5*(u_vec(i+1,j) + u_vec(i,j));
-    %                 duw_dx(i,j) = (flux_top - flux_bot)/L_node;
-    %
-    %                 flux_bot = g_q(i-1,j)*0.5*(u_vec(i,j) + u_vec(i-1,j));
-    %                 flux_top = g_q(i,j)*0.5*(u_vec(i+1,j) + u_vec(i,j));
-    %                 dug_dx(i,j) = (flux_top - flux_bot)/L_node;
-    %             else
-    %                 falling: flux in is from +x
-    %                 flux_top = w_q(i+1,j)*0.5*(u_vec(i+1,j) + u_vec(i,j));
-    %                 flux_bot = w_q(i,j)*0.5*(u_vec(i,j) + u_vec(i-1,j));
-    %                 duw_dx(i,j) = (flux_top - flux_bot)/L_node;
-    %
-    %                 flux_top = g_q(i+1,j)*0.5*(u_vec(i+1,j) + u_vec(i,j));
-    %                 flux_bot = g_q(i,j)*0.5*(u_vec(i,j) + u_vec(i-1,j));
-    %                 dug_dx(i,j) = (flux_top - flux_bot)/L_node;
-    %             end
-    %
-    %         end
-    %
-    %     else
-    %
-    %         if i == 1
-    %             bottom point
-    %
-    %             duw_dx(i,:) = uw_vec(i,:)/L_node;
-    %             dug_dx(i,:) = ug_vec(i,:)/L_node;
-    %                         duw_dx(i,:) = (uw_vec(i+1,:) - uw_vec(i,:))/L_node;
-    %                         dug_dx(i,:) = (ug_vec(i+1,:) - ug_vec(i,:))/L_node;
-    %         else
-    %             top 2 points
-    %                         duw_dx(i,:) = ( uw_vec(i,:) - uw_vec(i-1,:) )/(L_node);
-    %                         dug_dx(i,:) = ( ug_vec(i,:) - ug_vec(i-1,:) )/(L_node);
-    %             duw_dx(i,:) = zeros(size(uw_vec(i,:)));
-    %             dug_dx(i,:) = zeros(size(ug_vec(i,:)));
-    %         end
-    %     end
-    %
-    % Roe
-    if i > 1 && i < N_full
+% MUSCL
+    if i > 2 && i < N_full
         % interior grid points
         
-        
         for j = 1:N_ab
-            % w flux through top
-            u_RL = ( sqrt(w_q(i+1,j))*u_vec(i+1,j) + sqrt(w_q(i,j))*u_vec(i,j))...
-                /(sqrt(w_q(i+1,j)) + sqrt(w_q(i,j)));
             
-            du = u_vec(i+1,j) - u_vec(i,j);
-            dw = w_q(i+1,j) - w_q(i,j);
+            U = [w_q(:,j)'; g_q(:,j)'];
             
-            A_ip12 = u_RL;
+            u = u_vec(:,j)';
             
-            if abs(u_RL) < du
-                phi_RL = (u_RL^2+ du^2)/(2*du);
-            else
-                phi_RL = abs(u_RL);
-            end
+            r_U = (U(:,i) - U(:,i-1))./(U(:,i+1) - U(:,i));
+            r_u = (u(i) - u(i-1))/(u(i+1) - u(i));
             
-%             flux_top = 0.5*A_ip12*(w_q(i,j) + w_q(i+1,j)) - 0.5*(phi_RL*dw);
+            flux_limiter_ui = max([0, min(1, r_u)]);
+            flux_limiter_Ui(1) = max([0, min(1, r_U(1))]);
+            flux_limiter_Ui(2) = max([0, min(1, r_U(2))]);
             
-            flux_top = 0.5*(uw_vec(i,j) + uw_vec(i+1,j)) - 0.5*(phi_RL*dw);
-
+            r_U = (U(:,i+1) - U(:,i))./(U(:,i+2) - U(:,i+1));
+            r_u = (u(i+1) - u(i))/(u(i+2) - u(i+1));
             
-            % w flux through bottom
-            u_RL = ( sqrt(w_q(i,j))*u_vec(i,j) + sqrt(w_q(i-1,j))*u_vec(i-1,j))...
-                /(sqrt(w_q(i,j)) + sqrt(w_q(i-1,j)));
+            flux_limiter_uip1 = max([0, min(1, r_u)]);
+            flux_limiter_Uip1(1) = max([0, min(1, r_U(1))]);
+            flux_limiter_Uip1(2) = max([0, min(1, r_U(2))]);
             
-            du = u_vec(i,j) - u_vec(i-1,j);
-            dw = w_q(i,j) - w_q(i-1,j);
+            r_U = (U(:,i-1) - U(:,i-2))./(U(:,i) - U(:,i-1));
+            r_u = (u(i-1) - u(i-2))/(u(i) - u(i-1));
             
-            A_im12 = u_RL;
+            flux_limiter_uim1 = max([0, min(1, r_u)]);
+            flux_limiter_Uim1(1) = max([0, min(1, r_U(1))]);
+            flux_limiter_Uim1(2) = max([0, min(1, r_U(2))]);
             
-            if abs(u_RL) < du
-                phi_RL = (u_RL^2+ du^2)/(2*du);
-            else
-                phi_RL = abs(u_RL);
-            end
+            % flux through top(i + 1/2)
+            uL = u(i) + 0.5*flux_limiter_ui*(u(i+1) - u(i));
+            uR = u(i+1) - 0.5*flux_limiter_uip1*(u(i+2) - u(i+1));
             
-%             flux_bot = 0.5*A_im12*(w_q(i-1,j) + w_q(i,j)) - 0.5*(phi_RL*dw);
+            UL = U(:,i) + 0.5*flux_limiter_Ui'.*(U(:,i+1) - U(:,i));
+            UR = U(:,i+1) - 0.5*flux_limiter_Uip1'.*(U(:,i+2) - U(:,i+1));
             
-            flux_bot = 0.5*(uw_vec(i-1,j) + uw_vec(i,j)) - 0.5*(phi_RL*dw);
-
-            duw_dx(i,j) = (flux_top - flux_bot)/L_node;
+            a = max([abs(uL), abs(uR)]);
             
+            FR = uR*UR;
+            FL = uL*UL;
             
+            F_star_top = 0.5*( (FR + FL) - a*(UR - UL) );
             
-            % g flux through top
-            u_RL = ( sqrt(g_q(i+1,j))*u_vec(i+1,j) + sqrt(g_q(i,j))*u_vec(i,j))...
-                /(sqrt(g_q(i+1,j)) + sqrt(g_q(i,j)));
+            % flux through bottom(i - 1/2)
+            uL = u(i-1) + 0.5*flux_limiter_uim1*(u(i) - u(i-1));
+            uR = u(i) - 0.5*flux_limiter_ui*(u(i+1) - u(i));
             
-            du = u_vec(i+1,j) - u_vec(i,j);
-            dg = g_q(i+1,j) - g_q(i,j);
+            UL = U(:,i-1) + 0.5*flux_limiter_Uim1'.*(U(:,i) - U(:,i-1));
+            UR = U(:,i) - 0.5*flux_limiter_Ui'.*(U(:,i+1) - U(:,i));
             
-            A_ip12 = u_RL;
+            a = max([abs(uL), abs(uR)]);
             
-            if abs(u_RL) < du
-                phi_RL = (u_RL^2+ du^2)/(2*du);
-            else
-                phi_RL = abs(u_RL);
-            end
+            FR = uR*UR;
+            FL = uL*UL;
             
-%             flux_top = 0.5*A_ip12*(g_q(i,j) + g_q(i+1,j)) - 0.5*(phi_RL*dg);
+            F_star_bot = 0.5*( (FR + FL) - a*(UR - UL) );
             
-            flux_top = 0.5*(ug_vec(i,j) + ug_vec(i+1,j)) - 0.5*(phi_RL*dg);
-
+            dF_dx = (F_star_top - F_star_bot)/L_node;
             
-            % g flux through bottom
-            u_RL = ( sqrt(g_q(i,j))*u_vec(i,j) + sqrt(g_q(i-1,j))*u_vec(i-1,j))...
-                /(sqrt(g_q(i,j)) + sqrt(g_q(i-1,j)));
+            duw_dx(i,j) = dF_dx(1);
+            dug_dx(i,j) = dF_dx(2);
             
-            du = u_vec(i,j) - u_vec(i-1,j);
-            dg = g_q(i,j) - g_q(i-1,j);
-            
-            A_im12 = u_RL;
-            
-            if abs(u_RL) < du
-                phi_RL = (u_RL^2+ du^2)/(2*du);
-            else
-                phi_RL = abs(u_RL);
-            end
-            
-%             flux_bot = 0.5*A_im12*(g_q(i-1,j) + g_q(i,j)) - 0.5*(phi_RL*dg);
-            
-            flux_bot = 0.5*(ug_vec(i-1,j) + ug_vec(i,j)) - 0.5*(phi_RL*dg);
-
-            
-            dug_dx(i,j) = (flux_top - flux_bot)/L_node;
         end
         
     else
@@ -1889,11 +2010,16 @@ for i = 1:N_full + 1
             %             duw_dx(i,:) = (uw_vec(i+1,:) - uw_vec(i,:))/L_node;
             %             dug_dx(i,:) = (ug_vec(i+1,:) - ug_vec(i,:))/L_node;
         else
-            % top 2 points
-            %             duw_dx(i,:) = ( uw_vec(i,:) - uw_vec(i-1,:) )/(L_node);
-            %             dug_dx(i,:) = ( ug_vec(i,:) - ug_vec(i-1,:) )/(L_node);
-            duw_dx(i,:) = zeros(size(uw_vec(i,:)));
-            dug_dx(i,:) = zeros(size(ug_vec(i,:)));
+%             if i == 2
+                duw_dx(i,:) = (uw_vec(i,:) - uw_vec(i-1,:))/L_node;
+                dug_dx(i,:) = (ug_vec(i,:) - ug_vec(i-1,:))/L_node;
+%             else
+%                 % top 2 points
+%                 %             duw_dx(i,:) = ( uw_vec(i,:) - uw_vec(i-1,:) )/(L_node);
+%                 %             dug_dx(i,:) = ( ug_vec(i,:) - ug_vec(i-1,:) )/(L_node);
+%                 duw_dx(i,:) = zeros(size(uw_vec(i,:)));
+%                 dug_dx(i,:) = zeros(size(ug_vec(i,:)));
+%             end
         end
     end
     
@@ -1962,17 +2088,17 @@ for i = 1:N_full + 1
         
         
         % length of liquid node volume [m]
-        %         L_l = V_l_star(i) / (pi * 0.25 * D^2);
+        %         L_l = V_l_star(i) / (pi * 0.25 * D_tank^2);
         L_l = node_level(i)*L_node;
         if i == 1 || i == N_nodes
             L_l = L_l/2;
         end
         
         % surface area of node[m^2]
-        A_l = pi * D * L_l;% + pi * 0.25 * D^2;
+        A_l = pi * D_tank * L_l;% + pi * 0.25 * D_tank^2;
         
         if i == 1
-            A_l = A_l + 0.25*pi*D^2;
+            A_l = A_l + 0.25*pi*D_tank^2;
         end
         
         switch constants.nuc_model
@@ -2095,6 +2221,7 @@ for i = 1:N_full + 1
     
     spec_nuc_rate = nuc_rate / ( (node_level(i) + 1e-3) * V_node );
     
+    % top and bottom cells are half the size
     if i == 1 || i == N_nodes
         spec_nuc_rate = spec_nuc_rate/(0.5);
     end
@@ -2150,21 +2277,21 @@ for i = 1:N_full + 1
         % most of this is from prince and blanch (1990)
         % buoyancy and turbulence driven
         
-        nu_t = 0.0536*D^1.77/rho_l;
-        U_max = ( (1 - 0.75*V_bubi(i))/(1 - V_bubi(i)) )*V_bubi(i) * D^2/(48*nu_t);
-        mean_shear = 0.53*U_max/(0.5*D);
+        nu_t = 0.0536*D_tank^1.77/rho_l;
+        U_max = ( (1 - 0.75*V_bubi(i))/(1 - V_bubi(i)) )*V_bubi(i) * D_tank^2/(48*nu_t);
+        mean_shear = 0.53*U_max/(0.5*D_tank);
         
         P2 = P;
         
-        liquid_height = V_l_star/(pi*D^2/4);
+        liquid_height = V_l_star/(pi*D_tank^2/4);
         
         P1 = P2 + rho_l*g*liquid_height;
         
-        L = V_tank/(pi*D^2/4);
+        L = V_tank/(pi*D_tank^2/4);
         
         Q = V_tank/8; % volumetric gas flow rate. just assumed a constant value here
         
-        turb_diss = Q*g * P2*log(P1/P2) / ( pi * (0.5*D)^2 * (P1 - P2) );
+        turb_diss = Q*g * P2*log(P1/P2) / ( pi * (0.5*D_tank)^2 * (P1 - P2) );
         
         for k = 1:N_ab*2
             for l = 1:N_ab
@@ -2290,20 +2417,27 @@ for i = 1:N_full + 1
         % bubbles leaving from free surface (m^3/(m^2 * s))
         
         % if we're looking at the bottom node, just take its value
-        if i == 1
-            death_term = 4/3 * pi * sum(r_q(i,:).^(3) .* w_q(i,:) .* (u_rise(i,:) - u_bulk) );
-        else
-            % above the bottom node, linearly interpolate/extrapolate to
-            % get the value wherever the free surface is
-            death_term_i = 4/3 * pi * sum(r_q(i,:).^(3) .* w_q(i,:) .* (u_rise(i,:) - u_bulk) );
-            death_term_im1 = 4/3 * pi * sum(r_q(i-1,:).^(3) .* w_q(i-1,:) .* (u_rise(i-1,:) - u_bulk) );
-            if node_level(i) < 0.5
-                death_term = (0.5 + node_level(i))*death_term_i + (0.5 - node_level(i))*death_term_im1;
-            else
-                death_term_slope = (death_term_i - death_term_im1)/1;
-                death_term = death_term_i + death_term_slope*( node_level(i) - 0.5 );
-            end
-        end
+%         if i == 1
+            death_term = 4/3 * pi * sum(r_q(i,:).^(3) .* w_q(i,:) .* (u_rise(i,:) - u_LL) );
+%         else
+%             if i == 2
+%             % above the bottom node, linearly interpolate/extrapolate to
+%             % get the value wherever the free surface is
+%             death_term_i = 4/3 * pi * sum(r_q(i,:).^(3) .* w_q(i,:) .* (u_rise(i,:) - u_bulk) );
+%             death_term_im1 = 4/3 * pi * sum(r_q(i-1,:).^(3) .* w_q(i-1,:) .* (u_rise(i-1,:) - u_bulk) );
+% %             if node_level(i) < 0.5
+% %                 death_term = (0.5 + node_level(i))*death_term_i + (0.5 - node_level(i))*death_term_im1;
+% %             else
+%                 death_term_slope = (death_term_i - death_term_im1)/1;
+%                 death_term = death_term_i + death_term_slope*( node_level(i) - 0.5 );
+% %             end
+%             else
+%                death_term_i = 4/3 * pi * sum(r_q(i,:).^(3) .* w_q(i,:) .* (u_rise(i,:) - u_bulk) );
+%                death_term_im1 = 4/3 * pi * sum(r_q(i-1,:).^(3) .* w_q(i-1,:) .* (u_rise(i-1,:) - u_bulk) );
+%                death_term_im2 = 4/3 * pi * sum(r_q(i-2,:).^(3) .* w_q(i-2,:) .* (u_rise(i-2,:) - u_bulk) );
+%                death_term = interp1( [-2 -1 0], [death_term_im2, death_term_im1, death_term_i], (node_level(i)-0.5),'nearest','extrap');
+%             end
+%         end
     else
         death_term = 0;
     end
@@ -2318,7 +2452,7 @@ for i = 1:N_full + 1
     
     % mdot into bubbles from liquid
     %     mdot_bub_l(i) = V_l_star(i) * 4/3*pi * rho_tg_sat * (birth_term + growth_term);
-    mdot_bub_l(i) = node_level(i) * V_node * 4/3 * pi * rho_tg_sat * (birth_term(i) + growth_term);
+    mdot_bub_l(i) = node_level(i) * V_node * 4/3 * pi * rho_tg_sat * (birth_term(i) + growth_term - (death_term/(4/3*pi)));
     
     if i == 1 || i == N_nodes
         mdot_bub_l(i) = mdot_bub_l(i)/2;
@@ -2327,7 +2461,7 @@ for i = 1:N_full + 1
     % mdot into bubbles from tg (really from bubbles into tg, but have to
     % keep sign convention for mdot)
     
-    mdot_bub_tg(i) = - pi/4*D^2 * rho_tg_sat * death_term;
+    mdot_bub_tg(i) = - pi/4*D_tank^2 * rho_tg_sat * death_term;
     
     % mdot into the bubbles
     mdot_bub(i) = mdot_bub_l(i) + mdot_bub_tg(i);
@@ -2338,7 +2472,10 @@ for i = 1:N_full + 1
     
 end
 
-mdot_bub_injector = pi/4*D^2 * rho_tg_sat * death_term_injector;
+mdot_bub_tg(N_full+2:N_nodes) = 0;
+mdot_bub_l(N_full+2:N_nodes) = 0;
+
+mdot_bub_injector = pi/4*D_tank^2 * rho_tg_sat * death_term_injector;
 
 % need to deal with dw_dt and dg_dt for the nodes that have left the liquid
 for i = N_full+2:N_nodes
@@ -2357,7 +2494,7 @@ mdot_tg = sum( -mdot_bub_tg );
 mdot_l = - sum(mdot_bub_l) - mdot_out_liq;
 
 % HT from wall to liquid
-% Qdot_lw = Qdot('lw',T_l,T_lw(1),rho_l,m_l,D);
+% Qdot_lw = Qdot('lw',T_l,T_lw(1),rho_l,m_l,D_tank);
 
 Pr = P/P_cr;
 h_20_lw = 1e3 * exp( 0.3092*log(Pr)^3 + 1.649*log(Pr)^2 + 3.641*log(Pr) + 5.272);
@@ -2371,7 +2508,7 @@ else
     q_lw = 0;
 end
 
-A_l = 4*V_l/D + pi/4*D^2;
+A_l = 4*V_l/D_tank + pi/4*D_tank^2;
 Qdot_lw = C_qdot_lw * q_lw*A_l;
 
 % Qdot_lw = 0;
@@ -2379,7 +2516,7 @@ Qdot_lw = C_qdot_lw * q_lw*A_l;
 Qdot_l = Qdot_lw;
 
 % HT into gas from wall
-Qdot_gw = Qdot('gw',T_tg,T_gw(1),rho_tg,m_tg,D);
+Qdot_gw = Qdot('gw',T_tg,T_gw(1),rho_tg,m_tg,D_tank);
 % Qdot_gw = 0;
 % net HT into gas
 Qdot_tg = Qdot_gw;
@@ -2423,24 +2560,24 @@ rhodot_l = mdot_l/V_l - m_l/V_l^2 * Vdot_l;
 Tdot_l = ( ( Udot_l - u_l*mdot_l )/m_l - du_drho_l*rhodot_l )/Cv_l;
 
 % mass of wall exposed to liquid
-m_lw = tank_wall_mass(V_l,D,rho_w,t_w);
+m_lw = tank_wall_mass(V_l,D_tank,rho_w,t_w);
 
 % mass of wall exposed to gas
-m_gw = tank_wall_mass(V_tg,D,rho_w,t_w);
+m_gw = tank_wall_mass(V_tg,D_tank,rho_w,t_w);
 
 % HT from air to gas wall
-Qdot_agw = Qdot('agw',T_air,T_gw(end),rho_tg,m_tg,D);
+Qdot_agw = Qdot('agw',T_air,T_gw(end),rho_tg,m_tg,D_tank);
 
 % HT from air to liquid wall
-Qdot_alw = Qdot('alw',T_air,T_lw(end),rho_l,m_l,D);
+Qdot_alw = Qdot('alw',T_air,T_lw(end),rho_l,m_l,D_tank);
 
 % conduction from liquid wall to gas wall
-L_tank = 4*V_tank/(pi*D^2);
+L_tank = 4*V_tank/(pi*D_tank^2);
 L_wc = L_tank/2;
-Qdot_wc = k_w*(T_lw - T_gw)*pi*D*t_w/L_wc;
+Qdot_wc = k_w*(T_lw - T_gw)*pi*D_tank*t_w/L_wc;
 
 % rate of change of mass of gass wall
-mdot_gw = 4*Vdot_tg*t_w*rho_w/D;
+mdot_gw = 4*Vdot_tg*t_w*rho_w/D_tank;
 
 % rate of change of temperature of gas wall
 % Tdot_gw = (Qdot_agw - Qdot_gw + Qdot_wc + cv_w*mdot_gw*(T_lw - T_gw))/(m_gw*cv_w);
@@ -2540,6 +2677,11 @@ else
     debug_data.u_rise = u_rise;
     debug_data.N_bubi = N_bubi;
     debug_data.N_full = N_full;
+    debug_data.mdot_tg = mdot_tg;
+    debug_data.mdot_bub_l = mdot_bub_l;
+    debug_data.mdot_bub_tg = mdot_bub_tg;
+    debug_data.mdot_l = mdot_l;
+    
 %     debug_data.diff_eqns_error_flag = error_flag;
     
     varargout{2} = debug_data;
