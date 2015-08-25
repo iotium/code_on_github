@@ -43,9 +43,9 @@ end
 current_dir = pwd;
 % constants.property_source = 'PDT';
 constants.fsolve_options = optimset('TolX',1e-12,'Display','off');
-constants.property_source = 'refprop';
+constants.property_source = 'PDT';
 constants.nuc_model = 'SJ';
-constants.r_dep_expression = 'without superheat';
+constants.r_dep_expression = 'with superheat';
 constants.ADQMOM_p = 1;
 p = constants.ADQMOM_p;
 fluid = 'CO2';
@@ -58,9 +58,9 @@ if nargin == 0
     N_nodes = 50;
     N_mom = 4;
     rel_tol = 5e-4;     % [] max relative error allowed in adaptive scheme
-    constants.C_qdot_lw = 2e-4;
+    constants.C_qdot_lw = 2e-5;
     constants.C_coalescence = [1 1 1]; % collision efficiency, laminar shear, turbulence
-    constants.C_nuc_rate = 10; % had this at 6e4 using the r_dep with superheat
+    constants.C_nuc_rate = 5e4; % had this at 6e4 using the r_dep with superheat, 50 without
     
 else
     inputs = varargin{1};
@@ -85,6 +85,8 @@ constants.N_ab = N_ab; % number of abscissas
 % (2*N = number of moments, going from 0 to 2N-1)
 
 constants.phi = 0.1;
+
+constants.CD_churn_turb_boundary = 0.3;
 
 clock_save = clock;
 clock_start = clock;
@@ -971,7 +973,7 @@ while running == 1;
     mdot_bub_l(:,n+1) = debug_data.mdot_bub_l;
     mdot_bub_tg(:,n+1) = debug_data.mdot_bub_tg;
     mdot_l(n+1) = debug_data.mdot_l;
-    
+    Cp_l(n+1) = debug_data.Cp_l;
     
     %     fprintf('r_q = ')
     %     fprintf('%4.6g,\t', r_q(1:6,1))
@@ -1681,13 +1683,21 @@ Ja = Cp_l * rho_l * deltaT_sup/(rho_tg_v * h_lv);
 % % have to do this because the velocity fit is bad in this region
 % u_rise(r_q < 1e-6) = 0;
 
+% parameters for fan-tsuchiya rise velocity expression
+
+n_FT = 1.6;
+c_FT = 1.2;
+Kbo_FT = 10.2;
+Kb_FT = max([ Kbo_FT*Mo^-0.038, 12]);
+
+
 u_rise = zeros(size(r_q));
 
 delta_rho = rho_l - rho_tg_sat;
 
 for i = 1:N_full+1
     
-    if V_bubi(i) > 0
+    if V_bubi(i) > constants.CD_churn_turb_boundary
         Eprime = (1 - V_bubi(i)).^2;
         Cd = 8*Eprime/3;
         u_rise(i,:) = sqrt(2/3 * delta_rho * g * r_q(i,:)./(rho_l * Cd));
@@ -1696,10 +1706,6 @@ for i = 1:N_full+1
         
         % fit from fan and tsuchiya
         %
-        n_FT = 1.6;
-        c_FT = 1.2;
-        Kbo_FT = 10.2;
-        Kb_FT = max([ Kbo_FT*Mo^-0.038, 12]);
         
         De = 2*r_q(i,:);
         
@@ -2042,6 +2048,7 @@ for i = 1:N_full + 1
         if i == 1
             % bottom point
             % there's flux out the top and nothing out the bottom
+            % also L_node = 1/2 L_node
 %             duw_dx(i,:) = uw_vec(i,:)/L_node;
 %             dug_dx(i,:) = ug_vec(i,:)/L_node;
             
@@ -2197,6 +2204,12 @@ for i = 1:N_full + 1
                     r_dep = 0.5 * (Eo_dep*sigma /(g*(rho_l - rho_tg_v)) )^0.5;
                     
                 end
+                
+%                 % hysteresis!
+%                 if constants.min_flag ~= 1
+%                     r_nuc = 2*r_nuc;
+%                     r_dep = 2*r_dep;
+%                 end
                 
                 %                 if (i == 1 && constants.step == 1) && constants.t > 0.1
                 %                     fprintf('r_dep/r_dep1 = %0.4g\n', r_dep/r_dep1)
@@ -2366,9 +2379,7 @@ for i = 1:N_full + 1
         liquid_height = V_l_star/(pi*D_tank^2/4);
         
         P1 = P2 + rho_l*g*liquid_height;
-        
-        L = V_tank/(pi*D_tank^2/4);
-        
+                
         Q = V_tank/8; % volumetric gas flow rate. just assumed a constant value here
         
         turb_diss = Q*g * P2*log(P1/P2) / ( pi * (0.5*D_tank)^2 * (P1 - P2) );
@@ -2597,10 +2608,10 @@ Qdot_lw = C_qdot_lw * q_lw*A_l;
 Qdot_l = Qdot_lw;
 
 % HT into gas from wall
-Qdot_gw = 0;%Qdot('gw',T_tg,T_gw(1),rho_tg,m_tg,D_tank);
+Qdot_gw = Qdot('gw',T_tg,T_gw(1),rho_tg,m_tg,D_tank);
 % Qdot_gw = 0;
 % net HT into gas
-Qdot_tg = 0;%Qdot_gw;
+Qdot_tg = Qdot_gw;
 
 % not sure if this is correct... should it include a rhodot term?
 % probably!!!
@@ -2769,6 +2780,7 @@ else
     debug_data.mdot_bub_l = mdot_bub_l;
     debug_data.mdot_bub_tg = mdot_bub_tg;
     debug_data.mdot_l = mdot_l;
+    debug_data.Cp_l = Cp_l;
     
     %     debug_data.diff_eqns_error_flag = error_flag;
     
