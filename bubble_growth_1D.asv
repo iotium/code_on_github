@@ -15,9 +15,10 @@ switch computer
         plot_stuff = 0;
         save_stuff = 1;
         save_periodically = 0;
-        save_parameters_only = 1;
+        save_parameters_only = 0;
+        plot_periodically = 0;
         time_out = 1;
-        max_comp_time = 60*60;
+        max_comp_time = 6*60*60;
         results_save_dir = pwd;
         
         
@@ -44,6 +45,7 @@ current_dir = pwd;
 constants.fsolve_options = optimset('TolX',1e-12,'Display','off');
 constants.property_source = 'refprop';
 constants.nuc_model = 'SJ';
+constants.r_dep_expression = 'without superheat';
 constants.ADQMOM_p = 1;
 p = constants.ADQMOM_p;
 fluid = 'CO2';
@@ -56,9 +58,9 @@ if nargin == 0
 N_nodes = 50;
 N_mom = 4;
 rel_tol = 5e-4;     % [] max relative error allowed in adaptive scheme
-constants.C_qdot_lw = 2e-4;
-constants.C_coalescence = [0 5e-6 5e-2]; % collision efficiency, laminar shear, turbulence
-constants.C_nuc_rate = 6e4;
+constants.C_qdot_lw = 0;%2e-4;
+constants.C_coalescence = [0.05 1 1]; % collision efficiency, laminar shear, turbulence
+constants.C_nuc_rate = 10; % had this at 6e4 using the r_dep with superheat
 
 else
     inputs = varargin{1};
@@ -412,11 +414,12 @@ f = zeros(N_dim,1);
 constants.min_flag = 0;
 constants.peak_flag = 0;
 
-f_cutoff_norm = 1e-2; % supposed to be filter cutoff f / (1/2 sample f)
+f_cutoff_norm = 1e-1; % supposed to be filter cutoff f / (1/2 sample f)
 % so it's basically = 2*dt*f_cutoff
 filter_order = 3;
-[b_filter,a_filter] = butter(filter_order, f_cutoff_norm, 'low');
-
+% [b_filter,a_filter] = butter(filter_order, f_cutoff_norm, 'low');
+filter_handle = fdesign.lowpass('N,F3dB',filter_order, f_cutoff_norm);
+filter_design = design(filter_handle,'butter');
 
 %% ODE solver
 
@@ -437,18 +440,49 @@ while running == 1;
     
     if n > 10
         
-        rho_tg_sat_filtered = filtfilt(b_filter, a_filter, rho_tg_sat);
+        t_filt = linspace(t(n-10),t(n),11);
         
-        guesses.rhodot_tg_sat = bdiff(rho_tg_sat_filtered, starti, n, t, adaptive);
+        LL_for_filter = interp1(t(n-10:n),L_tank*V_l_star(n-10:n)/V_tank, t_filt,'linear');
+        rho_tg_sat_for_filter = interp1(t(n-10:n),rho_tg_sat(n-10:n), t_filt,'linear');
+
+        f_sample = 1/mean(diff(t_filt));
+        f_cutoff = f_cutoff_norm*f_sample/2;
         
-        LL_filtered = filtfilt(b_filter, a_filter, L_tank*V_l_star/V_tank);
+        if f_cutoff > 20
+            f_cutoff_norm = 20/(0.5*f_sample);
+            if f_cutoff_norm < 1
+                
+%                 [b_filter,a_filter] = butter(filter_order, f_cutoff_norm, 'low');
+                filter_handle = fdesign.lowpass('N,F3dB',filter_order, f_cutoff_norm);
+                filter_design = design(filter_handle,'butter');
+            
+            end
+        elseif f_cutoff < 4
+            f_cutoff_norm = 4/(0.5*f_sample);
+            if f_cutoff_norm < 1
+%                 [b_filter,a_filter] = butter(filter_order, f_cutoff_norm, 'low');
+                filter_handle = fdesign.lowpass('N,F3dB',filter_order, f_cutoff_norm);
+                filter_design = design(filter_handle,'butter');
+            
+            end
+        end
         
-        guesses.dLL_dt = bdiff(LL_filtered, starti, n, t, adaptive);
+%         rho_tg_sat_filtered = filtfilt(b_filter, a_filter, rho_tg_sat);
+        rho_tg_sat_filtered = filtfilt(filter_design.sosMatrix, ...
+            filter_design.ScaleValues, rho_tg_sat_for_filter);
+        
+        guesses.rhodot_tg_sat = bdiff(rho_tg_sat_filtered, 8, 11, t_filt, 0);  
+        
+%         LL_filtered = filtfilt(b_filter, a_filter, LL_for_filter);
+        LL_filtered = filtfilt(filter_design.sosMatrix, ...
+            filter_design.ScaleValues, LL_for_filter);
+
+        guesses.dLL_dt = bdiff(LL_filtered, 8, 11, t_filt, 0);
         
     else
         
         guesses.rhodot_tg_sat = 0;
-        guesses.LL = 0;
+        guesses.dLL_dt = 0;
     end
     
     Vdot_bub(n+1) = bdiff(V_bub, starti, n, t, adaptive);
@@ -2010,9 +2044,20 @@ for i = 1:N_full + 1
             %             duw_dx(i,:) = (uw_vec(i+1,:) - uw_vec(i,:))/L_node;
             %             dug_dx(i,:) = (ug_vec(i+1,:) - ug_vec(i,:))/L_node;
         else
+            % upwind it
+            
+            % %      rising: flux in is from -x
+                    flux_bot = w_q(i-1,:).*0.5.*(u_vec(i,:) + u_vec(i-1,:));
+                    flux_top = w_q(i,:).*0.5.*(u_vec(i+1,:) + u_vec(i,:));
+                    duw_dx(i,:) = (flux_top - flux_bot)/L_node;
+    
+                    flux_bot = g_q(i-1,:).*0.5.*(u_vec(i,:) + u_vec(i-1,:));
+                    flux_top = g_q(i,:).*0.5.*(u_vec(i+1,:) + u_vec(i,:));
+                    dug_dx(i,:) = (flux_top - flux_bot)/L_node;
+            
 %             if i == 2
-                duw_dx(i,:) = (uw_vec(i,:) - uw_vec(i-1,:))/L_node;
-                dug_dx(i,:) = (ug_vec(i,:) - ug_vec(i-1,:))/L_node;
+%                 duw_dx(i,:) = (uw_vec(i,:) - uw_vec(i-1,:))/L_node;
+%                 dug_dx(i,:) = (ug_vec(i,:) - ug_vec(i-1,:))/L_node;
 %             else
 %                 % top 2 points
 %                 %             duw_dx(i,:) = ( uw_vec(i,:) - uw_vec(i-1,:) )/(L_node);
@@ -2108,7 +2153,12 @@ for i = 1:N_full + 1
                 % rate of nucleation (mostly from shin & jones, 1993)
                 
                 % departure diameter [m]
-                r_dep1 = 0.5 * 2.97e4 * (P/P_cr)^-1.09 * ( K_b * T_cr / (P_cr * MW) )^(1/3);
+                
+                if strcmp(constants.r_dep_expression, 'without superheat')
+                
+                r_dep = 0.5 * 2.97e4 * (P/P_cr)^-1.09 * ( K_b * T_cr / (P_cr * MW) )^(1/3);
+                
+                elseif strcmp(constants.r_dep_expression, 'with superheat')
                 
                 Ja_wall = (T_lw(1) - (T_s + dT_sat_depth)) * rho_l * Cp_l/(rho_tg_v*h_lv);
                 
@@ -2117,6 +2167,8 @@ for i = 1:N_full + 1
                 Eo_dep = ( 0.19*( 1.8 + 1e5*K_1)^(2/3) )^2;
                 
                 r_dep = 0.5 * (Eo_dep*sigma /(g*(rho_l - rho_tg_v)) )^0.5;
+                
+                end
                 
                 %                 if (i == 1 && constants.step == 1) && constants.t > 0.1
                 %                     fprintf('r_dep/r_dep1 = %0.4g\n', r_dep/r_dep1)
@@ -2306,30 +2358,31 @@ for i = 1:N_full + 1
                 dbi = 2*rbi;
                 dbj = 2*rbj;
                 
-                % theta for laminar shear
+                % ----- theta for laminar shear -----
                 qLS = C_coalescence(2) * 4/3*(rbi + rbj).^3*mean_shear;
                 
                 % rise velocity for bubble i and j
                 u_ri = sqrt( (2.14*sigma/(rho_l*dbi)) + 0.505*g*dbi);
                 u_rj = sqrt( (2.14*sigma./(rho_l*dbj)) + 0.505*g*dbj);
                 
-                % collision area
+                % ----- collision area ----- 
                 Sij = pi/4*(rbi + rbj).^2;
                 
-                % theta for buoyancy
+                % ----- theta for buoyancy -----
                 qB = Sij.*abs(u_ri - u_rj);
                 
-                % theta for turbulence
+                % ----- theta for turbulence -----
                 qT = C_coalescence(3) * 0.089*pi*(dbi + dbj).^2 .* turb_diss.^(1/3) .* sqrt(dbi.^(2/3) + dbj.^(2/3));
                 
-                % bubble radius
+                % ----- equivalent bubble radius -----
                 rb_eq = ( (1./rbi + 1./rbj)/2 ).^-1;
                 
-                % contanct time
+                % ----- contanct time -----
+                
                 % prince + blanch, 1990, in turn from Levich, 1962
                 % note I added the 0.1 factor in front. P+B say this is
                 % really just an order of magnitude (if that) estimate
-                %                  t_cont = 0.1*rb_eq.^(2/3) ./ turb_diss.^(1/3);
+%                                  t_cont = 0.1*rb_eq.^(2/3) ./ turb_diss.^(1/3);
                 
                 % kamp & chesters, 2001
                 rho_c = rho_l;
@@ -2414,29 +2467,29 @@ for i = 1:N_full + 1
     %     death_term = death_int_s(4)*r_m^3;
     
     if i == N_full + 1
-        % bubbles leaving from free surface (m^3/(m^2 * s))
+%         bubbles leaving from free surface (m^3/(m^2 * s))
         
-        % if we're looking at the bottom node, just take its value
+%         if we're looking at the bottom node, just take its value
 %         if i == 1
-            death_term = 4/3 * pi * sum(r_q(i,:).^(3) .* w_q(i,:) .* (u_rise(i,:) + u_LL) );
+            death_term = 4/3 * pi * sum(r_q(i,:).^(3) .* w_q(i,:) .* (u_rise(i,:) - u_LL) );
 %         else
-%             if i == 2
+% %             if i == 2
 %             % above the bottom node, linearly interpolate/extrapolate to
 %             % get the value wherever the free surface is
-%             death_term_i = 4/3 * pi * sum(r_q(i,:).^(3) .* w_q(i,:) .* (u_rise(i,:) - u_bulk) );
-%             death_term_im1 = 4/3 * pi * sum(r_q(i-1,:).^(3) .* w_q(i-1,:) .* (u_rise(i-1,:) - u_bulk) );
+%             death_term_i = 4/3 * pi * sum(r_q(i,:).^(3) .* w_q(i,:) .* (u_rise(i,:) - u_LL) );
+%             death_term_im1 = 4/3 * pi * sum(r_q(i-1,:).^(3) .* w_q(i-1,:) .* (u_rise(i-1,:) - u_LL) );
 % %             if node_level(i) < 0.5
 % %                 death_term = (0.5 + node_level(i))*death_term_i + (0.5 - node_level(i))*death_term_im1;
 % %             else
 %                 death_term_slope = (death_term_i - death_term_im1)/1;
 %                 death_term = death_term_i + death_term_slope*( node_level(i) - 0.5 );
 % %             end
-%             else
-%                death_term_i = 4/3 * pi * sum(r_q(i,:).^(3) .* w_q(i,:) .* (u_rise(i,:) - u_bulk) );
-%                death_term_im1 = 4/3 * pi * sum(r_q(i-1,:).^(3) .* w_q(i-1,:) .* (u_rise(i-1,:) - u_bulk) );
-%                death_term_im2 = 4/3 * pi * sum(r_q(i-2,:).^(3) .* w_q(i-2,:) .* (u_rise(i-2,:) - u_bulk) );
-%                death_term = interp1( [-2 -1 0], [death_term_im2, death_term_im1, death_term_i], (node_level(i)-0.5),'nearest','extrap');
-%             end
+% %             else
+% %                death_term_i = 4/3 * pi * sum(r_q(i,:).^(3) .* w_q(i,:) .* (u_rise(i,:) - u_bulk) );
+% %                death_term_im1 = 4/3 * pi * sum(r_q(i-1,:).^(3) .* w_q(i-1,:) .* (u_rise(i-1,:) - u_bulk) );
+% %                death_term_im2 = 4/3 * pi * sum(r_q(i-2,:).^(3) .* w_q(i-2,:) .* (u_rise(i-2,:) - u_bulk) );
+% %                death_term = interp1( [-2 -1 0], [death_term_im2, death_term_im1, death_term_i], (node_level(i)-0.5),'nearest','extrap');
+% %             end
 %         end
     else
         death_term = 0;
@@ -2611,6 +2664,13 @@ dy = [mdot_tg;
 if ~sum(isreal(dy(:))) || sum(isnan(dy(:)))
     disp('complex or nans in derivatives')
     error_flag = 1;
+    
+%     if constants.t > 3
+%         beep
+%         beep
+%         beep
+%     keyboard
+%     end
 end
 
 % correct for negative stuff

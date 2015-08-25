@@ -45,6 +45,7 @@ current_dir = pwd;
 constants.fsolve_options = optimset('TolX',1e-12,'Display','off');
 constants.property_source = 'refprop';
 constants.nuc_model = 'SJ';
+constants.r_dep_expression = 'without superheat';
 constants.ADQMOM_p = 1;
 p = constants.ADQMOM_p;
 fluid = 'CO2';
@@ -56,10 +57,10 @@ if nargin == 0
 
 N_nodes = 50;
 N_mom = 4;
-rel_tol = 1e-4;     % [] max relative error allowed in adaptive scheme
+rel_tol = 5e-4;     % [] max relative error allowed in adaptive scheme
 constants.C_qdot_lw = 0;%2e-4;
-constants.C_coalescence = [0 5e-6 5e-2]; % collision efficiency, laminar shear, turbulence
-constants.C_nuc_rate = 6e4;
+constants.C_coalescence = [0.01 1 1]; % collision efficiency, laminar shear, turbulence
+constants.C_nuc_rate = 10; % had this at 6e4 using the r_dep with superheat
 
 else
     inputs = varargin{1};
@@ -591,9 +592,13 @@ while running == 1;
         
         % if error is < min_error
         if max(abs_err/abs_tol,rel_err/rel_tol) < min_error
+            % also check that we didn't just recover from an error
+            if error_flag ~= 1
             
             % make h bigger
             h = min(4*h,h_max);
+            
+            end
             
         end
         
@@ -1685,7 +1690,7 @@ for i = 1:N_full+1
     if V_bubi(i) > 0.3
         Eprime = (1 - V_bubi(i)).^2;
         Cd = 8*Eprime/3;
-        u_rise(i,:) = sqrt(8/3 * delta_rho * g * r_q(i,:)./(rho_l * Cd));
+        u_rise(i,:) = sqrt(2/3 * delta_rho * g * r_q(i,:)./(rho_l * Cd));
     else
         
         
@@ -1725,7 +1730,7 @@ for i = 1:N_full+1
                 E = ( (1 + 17.67*(1 - V_bubi(i)).^(6/7) )./(18.67*(1 - V_bubi(i)))).^2;
                 Eo = g*delta_rho*4*pi*r_q(i,j).^2/sigma;
                 Cd = 2/3*E.*Eo;
-                u_rise(i,j) = sqrt(8/3 * delta_rho * g * r_q(i,j)./(rho_l * Cd));
+                u_rise(i,j) = sqrt(2/3 * delta_rho * g * r_q(i,j)./(rho_l * Cd));
                 
             end
             
@@ -2152,7 +2157,12 @@ for i = 1:N_full + 1
                 % rate of nucleation (mostly from shin & jones, 1993)
                 
                 % departure diameter [m]
-                r_dep1 = 0.5 * 2.97e4 * (P/P_cr)^-1.09 * ( K_b * T_cr / (P_cr * MW) )^(1/3);
+                
+                if strcmp(constants.r_dep_expression, 'without superheat')
+                
+                r_dep = 0.5 * 2.97e4 * (P/P_cr)^-1.09 * ( K_b * T_cr / (P_cr * MW) )^(1/3);
+                
+                elseif strcmp(constants.r_dep_expression, 'with superheat')
                 
                 Ja_wall = (T_lw(1) - (T_s + dT_sat_depth)) * rho_l * Cp_l/(rho_tg_v*h_lv);
                 
@@ -2161,6 +2171,8 @@ for i = 1:N_full + 1
                 Eo_dep = ( 0.19*( 1.8 + 1e5*K_1)^(2/3) )^2;
                 
                 r_dep = 0.5 * (Eo_dep*sigma /(g*(rho_l - rho_tg_v)) )^0.5;
+                
+                end
                 
                 %                 if (i == 1 && constants.step == 1) && constants.t > 0.1
                 %                     fprintf('r_dep/r_dep1 = %0.4g\n', r_dep/r_dep1)
@@ -2350,35 +2362,36 @@ for i = 1:N_full + 1
                 dbi = 2*rbi;
                 dbj = 2*rbj;
                 
-                % theta for laminar shear
+                % ----- theta for laminar shear -----
                 qLS = C_coalescence(2) * 4/3*(rbi + rbj).^3*mean_shear;
                 
                 % rise velocity for bubble i and j
                 u_ri = sqrt( (2.14*sigma/(rho_l*dbi)) + 0.505*g*dbi);
                 u_rj = sqrt( (2.14*sigma./(rho_l*dbj)) + 0.505*g*dbj);
                 
-                % collision area
+                % ----- collision area ----- 
                 Sij = pi/4*(rbi + rbj).^2;
                 
-                % theta for buoyancy
+                % ----- theta for buoyancy -----
                 qB = Sij.*abs(u_ri - u_rj);
                 
-                % theta for turbulence
+                % ----- theta for turbulence -----
                 qT = C_coalescence(3) * 0.089*pi*(dbi + dbj).^2 .* turb_diss.^(1/3) .* sqrt(dbi.^(2/3) + dbj.^(2/3));
                 
-                % bubble radius
+                % ----- equivalent bubble radius -----
                 rb_eq = ( (1./rbi + 1./rbj)/2 ).^-1;
                 
-                % contanct time
+                % ----- contanct time -----
+                
                 % prince + blanch, 1990, in turn from Levich, 1962
                 % note I added the 0.1 factor in front. P+B say this is
                 % really just an order of magnitude (if that) estimate
-                %                  t_cont = 0.1*rb_eq.^(2/3) ./ turb_diss.^(1/3);
+                                 t_cont = 0.1*rb_eq.^(2/3) ./ turb_diss.^(1/3);
                 
                 % kamp & chesters, 2001
                 rho_c = rho_l;
                 C_vm = 0.8;
-                t_cont = sqrt( rho_c*C_vm/(3*sigma) * ( 2*dbi.*dbj./(dbi + dbj)).^3 );
+%                 t_cont = sqrt( rho_c*C_vm/(3*sigma) * ( 2*dbi.*dbj./(dbi + dbj)).^3 );
                 
                 % film initial and final thicknesses
                 film_i = 1e-4;
@@ -2461,27 +2474,27 @@ for i = 1:N_full + 1
 %         bubbles leaving from free surface (m^3/(m^2 * s))
         
 %         if we're looking at the bottom node, just take its value
-        if i == 1
+%         if i == 1
             death_term = 4/3 * pi * sum(r_q(i,:).^(3) .* w_q(i,:) .* (u_rise(i,:) - u_LL) );
-        else
-%             if i == 2
-            % above the bottom node, linearly interpolate/extrapolate to
-            % get the value wherever the free surface is
-            death_term_i = 4/3 * pi * sum(r_q(i,:).^(3) .* w_q(i,:) .* (u_rise(i,:) - u_LL) );
-            death_term_im1 = 4/3 * pi * sum(r_q(i-1,:).^(3) .* w_q(i-1,:) .* (u_rise(i-1,:) - u_LL) );
-%             if node_level(i) < 0.5
-%                 death_term = (0.5 + node_level(i))*death_term_i + (0.5 - node_level(i))*death_term_im1;
-%             else
-                death_term_slope = (death_term_i - death_term_im1)/1;
-                death_term = death_term_i + death_term_slope*( node_level(i) - 0.5 );
-%             end
-%             else
-%                death_term_i = 4/3 * pi * sum(r_q(i,:).^(3) .* w_q(i,:) .* (u_rise(i,:) - u_bulk) );
-%                death_term_im1 = 4/3 * pi * sum(r_q(i-1,:).^(3) .* w_q(i-1,:) .* (u_rise(i-1,:) - u_bulk) );
-%                death_term_im2 = 4/3 * pi * sum(r_q(i-2,:).^(3) .* w_q(i-2,:) .* (u_rise(i-2,:) - u_bulk) );
-%                death_term = interp1( [-2 -1 0], [death_term_im2, death_term_im1, death_term_i], (node_level(i)-0.5),'nearest','extrap');
-%             end
-        end
+%         else
+% %             if i == 2
+%             % above the bottom node, linearly interpolate/extrapolate to
+%             % get the value wherever the free surface is
+%             death_term_i = 4/3 * pi * sum(r_q(i,:).^(3) .* w_q(i,:) .* (u_rise(i,:) - u_LL) );
+%             death_term_im1 = 4/3 * pi * sum(r_q(i-1,:).^(3) .* w_q(i-1,:) .* (u_rise(i-1,:) - u_LL) );
+% %             if node_level(i) < 0.5
+% %                 death_term = (0.5 + node_level(i))*death_term_i + (0.5 - node_level(i))*death_term_im1;
+% %             else
+%                 death_term_slope = (death_term_i - death_term_im1)/1;
+%                 death_term = death_term_i + death_term_slope*( node_level(i) - 0.5 );
+% %             end
+% %             else
+% %                death_term_i = 4/3 * pi * sum(r_q(i,:).^(3) .* w_q(i,:) .* (u_rise(i,:) - u_bulk) );
+% %                death_term_im1 = 4/3 * pi * sum(r_q(i-1,:).^(3) .* w_q(i-1,:) .* (u_rise(i-1,:) - u_bulk) );
+% %                death_term_im2 = 4/3 * pi * sum(r_q(i-2,:).^(3) .* w_q(i-2,:) .* (u_rise(i-2,:) - u_bulk) );
+% %                death_term = interp1( [-2 -1 0], [death_term_im2, death_term_im1, death_term_i], (node_level(i)-0.5),'nearest','extrap');
+% %             end
+%         end
     else
         death_term = 0;
     end
@@ -2655,6 +2668,13 @@ dy = [mdot_tg;
 if ~sum(isreal(dy(:))) || sum(isnan(dy(:)))
     disp('complex or nans in derivatives')
     error_flag = 1;
+    
+%     if constants.t > 3
+%         beep
+%         beep
+%         beep
+%     keyboard
+%     end
 end
 
 % correct for negative stuff
