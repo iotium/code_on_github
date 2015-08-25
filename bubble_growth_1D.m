@@ -54,14 +54,14 @@ constants.fluid = fluid;
 ADQMOM = 'off';
 
 if nargin == 0
-
-N_nodes = 50;
-N_mom = 4;
-rel_tol = 5e-4;     % [] max relative error allowed in adaptive scheme
-constants.C_qdot_lw = 0;%2e-4;
-constants.C_coalescence = [0.01 1 1]; % collision efficiency, laminar shear, turbulence
-constants.C_nuc_rate = 10; % had this at 6e4 using the r_dep with superheat
-
+    
+    N_nodes = 50;
+    N_mom = 4;
+    rel_tol = 5e-4;     % [] max relative error allowed in adaptive scheme
+    constants.C_qdot_lw = 2e-4;
+    constants.C_coalescence = [1 1 1]; % collision efficiency, laminar shear, turbulence
+    constants.C_nuc_rate = 10; % had this at 6e4 using the r_dep with superheat
+    
 else
     inputs = varargin{1};
     N_nodes = inputs.N_nodes;
@@ -71,7 +71,7 @@ else
     constants.C_qdot_lw = inputs.C_qdot_lw;
     constants.C_coalescence = inputs.C_coalescence;
     constants.C_nuc_rate = inputs.C_nuc_rate;
-
+    
 end
 
 constants.N_nodes = N_nodes;
@@ -101,7 +101,7 @@ constants.C_r_nuc = 1;
 constants.C_dTs = 1;
 constants.C_x_inj = 1;
 if constants.C_coalescence(1) == 0
-constants.coalescence_switch = 'off';
+    constants.coalescence_switch = 'off';
 else
     constants.coalescence_switch = 'on';
 end
@@ -444,7 +444,7 @@ while running == 1;
         
         LL_for_filter = interp1(t(n-10:n),L_tank*V_l_star(n-10:n)/V_tank, t_filt,'linear');
         rho_tg_sat_for_filter = interp1(t(n-10:n),rho_tg_sat(n-10:n), t_filt,'linear');
-
+        
         f_sample = 1/mean(diff(t_filt));
         f_cutoff = f_cutoff_norm*f_sample/2;
         
@@ -452,31 +452,31 @@ while running == 1;
             f_cutoff_norm = 20/(0.5*f_sample);
             if f_cutoff_norm < 1
                 
-%                 [b_filter,a_filter] = butter(filter_order, f_cutoff_norm, 'low');
+                %                 [b_filter,a_filter] = butter(filter_order, f_cutoff_norm, 'low');
                 filter_handle = fdesign.lowpass('N,F3dB',filter_order, f_cutoff_norm);
                 filter_design = design(filter_handle,'butter');
-            
+                
             end
         elseif f_cutoff < 4
             f_cutoff_norm = 4/(0.5*f_sample);
             if f_cutoff_norm < 1
-%                 [b_filter,a_filter] = butter(filter_order, f_cutoff_norm, 'low');
+                %                 [b_filter,a_filter] = butter(filter_order, f_cutoff_norm, 'low');
                 filter_handle = fdesign.lowpass('N,F3dB',filter_order, f_cutoff_norm);
                 filter_design = design(filter_handle,'butter');
-            
+                
             end
         end
         
-%         rho_tg_sat_filtered = filtfilt(b_filter, a_filter, rho_tg_sat);
+        %         rho_tg_sat_filtered = filtfilt(b_filter, a_filter, rho_tg_sat);
         rho_tg_sat_filtered = filtfilt(filter_design.sosMatrix, ...
             filter_design.ScaleValues, rho_tg_sat_for_filter);
         
-        guesses.rhodot_tg_sat = bdiff(rho_tg_sat_filtered, 8, 11, t_filt, 0);  
+        guesses.rhodot_tg_sat = bdiff(rho_tg_sat_filtered, 8, 11, t_filt, 0);
         
-%         LL_filtered = filtfilt(b_filter, a_filter, LL_for_filter);
+        %         LL_filtered = filtfilt(b_filter, a_filter, LL_for_filter);
         LL_filtered = filtfilt(filter_design.sosMatrix, ...
             filter_design.ScaleValues, LL_for_filter);
-
+        
         guesses.dLL_dt = bdiff(LL_filtered, 8, 11, t_filt, 0);
         
     else
@@ -541,10 +541,10 @@ while running == 1;
     end
     
     
-%     mdot_l = f(4);
+    %     mdot_l = f(4);
     %     rhodot_l = mdot_l/V_l(n) - m_l(n)/V_l(n)^2*Vdot_l(n);
     
-%     mdot_tg = f(1);
+    %     mdot_tg = f(1);
     %     rhodot_tg = mdot_tg/V_tg(n) - m_tg(n)/V_tg(n)^2*Vdot_tg(n);
     
     
@@ -594,10 +594,10 @@ while running == 1;
         if max(abs_err/abs_tol,rel_err/rel_tol) < min_error
             % also check that we didn't just recover from an error
             if error_flag ~= 1
-            
-            % make h bigger
-            h = min(4*h,h_max);
-            
+                
+                % make h bigger
+                h = min(4*h,h_max);
+                
             end
             
         end
@@ -667,54 +667,110 @@ while running == 1;
     error_OK = 0;
     
     try
-    
-    while error_OK == 0
-        % solving differential equations
-        % i = counter for
         
-        constants.h = h;
-        
-        error_flag = 0;
-        
-        for i = 1:s
-            % s = number of stages in the scheme
+        while error_OK == 0
+            % solving differential equations
+            % i = counter for
             
+            constants.h = h;
             
-            if i == 1
+            error_flag = 0;
+            
+            for i = 1:s
+                % s = number of stages in the scheme
                 
-                % f = f( t(n) , y(n) )
                 
-                if n > 1 && ~isnan(f_np1(1))
-                    % we calculated it at the end of last time step
-                    f = f_np1;
+                if i == 1
+                    
+                    % f = f( t(n) , y(n) )
+                    
+                    if n > 1 && ~isnan(f_np1(1))
+                        % we calculated it at the end of last time step
+                        f = f_np1;
+                    else
+                        % we haven't had a time step yet!
+                        constants.step = 1;
+                        try
+                            f = diffeqns(y(:,n), constants, guesses, PDT);
+                        catch
+                            error_flag = 1;
+                        end
+                    end
                 else
-                    % we haven't had a time step yet!
-                    constants.step = 1;
-                    try
-                        f = diffeqns(y(:,n), constants, guesses, PDT);
-                    catch
+                    
+                    % f for k(2) = f( t(n) + c(2)*h , y(n) + a(2,1)*k(1) )
+                    % f for k(3) = f( t(n) + c(3)*h , y(n) + a(3,1)*k(1) + a(3,2)*k(2) )
+                    % and so on
+                    constants.step = i;
+                    a_k_term = sum( (ones(N_dim,1)*a(i,1:i-1)).*k(:,1:i-1) ,2 );
+                    
+                    y_new = y(:,n) + a_k_term;
+                    
+                    variables = unpack_y(y_new, constants);
+                    
+                    T_l_new = variables.T_l;
+                    g_q_new = variables.g_q;
+                    w_q_new = variables.w_q;
+                    
+                    r_q_new = g_q_new./w_q_new;
+                    
+                    V_bubi_new = 4/3*pi*sum( r_q_new.^((4-1)/p) .* w_q_new, 2 );
+                    
+                    % check to see if we're taking a step that'll cause errors
+                    error_conditions = [isnan(sum(y_new(:))), (T_l_new < 220), (T_l_new > 305), ...
+                        (T_l_new > (T_l(n) + 0.25)),  (T_l_new < (T_l(n) - 5)),...
+                        (max(r_q_new(:)) > 0.2), (max(V_bubi_new) > 1)];
+                    % (min(y_new) < 0),
+                    
+                    if sum(error_conditions) > 0
+                        error_conditions(:)'
+                        disp('we''re taking a bad step')
+                        f = ones(size(f));
                         error_flag = 1;
+                        break
+                    else
+                        
+                        [ind_neg, min_val] = min(y_new);
+                        if min_val < 0
+                            fprintf('negative part of y. index: %0.d\n', ind_neg)
+                            %                     keyboard
+                        end
+                        
+                        try
+                            f = diffeqns(y_new, ...
+                                constants, guesses, PDT);
+                        catch
+                            error_flag = 1;
+                        end
+                        
                     end
                 end
-            else
                 
-                % f for k(2) = f( t(n) + c(2)*h , y(n) + a(2,1)*k(1) )
-                % f for k(3) = f( t(n) + c(3)*h , y(n) + a(3,1)*k(1) + a(3,2)*k(2) )
-                % and so on
-                constants.step = i;
-                a_k_term = sum( (ones(N_dim,1)*a(i,1:i-1)).*k(:,1:i-1) ,2 );
+                k(:,i) = f*h;
                 
-                y_new = y(:,n) + a_k_term;
+            end
+            
+            %         k1 = h*diffeqns(y(:,n));
+            %         k2 = h*diffeqns(y(:,n) + a(2,1)*k1);
+            %         k3 = h*diffeqns(y(:,n) + a(3,1)*k1 + a(3,2)*k2);
+            %         k4 = h*diffeqns(y(:,n) + a(4,1)*k1 + a(4,2)*k2 + a(4,3)*k3);
+            %         k5 = h*diffeqns(y(:,n) + a(5,1)*k1 + a(5,2)*k2 + a(5,3)*k3 + a(5,4)*k4);
+            %         k6 = h*diffeqns(y(:,n) + a(6,1)*k1 + a(6,2)*k2 + a(6,3)*k3 + a(6,4)*k4 + a(6,5)*k5);
+            %
+            %         k = [k1, k2, k3, k4, k5, k6];
+            
+            y(:,n+1) = y(:,n) + (k*b);
+            
+            if error_flag == 0
+                % need to check the new y to make sure it's OK too
                 
-                variables = unpack_y(y_new, constants);
+                variables = unpack_y(y(:,n+1), constants);
                 
                 T_l_new = variables.T_l;
                 g_q_new = variables.g_q;
                 w_q_new = variables.w_q;
                 
                 r_q_new = g_q_new./w_q_new;
-                
-                V_bubi_new = 4/3*pi*sum( r_q_new.^((4-1)/p) .* w_q_new, 2 );
                 
                 % check to see if we're taking a step that'll cause errors
                 error_conditions = [isnan(sum(y_new(:))), (T_l_new < 220), (T_l_new > 305), ...
@@ -723,205 +779,149 @@ while running == 1;
                 % (min(y_new) < 0),
                 
                 if sum(error_conditions) > 0
-                    error_conditions(:)'
                     disp('we''re taking a bad step')
                     f = ones(size(f));
                     error_flag = 1;
-                    break
-                else
-                    
-                    [ind_neg, min_val] = min(y_new);
-                    if min_val < 0
-                        fprintf('negative part of y. index: %0.d\n', ind_neg)
-                        %                     keyboard
-                    end
-                    
-                    try
-                    f = diffeqns(y_new, ...
-                        constants, guesses, PDT);
-                    catch
-                        error_flag = 1;
-                    end
-                    
                 end
             end
             
-            k(:,i) = f*h;
-            
-        end
-        
-        %         k1 = h*diffeqns(y(:,n));
-        %         k2 = h*diffeqns(y(:,n) + a(2,1)*k1);
-        %         k3 = h*diffeqns(y(:,n) + a(3,1)*k1 + a(3,2)*k2);
-        %         k4 = h*diffeqns(y(:,n) + a(4,1)*k1 + a(4,2)*k2 + a(4,3)*k3);
-        %         k5 = h*diffeqns(y(:,n) + a(5,1)*k1 + a(5,2)*k2 + a(5,3)*k3 + a(5,4)*k4);
-        %         k6 = h*diffeqns(y(:,n) + a(6,1)*k1 + a(6,2)*k2 + a(6,3)*k3 + a(6,4)*k4 + a(6,5)*k5);
-        %
-        %         k = [k1, k2, k3, k4, k5, k6];
-        
-        y(:,n+1) = y(:,n) + (k*b);
-        
-        if error_flag == 0
-            % need to check the new y to make sure it's OK too
-            
-            variables = unpack_y(y(:,n+1), constants);
-            
-            T_l_new = variables.T_l;
-            g_q_new = variables.g_q;
-            w_q_new = variables.w_q;
-            
-            r_q_new = g_q_new./w_q_new;
-            
-            % check to see if we're taking a step that'll cause errors
-            error_conditions = [isnan(sum(y_new(:))), (T_l_new < 220), (T_l_new > 305), ...
-                (T_l_new > (T_l(n) + 0.25)),  (T_l_new < (T_l(n) - 5)),...
-                (max(r_q_new(:)) > 0.2), (max(V_bubi_new) > 1)];
-            % (min(y_new) < 0),
-            
-            if sum(error_conditions) > 0
-                disp('we''re taking a bad step')
-                f = ones(size(f));
-                error_flag = 1;
-            end
-        end
-        
-        if adaptive == 1
-            % using adaptive scheme, need to check error
-            
-            err = k*(b - bs);   % absolute error (diff. between 5th and 4th order estimates of y(n+1) - y(n))
-            
-            %             rel_err = abs(err./( y(:,n) + 1e-6));  % relative error
-            
-            %             rel_err = abs(err./( mean([y(:,n) y(:,n+1)],2) + 1e-6));  % relative error
-            
-            
-            for j = 1:N_dim
-                if abs(y(j,n)) > 1e-6
-                    
-                    rel_err(j) = abs(err(j))./( abs( mean( y(j,n:n+1))) + 1e-6);  % relative error
-                else
-                    rel_err(j) = abs(err(j));
-                end
-            end
-            
-            %             rel_err = rel_err(1:6); % remove the bubble distribution terms
-            
-            [rel_err, ind_max_rel_err(n+1)] = max(rel_err(isfinite(rel_err)));  % fix rel_err to the maximum finite value of rel_err
-            
-            
-            
-            abs_err = abs(err);
-            
-            %             abs_err = abs_err(1:6); % remove the bubble distribution terms
-            
-            abs_err = max(abs_err(isfinite(abs_err)));  % do the same for abs_err
-            
-            % check for possible problems: isempty statements are in case
-            % abs and rel err are both full of non-finite values
-            % isnan checks for nan's
-            % isreal checks for imaginary numbers
-            error_conditions2 = isempty(rel_err) + ...
-                isempty(abs_err) +  ...
-                isnan(sum(err)) + ...
-                ~isreal(sum(y(:,n+1))) + ...
-                error_flag;
-            
-            % if any of those fail, set rel_err large so that the step gets
-            % recomuputed
-            if error_conditions2 > 0
-                rel_err = 1;
-            end
-            
-            if ( rel_err < rel_tol && abs_err < abs_tol) || (h < 1.25*h_min)
-                % meeting the error requirement or step size is too
-                % small already
-                error_OK = 1;
+            if adaptive == 1
+                % using adaptive scheme, need to check error
                 
-                if ((n > 1) && ((h_LRO < LRO_tol) && (h_LRO > 0))) && (fill_level(n) < 0.01)
-                    % distance to LRO is less than LRO_tol
-                    running = 0;
-                    %                     disp('reached LRO')
+                err = k*(b - bs);   % absolute error (diff. between 5th and 4th order estimates of y(n+1) - y(n))
+                
+                %             rel_err = abs(err./( y(:,n) + 1e-6));  % relative error
+                
+                %             rel_err = abs(err./( mean([y(:,n) y(:,n+1)],2) + 1e-6));  % relative error
+                
+                
+                for j = 1:N_dim
+                    if abs(y(j,n)) > 1e-6
+                        
+                        rel_err(j) = abs(err(j))./( abs( mean( y(j,n:n+1))) + 1e-6);  % relative error
+                    else
+                        rel_err(j) = abs(err(j));
+                    end
                 end
                 
-                if h < 2*h_min
-                    fprintf('h got too small. exceeded tolerance by %6.4g%%\n',100*rel_err/rel_tol);
-                    running = 0;
+                %             rel_err = rel_err(1:6); % remove the bubble distribution terms
+                
+                [rel_err, ind_max_rel_err(n+1)] = max(rel_err(isfinite(rel_err)));  % fix rel_err to the maximum finite value of rel_err
+                
+                
+                
+                abs_err = abs(err);
+                
+                %             abs_err = abs_err(1:6); % remove the bubble distribution terms
+                
+                abs_err = max(abs_err(isfinite(abs_err)));  % do the same for abs_err
+                
+                % check for possible problems: isempty statements are in case
+                % abs and rel err are both full of non-finite values
+                % isnan checks for nan's
+                % isreal checks for imaginary numbers
+                error_conditions2 = isempty(rel_err) + ...
+                    isempty(abs_err) +  ...
+                    isnan(sum(err)) + ...
+                    ~isreal(sum(y(:,n+1))) + ...
+                    error_flag;
+                
+                % if any of those fail, set rel_err large so that the step gets
+                % recomuputed
+                if error_conditions2 > 0
+                    rel_err = 1;
+                end
+                
+                if ( rel_err < rel_tol && abs_err < abs_tol) || (h < 1.25*h_min)
+                    % meeting the error requirement or step size is too
+                    % small already
+                    error_OK = 1;
+                    
+                    if ((n > 1) && ((h_LRO < LRO_tol) && (h_LRO > 0))) && (fill_level(n) < 0.01)
+                        % distance to LRO is less than LRO_tol
+                        running = 0;
+                        %                     disp('reached LRO')
+                    end
+                    
+                    if h < 2*h_min
+                        fprintf('h got too small. exceeded tolerance by %6.4g%%\n',100*rel_err/rel_tol);
+                        running = 0;
+                    end
+                    
+                else
+                    
+                    %                 fprintf(['max rel err = %6.4g, ind of max rel err = %6.4g\n'...
+                    %                     'err(ind_max_rel_err) = %8.6g, y(ind_max_rel_err,n+1) = '...
+                    %                     '%8.6g, y(ind_max_rel_err,n) = %8.6g\n'], ...
+                    %                     rel_err, ind_max_rel_err, err(ind_max_rel_err), ...
+                    %                     y(ind_max_rel_err, (n+1):-1:n))
+                    
+                    % not meeting error requirements
+                    % sh is used to update h, h = sh*h
+                    
+                    if rel_err == 0 || abs_err == 0
+                        % something odd happened, so reduce step size a lot
+                        
+                        sh = 0.1;
+                        
+                    else
+                        
+                        if rel_err/rel_tol > abs_err/abs_tol
+                            % if relative error is a bigger problem than
+                            % absolute, update step size based on relative
+                            % error. Else, use absolute
+                            
+                            sh = 0.84*( rel_tol*h / (2*rel_err) )^(1/4);
+                        else
+                            sh = 0.84*( abs_tol*h / (2*abs_err) )^(1/4);
+                        end
+                    end
+                    
+                    if sh < 0.1
+                        % if it looks like the step size would be reduced too
+                        % much, only reduce it by 1/10
+                        sh = 0.1;
+                    elseif sh > 4.0
+                        % similarly if it's too big, only make it 4x bigger
+                        sh = 4.0;
+                    end
+                    
+                    % update step size
+                    h = h*sh;
+                    
+                    % minimum step size set by computer's precision
+                    h_min = 16*eps(t(n));
+                    
+                    % self explanatory I think
+                    if h > h_max
+                        h = h_max;
+                    elseif h < h_min
+                        h = h_min;
+                    end
+                    
                 end
                 
             else
-                
-                %                 fprintf(['max rel err = %6.4g, ind of max rel err = %6.4g\n'...
-                %                     'err(ind_max_rel_err) = %8.6g, y(ind_max_rel_err,n+1) = '...
-                %                     '%8.6g, y(ind_max_rel_err,n) = %8.6g\n'], ...
-                %                     rel_err, ind_max_rel_err, err(ind_max_rel_err), ...
-                %                     y(ind_max_rel_err, (n+1):-1:n))
-                
-                % not meeting error requirements
-                % sh is used to update h, h = sh*h
-                
-                if rel_err == 0 || abs_err == 0
-                    % something odd happened, so reduce step size a lot
-                    
-                    sh = 0.1;
-                    
-                else
-                    
-                    if rel_err/rel_tol > abs_err/abs_tol
-                        % if relative error is a bigger problem than
-                        % absolute, update step size based on relative
-                        % error. Else, use absolute
-                        
-                        sh = 0.84*( rel_tol*h / (2*rel_err) )^(1/4);
-                    else
-                        sh = 0.84*( abs_tol*h / (2*abs_err) )^(1/4);
-                    end
-                end
-                
-                if sh < 0.1
-                    % if it looks like the step size would be reduced too
-                    % much, only reduce it by 1/10
-                    sh = 0.1;
-                elseif sh > 4.0
-                    % similarly if it's too big, only make it 4x bigger
-                    sh = 4.0;
-                end
-                
-                % update step size
-                h = h*sh;
-                
-                % minimum step size set by computer's precision
-                h_min = 16*eps(t(n));
-                
-                % self explanatory I think
-                if h > h_max
-                    h = h_max;
-                elseif h < h_min
-                    h = h_min;
-                end
-                
+                % not using adaptive scheme, don't need to check error
+                error_OK = 1;
             end
             
-        else
-            % not using adaptive scheme, don't need to check error
-            error_OK = 1;
         end
         
-    end
-    
     catch
         y(:,n+1) = y(:,n);
         ind_max_rel_err(n+1) = 1;
         stop_reason = 'error in calling differential eqns';
         running = 0;
     end
-        
+    
     
     constants.step = 1;
     
     try
-    
-    [f_np1, debug_data] = diffeqns(y(:,n+1), constants, guesses, PDT);
-    
+        
+        [f_np1, debug_data] = diffeqns(y(:,n+1), constants, guesses, PDT);
+        
     catch
         
         f_np1 = f;
@@ -989,7 +989,7 @@ while running == 1;
     %
     if max(r_q(:)) > 0.99
         disp('r_q is getting too big')
-%         keyboard
+        %         keyboard
     end
     
     
@@ -1438,7 +1438,7 @@ r_q = g_q./w_q;
 
 if min(r_q) < 0
     disp('negative abscissa')
-%     keyboard
+    %     keyboard
 end
 
 % get the moments from gauss quadrature
@@ -1466,7 +1466,7 @@ end
 
 if max(V_bubi) > 1
     disp('V_bubi > 1!!')
-%     keyboard
+    %     keyboard
     V_bubi(V_bubi>1) = 0.99;
 end
 
@@ -1479,7 +1479,7 @@ if (P == pi) || isnan(P)
     disp('P error')
     constants.error_detected = 1;
     P = guesses.P;
-%     keyboard
+    %     keyboard
 end
 
 % get density of liquid and ullage based on temperature and pressure
@@ -1687,7 +1687,7 @@ delta_rho = rho_l - rho_tg_sat;
 
 for i = 1:N_full+1
     
-    if V_bubi(i) > 0.3
+    if V_bubi(i) > 0
         Eprime = (1 - V_bubi(i)).^2;
         Cd = 8*Eprime/3;
         u_rise(i,:) = sqrt(2/3 * delta_rho * g * r_q(i,:)./(rho_l * Cd));
@@ -1769,7 +1769,7 @@ Eo_min = min(min(Eo(1:N_full+1,:)));
 
 if sum(sum(isnan(u_rise(1:N_full+1,:)))) > 0
     disp('nans in u_rise')
-%     keyboard
+    %     keyboard
 end
 
 duw_dx = zeros(size(w_q));
@@ -1794,184 +1794,184 @@ end
 for i = 1:N_full + 1
     % fluxes in and out of node
     
-%             % using finite_diff (various possibilities) - play around w/
-% %             forwards, backwards, central, and what order
-%             max_order = 2;
-%             if i > 1
-%     
-%     
-%                 if i == N_full + 1
-%                     for j = 1:N_ab
-%                         duw_dx(i,j) = finite_diff(uw_vec(:,j), 1, N_full+1, i, L_node, 'backwards', max_order);
-%                         dug_dx(i,j) = finite_diff(ug_vec(:,j), 1, N_full+1, i, L_node, 'backwards', max_order);
-%                     end
-%                 else
-%     
-%                     for j = 1:N_ab
-%                         duw_dx(i,j) = finite_diff(uw_vec(:,j), 1, N_full+1, i, L_node, 'backwards', max_order);
-%                         dug_dx(i,j) = finite_diff(ug_vec(:,j), 1, N_full+1, i, L_node, 'backwards', max_order);
-%                     end
-%                 end
-%     
-%             else
-%                 % bottom node
-%                 duw_dx(i,:) = uw_vec(i,:)/L_node;
-%                 dug_dx(i,:) = ug_vec(i,:)/L_node;
-%             end
-%     
+    %             % using finite_diff (various possibilities) - play around w/
+    % %             forwards, backwards, central, and what order
+    %             max_order = 2;
+    %             if i > 1
+    %
+    %
+    %                 if i == N_full + 1
+    %                     for j = 1:N_ab
+    %                         duw_dx(i,j) = finite_diff(uw_vec(:,j), 1, N_full+1, i, L_node, 'backwards', max_order);
+    %                         dug_dx(i,j) = finite_diff(ug_vec(:,j), 1, N_full+1, i, L_node, 'backwards', max_order);
+    %                     end
+    %                 else
+    %
+    %                     for j = 1:N_ab
+    %                         duw_dx(i,j) = finite_diff(uw_vec(:,j), 1, N_full+1, i, L_node, 'backwards', max_order);
+    %                         dug_dx(i,j) = finite_diff(ug_vec(:,j), 1, N_full+1, i, L_node, 'backwards', max_order);
+    %                     end
+    %                 end
+    %
+    %             else
+    %                 % bottom node
+    %                 duw_dx(i,:) = uw_vec(i,:)/L_node;
+    %                 dug_dx(i,:) = ug_vec(i,:)/L_node;
+    %             end
+    %
     %
     
-%     %     1st order upwind
-%         if i > 1 && i < N_full
-%     %         interior grid points
-%     
-%             for j = 1:N_ab
-%     
-%                 if u_rise(i,j) - u_bulk > 0
-% %                     rising: flux in is from -x
-%                     flux_bot = w_q(i-1,j)*0.5*(u_vec(i,j) + u_vec(i-1,j));
-%                     flux_top = w_q(i,j)*0.5*(u_vec(i+1,j) + u_vec(i,j));
-%                     duw_dx(i,j) = (flux_top - flux_bot)/L_node;
-%     
-%                     flux_bot = g_q(i-1,j)*0.5*(u_vec(i,j) + u_vec(i-1,j));
-%                     flux_top = g_q(i,j)*0.5*(u_vec(i+1,j) + u_vec(i,j));
-%                     dug_dx(i,j) = (flux_top - flux_bot)/L_node;
-%                 else
-% %                     falling: flux in is from +x
-%                     flux_top = w_q(i+1,j)*0.5*(u_vec(i+1,j) + u_vec(i,j));
-%                     flux_bot = w_q(i,j)*0.5*(u_vec(i,j) + u_vec(i-1,j));
-%                     duw_dx(i,j) = (flux_top - flux_bot)/L_node;
-%     
-%                     flux_top = g_q(i+1,j)*0.5*(u_vec(i+1,j) + u_vec(i,j));
-%                     flux_bot = g_q(i,j)*0.5*(u_vec(i,j) + u_vec(i-1,j));
-%                     dug_dx(i,j) = (flux_top - flux_bot)/L_node;
-%                 end
-%     
-%             end
-%     
-%         else
-%     
-%             if i == 1
-% %                 bottom point
-%     
-%                 duw_dx(i,:) = uw_vec(i,:)/L_node;
-%                 dug_dx(i,:) = ug_vec(i,:)/L_node;
-% %                             duw_dx(i,:) = (uw_vec(i+1,:) - uw_vec(i,:))/L_node;
-% %                             dug_dx(i,:) = (ug_vec(i+1,:) - ug_vec(i,:))/L_node;
-%             else
-% %                 top 2 points
-% %                             duw_dx(i,:) = ( uw_vec(i,:) - uw_vec(i-1,:) )/(L_node);
-% %                             dug_dx(i,:) = ( ug_vec(i,:) - ug_vec(i-1,:) )/(L_node);
-%                 duw_dx(i,:) = zeros(size(uw_vec(i,:)));
-%                 dug_dx(i,:) = zeros(size(ug_vec(i,:)));
-%             end
-%         end
-%     %
-%     % Roe (1st order)
-%     if i > 1 && i < N_full
-%         % interior grid points
-%         sigma_o = 1;
-%         
-%         for j = 1:N_ab
-%             % w flux through top
-%             u_LR = ( sqrt(w_q(i+1,j))*u_vec(i+1,j) + sqrt(w_q(i,j))*u_vec(i,j))...
-%                 /(sqrt(w_q(i+1,j)) + sqrt(w_q(i,j)));
-%             
-%             du = u_vec(i+1,j) - u_vec(i,j);
-%             dw = w_q(i+1,j) - w_q(i,j);
-%             
-%             u_L = u_vec(i,j);
-%             u_R = u_vec(i+1,j);
-%             epsilon = sigma_o * max([0, u_LR - u_L, u_R - u_LR]);
-%             
-%             if abs(u_LR) < epsilon
-%                 u_LR = (u_LR^2 + epsilon^2)/(2*epsilon);
-%             end
-%             
-%             w_flux_top = 0.5*(uw_vec(i,j) + uw_vec(i+1,j)) - 0.5*(abs(u_LR)*dw);
-% 
-%             
-%                         
-%             % g flux through top
-%             u_LR = ( sqrt(g_q(i+1,j))*u_vec(i+1,j) + sqrt(g_q(i,j))*u_vec(i,j))...
-%                 /(sqrt(g_q(i+1,j)) + sqrt(g_q(i,j)));
-%             
-%             du = u_vec(i+1,j) - u_vec(i,j);
-%             dg = g_q(i+1,j) - g_q(i,j);
-%             
-%             u_L = u_vec(i,j);
-%             u_R = u_vec(i+1,j);
-%             epsilon = sigma_o * max([0, u_LR - u_L, u_R - u_LR]);
-%             
-%             if abs(u_LR) < epsilon
-%                 u_LR = (u_LR^2 + epsilon^2)/(2*epsilon);
-%             end
-%             
-%             g_flux_top = 0.5*(ug_vec(i,j) + ug_vec(i+1,j)) - 0.5*(abs(u_LR)*dg);
-% 
-%             
-%             % w flux through bottom
-%             u_LR = ( sqrt(w_q(i,j))*u_vec(i,j) + sqrt(w_q(i-1,j))*u_vec(i-1,j))...
-%                 /(sqrt(w_q(i,j)) + sqrt(w_q(i-1,j)));
-%             
-%             du = u_vec(i,j) - u_vec(i-1,j);
-%             dw = w_q(i,j) - w_q(i-1,j);
-%             
-%             u_L = u_vec(i-1,j);
-%             u_R = u_vec(i,j);
-%             epsilon = sigma_o * max([0, u_LR - u_L, u_R - u_LR]);
-%             
-%             if abs(u_LR) < epsilon
-%                 u_LR = (u_LR^2 + epsilon^2)/(2*epsilon);
-%             end
-% 
-%             w_flux_bot = 0.5*(uw_vec(i-1,j) + uw_vec(i,j)) - 0.5*(abs(u_LR)*dw);
-% 
-% 
-%             
-%             % g flux through bottom
-%             u_LR = ( sqrt(g_q(i,j))*u_vec(i,j) + sqrt(g_q(i-1,j))*u_vec(i-1,j))...
-%                 /(sqrt(g_q(i,j)) + sqrt(g_q(i-1,j)));
-%             
-%             du = u_vec(i,j) - u_vec(i-1,j);
-%             dg = g_q(i,j) - g_q(i-1,j);
-% 
-%             u_L = u_vec(i-1,j);
-%             u_R = u_vec(i,j);
-%             epsilon = sigma_o * max([0, u_LR - u_L, u_R - u_LR]);
-%             
-%             if abs(u_LR) < epsilon
-%                 u_LR = (u_LR^2 + epsilon^2)/(2*epsilon);
-%             end
-%                       
-%             g_flux_bot = 0.5*(ug_vec(i-1,j) + ug_vec(i,j)) - 0.5*(abs(u_LR)*dg);
-% 
-%    
-%             duw_dx(i,j) = (w_flux_top -w_flux_bot)/L_node;
-% 
-%             dug_dx(i,j) = (g_flux_top - g_flux_bot)/L_node;
-%         end
-%         
-%     else
-%         
-%         if i == 1
-%             % bottom point
-%             % there's flux out the top and nothing out the bottom
-%             duw_dx(i,:) = uw_vec(i,:)/L_node;
-%             dug_dx(i,:) = ug_vec(i,:)/L_node;
-%             
-%             %             duw_dx(i,:) = (uw_vec(i+1,:) - uw_vec(i,:))/L_node;
-%             %             dug_dx(i,:) = (ug_vec(i+1,:) - ug_vec(i,:))/L_node;
-%         else
-%             % top 2 points
-%             %             duw_dx(i,:) = ( uw_vec(i,:) - uw_vec(i-1,:) )/(L_node);
-%             %             dug_dx(i,:) = ( ug_vec(i,:) - ug_vec(i-1,:) )/(L_node);
-%             duw_dx(i,:) = zeros(size(uw_vec(i,:)));
-%             dug_dx(i,:) = zeros(size(ug_vec(i,:)));
-%         end
-%     end
+    %     %     1st order upwind
+    %         if i > 1 && i < N_full
+    %     %         interior grid points
+    %
+    %             for j = 1:N_ab
+    %
+    %                 if u_rise(i,j) - u_bulk > 0
+    % %                     rising: flux in is from -x
+    %                     flux_bot = w_q(i-1,j)*0.5*(u_vec(i,j) + u_vec(i-1,j));
+    %                     flux_top = w_q(i,j)*0.5*(u_vec(i+1,j) + u_vec(i,j));
+    %                     duw_dx(i,j) = (flux_top - flux_bot)/L_node;
+    %
+    %                     flux_bot = g_q(i-1,j)*0.5*(u_vec(i,j) + u_vec(i-1,j));
+    %                     flux_top = g_q(i,j)*0.5*(u_vec(i+1,j) + u_vec(i,j));
+    %                     dug_dx(i,j) = (flux_top - flux_bot)/L_node;
+    %                 else
+    % %                     falling: flux in is from +x
+    %                     flux_top = w_q(i+1,j)*0.5*(u_vec(i+1,j) + u_vec(i,j));
+    %                     flux_bot = w_q(i,j)*0.5*(u_vec(i,j) + u_vec(i-1,j));
+    %                     duw_dx(i,j) = (flux_top - flux_bot)/L_node;
+    %
+    %                     flux_top = g_q(i+1,j)*0.5*(u_vec(i+1,j) + u_vec(i,j));
+    %                     flux_bot = g_q(i,j)*0.5*(u_vec(i,j) + u_vec(i-1,j));
+    %                     dug_dx(i,j) = (flux_top - flux_bot)/L_node;
+    %                 end
+    %
+    %             end
+    %
+    %         else
+    %
+    %             if i == 1
+    % %                 bottom point
+    %
+    %                 duw_dx(i,:) = uw_vec(i,:)/L_node;
+    %                 dug_dx(i,:) = ug_vec(i,:)/L_node;
+    % %                             duw_dx(i,:) = (uw_vec(i+1,:) - uw_vec(i,:))/L_node;
+    % %                             dug_dx(i,:) = (ug_vec(i+1,:) - ug_vec(i,:))/L_node;
+    %             else
+    % %                 top 2 points
+    % %                             duw_dx(i,:) = ( uw_vec(i,:) - uw_vec(i-1,:) )/(L_node);
+    % %                             dug_dx(i,:) = ( ug_vec(i,:) - ug_vec(i-1,:) )/(L_node);
+    %                 duw_dx(i,:) = zeros(size(uw_vec(i,:)));
+    %                 dug_dx(i,:) = zeros(size(ug_vec(i,:)));
+    %             end
+    %         end
+    %     %
+    %     % Roe (1st order)
+    %     if i > 1 && i < N_full
+    %         % interior grid points
+    %         sigma_o = 1;
+    %
+    %         for j = 1:N_ab
+    %             % w flux through top
+    %             u_LR = ( sqrt(w_q(i+1,j))*u_vec(i+1,j) + sqrt(w_q(i,j))*u_vec(i,j))...
+    %                 /(sqrt(w_q(i+1,j)) + sqrt(w_q(i,j)));
+    %
+    %             du = u_vec(i+1,j) - u_vec(i,j);
+    %             dw = w_q(i+1,j) - w_q(i,j);
+    %
+    %             u_L = u_vec(i,j);
+    %             u_R = u_vec(i+1,j);
+    %             epsilon = sigma_o * max([0, u_LR - u_L, u_R - u_LR]);
+    %
+    %             if abs(u_LR) < epsilon
+    %                 u_LR = (u_LR^2 + epsilon^2)/(2*epsilon);
+    %             end
+    %
+    %             w_flux_top = 0.5*(uw_vec(i,j) + uw_vec(i+1,j)) - 0.5*(abs(u_LR)*dw);
+    %
+    %
+    %
+    %             % g flux through top
+    %             u_LR = ( sqrt(g_q(i+1,j))*u_vec(i+1,j) + sqrt(g_q(i,j))*u_vec(i,j))...
+    %                 /(sqrt(g_q(i+1,j)) + sqrt(g_q(i,j)));
+    %
+    %             du = u_vec(i+1,j) - u_vec(i,j);
+    %             dg = g_q(i+1,j) - g_q(i,j);
+    %
+    %             u_L = u_vec(i,j);
+    %             u_R = u_vec(i+1,j);
+    %             epsilon = sigma_o * max([0, u_LR - u_L, u_R - u_LR]);
+    %
+    %             if abs(u_LR) < epsilon
+    %                 u_LR = (u_LR^2 + epsilon^2)/(2*epsilon);
+    %             end
+    %
+    %             g_flux_top = 0.5*(ug_vec(i,j) + ug_vec(i+1,j)) - 0.5*(abs(u_LR)*dg);
+    %
+    %
+    %             % w flux through bottom
+    %             u_LR = ( sqrt(w_q(i,j))*u_vec(i,j) + sqrt(w_q(i-1,j))*u_vec(i-1,j))...
+    %                 /(sqrt(w_q(i,j)) + sqrt(w_q(i-1,j)));
+    %
+    %             du = u_vec(i,j) - u_vec(i-1,j);
+    %             dw = w_q(i,j) - w_q(i-1,j);
+    %
+    %             u_L = u_vec(i-1,j);
+    %             u_R = u_vec(i,j);
+    %             epsilon = sigma_o * max([0, u_LR - u_L, u_R - u_LR]);
+    %
+    %             if abs(u_LR) < epsilon
+    %                 u_LR = (u_LR^2 + epsilon^2)/(2*epsilon);
+    %             end
+    %
+    %             w_flux_bot = 0.5*(uw_vec(i-1,j) + uw_vec(i,j)) - 0.5*(abs(u_LR)*dw);
+    %
+    %
+    %
+    %             % g flux through bottom
+    %             u_LR = ( sqrt(g_q(i,j))*u_vec(i,j) + sqrt(g_q(i-1,j))*u_vec(i-1,j))...
+    %                 /(sqrt(g_q(i,j)) + sqrt(g_q(i-1,j)));
+    %
+    %             du = u_vec(i,j) - u_vec(i-1,j);
+    %             dg = g_q(i,j) - g_q(i-1,j);
+    %
+    %             u_L = u_vec(i-1,j);
+    %             u_R = u_vec(i,j);
+    %             epsilon = sigma_o * max([0, u_LR - u_L, u_R - u_LR]);
+    %
+    %             if abs(u_LR) < epsilon
+    %                 u_LR = (u_LR^2 + epsilon^2)/(2*epsilon);
+    %             end
+    %
+    %             g_flux_bot = 0.5*(ug_vec(i-1,j) + ug_vec(i,j)) - 0.5*(abs(u_LR)*dg);
+    %
+    %
+    %             duw_dx(i,j) = (w_flux_top -w_flux_bot)/L_node;
+    %
+    %             dug_dx(i,j) = (g_flux_top - g_flux_bot)/L_node;
+    %         end
+    %
+    %     else
+    %
+    %         if i == 1
+    %             % bottom point
+    %             % there's flux out the top and nothing out the bottom
+    %             duw_dx(i,:) = uw_vec(i,:)/L_node;
+    %             dug_dx(i,:) = ug_vec(i,:)/L_node;
+    %
+    %             %             duw_dx(i,:) = (uw_vec(i+1,:) - uw_vec(i,:))/L_node;
+    %             %             dug_dx(i,:) = (ug_vec(i+1,:) - ug_vec(i,:))/L_node;
+    %         else
+    %             % top 2 points
+    %             %             duw_dx(i,:) = ( uw_vec(i,:) - uw_vec(i-1,:) )/(L_node);
+    %             %             dug_dx(i,:) = ( ug_vec(i,:) - ug_vec(i-1,:) )/(L_node);
+    %             duw_dx(i,:) = zeros(size(uw_vec(i,:)));
+    %             dug_dx(i,:) = zeros(size(ug_vec(i,:)));
+    %         end
+    %     end
     
-% MUSCL
+    % MUSCL
     if i > 2 && i < N_full
         % interior grid points
         
@@ -2042,33 +2042,57 @@ for i = 1:N_full + 1
         if i == 1
             % bottom point
             % there's flux out the top and nothing out the bottom
-            duw_dx(i,:) = uw_vec(i,:)/L_node;
-            dug_dx(i,:) = ug_vec(i,:)/L_node;
+%             duw_dx(i,:) = uw_vec(i,:)/L_node;
+%             dug_dx(i,:) = ug_vec(i,:)/L_node;
+            
+            
+            flux_bot = 0;%w_q(i-1,:).*0.5.*(u_vec(i,:) + u_vec(i-1,:));
+            flux_top = w_q(i,:).*0.5.*(u_vec(i+1,:) + u_vec(i,:));
+            duw_dx(i,:) = 2*(flux_top - flux_bot)/L_node;
+
+            flux_bot = 0;%g_q(i-1,:).*0.5.*(u_vec(i,:) + u_vec(i-1,:));
+            flux_top = g_q(i,:).*0.5.*(u_vec(i+1,:) + u_vec(i,:));
+            dug_dx(i,:) = 2*(flux_top - flux_bot)/L_node;
+            
             
             %             duw_dx(i,:) = (uw_vec(i+1,:) - uw_vec(i,:))/L_node;
             %             dug_dx(i,:) = (ug_vec(i+1,:) - ug_vec(i,:))/L_node;
         else
-            % upwind it
-            
-            % %      rising: flux in is from -x
-                    flux_bot = w_q(i-1,:).*0.5.*(u_vec(i,:) + u_vec(i-1,:));
-                    flux_top = w_q(i,:).*0.5.*(u_vec(i+1,:) + u_vec(i,:));
-                    duw_dx(i,:) = (flux_top - flux_bot)/L_node;
-    
-                    flux_bot = g_q(i-1,:).*0.5.*(u_vec(i,:) + u_vec(i-1,:));
-                    flux_top = g_q(i,:).*0.5.*(u_vec(i+1,:) + u_vec(i,:));
-                    dug_dx(i,:) = (flux_top - flux_bot)/L_node;
-            
-%             if i == 2
-%                 duw_dx(i,:) = (uw_vec(i,:) - uw_vec(i-1,:))/L_node;
-%                 dug_dx(i,:) = (ug_vec(i,:) - ug_vec(i-1,:))/L_node;
-%             else
-%                 % top 2 points
-%                 %             duw_dx(i,:) = ( uw_vec(i,:) - uw_vec(i-1,:) )/(L_node);
-%                 %             dug_dx(i,:) = ( ug_vec(i,:) - ug_vec(i-1,:) )/(L_node);
-%                 duw_dx(i,:) = zeros(size(uw_vec(i,:)));
-%                 dug_dx(i,:) = zeros(size(ug_vec(i,:)));
-%             end
+            if i == N_full + 1
+                % top point -> backwards difference
+%                 duw_dx(i,:) = ( uw_vec(i,:) - uw_vec(i-1,:) )/(L_node);
+%                 dug_dx(i,:) = ( ug_vec(i,:) - ug_vec(i-1,:) )/(L_node);
+                
+                flux_bot = w_q(i-1,:).*0.5.*(u_vec(i,:) + u_vec(i-1,:));
+                flux_top = w_q(i,:).*u_vec(i,:);
+                duw_dx(i,:) = (flux_top - flux_bot)/L_node;
+                
+                flux_bot = g_q(i-1,:).*0.5.*(u_vec(i,:) + u_vec(i-1,:));
+                flux_top = g_q(i,:).*u_vec(i,:);
+                dug_dx(i,:) = (flux_top - flux_bot)/L_node;
+            else
+                % upwind it
+                
+                % %      rising: flux in is from -x
+                flux_bot = w_q(i-1,:).*0.5.*(u_vec(i,:) + u_vec(i-1,:));
+                flux_top = w_q(i,:).*0.5.*(u_vec(i+1,:) + u_vec(i,:));
+                duw_dx(i,:) = (flux_top - flux_bot)/L_node;
+                
+                flux_bot = g_q(i-1,:).*0.5.*(u_vec(i,:) + u_vec(i-1,:));
+                flux_top = g_q(i,:).*0.5.*(u_vec(i+1,:) + u_vec(i,:));
+                dug_dx(i,:) = (flux_top - flux_bot)/L_node;
+                
+                %             if i == 2
+                %                 duw_dx(i,:) = (uw_vec(i,:) - uw_vec(i-1,:))/L_node;
+                %                 dug_dx(i,:) = (ug_vec(i,:) - ug_vec(i-1,:))/L_node;
+                %             else
+                %                 % top 2 points
+                %                 %             duw_dx(i,:) = ( uw_vec(i,:) - uw_vec(i-1,:) )/(L_node);
+                %                 %             dug_dx(i,:) = ( ug_vec(i,:) - ug_vec(i-1,:) )/(L_node);
+                %                 duw_dx(i,:) = zeros(size(uw_vec(i,:)));
+                %                 dug_dx(i,:) = zeros(size(ug_vec(i,:)));
+                %             end
+            end
         end
     end
     
@@ -2077,7 +2101,7 @@ end
 
 if deltaT_sup > 15
     disp('real superheat!')
-%     keyboard
+    %     keyboard
 end
 
 
@@ -2159,19 +2183,19 @@ for i = 1:N_full + 1
                 % departure diameter [m]
                 
                 if strcmp(constants.r_dep_expression, 'without superheat')
-                
-                r_dep = 0.5 * 2.97e4 * (P/P_cr)^-1.09 * ( K_b * T_cr / (P_cr * MW) )^(1/3);
-                
+                    
+                    r_dep = 0.5 * 2.97e4 * (P/P_cr)^-1.09 * ( K_b * T_cr / (P_cr * MW) )^(1/3);
+                    
                 elseif strcmp(constants.r_dep_expression, 'with superheat')
-                
-                Ja_wall = (T_lw(1) - (T_s + dT_sat_depth)) * rho_l * Cp_l/(rho_tg_v*h_lv);
-                
-                K_1 = (Ja_wall/Pr_l)*( g*rho_l*(rho_l-rho_tg_v)/mu_l^2 * (sigma/(g*(rho_l-rho_tg_v)))^(3/2) )^(-1);
-                
-                Eo_dep = ( 0.19*( 1.8 + 1e5*K_1)^(2/3) )^2;
-                
-                r_dep = 0.5 * (Eo_dep*sigma /(g*(rho_l - rho_tg_v)) )^0.5;
-                
+                    
+                    Ja_wall = (T_lw(1) - (T_s + dT_sat_depth)) * rho_l * Cp_l/(rho_tg_v*h_lv);
+                    
+                    K_1 = (Ja_wall/Pr_l)*( g*rho_l*(rho_l-rho_tg_v)/mu_l^2 * (sigma/(g*(rho_l-rho_tg_v)))^(3/2) )^(-1);
+                    
+                    Eo_dep = ( 0.19*( 1.8 + 1e5*K_1)^(2/3) )^2;
+                    
+                    r_dep = 0.5 * (Eo_dep*sigma /(g*(rho_l - rho_tg_v)) )^0.5;
+                    
                 end
                 
                 %                 if (i == 1 && constants.step == 1) && constants.t > 0.1
@@ -2252,7 +2276,7 @@ for i = 1:N_full + 1
     end
     
     % rdot term based on rho_dot
-    rdot_rhodot = 0;%-guesses.rhodot_tg_sat/rho_tg_sat * r_q(i,:)/3;
+    rdot_rhodot = -guesses.rhodot_tg_sat/rho_tg_sat * r_q(i,:)/3;
     
     % generat scaled abscissas for more accurate calculations
     % later on, _s will signify scaled (I think)
@@ -2291,35 +2315,35 @@ for i = 1:N_full + 1
     birth_int_s = zeros(1,N_ab*2);
     
     if deltaT_sup_node > 1e-4
-    
-    for k = 1:N_ab*2
-        % if nucleation happens only at r_nuc
-        birth_int_s_delta = (r_nuc/r_m).^((k-1)/p) * spec_nuc_rate;
         
-%                 % exponential distribution
-%                 r_a = 10*r_nuc;
-%         
-%                 birth_int_s_exp = (r_a/r_m)^((k-1)/p) * spec_nuc_rate * exp( r_nuc/r_a ) ...
-%                     * gamma(1+((k-1)/p)) * gammainc(r_nuc/r_a, 1+((k-1)/p), 'upper');
-%         %
-%         uniform distribution
-%                 dr = 100*r_nuc;
-%                 birth_int_s_uni = (1/r_m)^((k-1)/p) * spec_nuc_rate/dr * 1/( (k-1)/p + 1)*...
-%                     ( (r_nuc + dr)^( (k-1)/p + 1) - r_nuc^( (k-1)/p + 1) );
+        for k = 1:N_ab*2
+            % if nucleation happens only at r_nuc
+            birth_int_s_delta = (r_nuc/r_m).^((k-1)/p) * spec_nuc_rate;
+            
+            %                 % exponential distribution
+            %                 r_a = 10*r_nuc;
+            %
+            %                 birth_int_s_exp = (r_a/r_m)^((k-1)/p) * spec_nuc_rate * exp( r_nuc/r_a ) ...
+            %                     * gamma(1+((k-1)/p)) * gammainc(r_nuc/r_a, 1+((k-1)/p), 'upper');
+            %         %
+            %         uniform distribution
+            %                 dr = 100*r_nuc;
+            %                 birth_int_s_uni = (1/r_m)^((k-1)/p) * spec_nuc_rate/dr * 1/( (k-1)/p + 1)*...
+            %                     ( (r_nuc + dr)^( (k-1)/p + 1) - r_nuc^( (k-1)/p + 1) );
+            
+            
+            birth_int_s(k) = birth_int_s_delta;
+            
+            % now if it's spread out a bit (gaussian)
+            %         s_nuc = r_nuc;
+            % %         birth_int_s(k) = spec_nuc_rate * r_m*integral(@(rs) rs.^k .* ...
+            % %             (1/(s_nuc*sqrt(2*pi))).*exp( - ((r_m*rs) - r_nuc).^2./(2*s_nuc^2)), 0, 25*r_nuc/r_m);
+            %
+            %         rs = linspace(0,r_nuc/r_m + 5*s_nuc/r_m,1000);
+            %         birth_int_s(k) = spec_nuc_rate * r_m * trapz(rs, rs.^((k-1)/p) .* ...
+            %             (1/(s_nuc*sqrt(2*pi))).*exp( - ((r_m*rs) - r_nuc).^2./(2*s_nuc^2)));
+        end
         
-        
-        birth_int_s(k) = birth_int_s_delta;
-        
-        % now if it's spread out a bit (gaussian)
-        %         s_nuc = r_nuc;
-        % %         birth_int_s(k) = spec_nuc_rate * r_m*integral(@(rs) rs.^k .* ...
-        % %             (1/(s_nuc*sqrt(2*pi))).*exp( - ((r_m*rs) - r_nuc).^2./(2*s_nuc^2)), 0, 25*r_nuc/r_m);
-        %
-        %         rs = linspace(0,r_nuc/r_m + 5*s_nuc/r_m,1000);
-        %         birth_int_s(k) = spec_nuc_rate * r_m * trapz(rs, rs.^((k-1)/p) .* ...
-        %             (1/(s_nuc*sqrt(2*pi))).*exp( - ((r_m*rs) - r_nuc).^2./(2*s_nuc^2)));
-    end
-    
     end
     
     % birth and death due to coalescence
@@ -2369,7 +2393,7 @@ for i = 1:N_full + 1
                 u_ri = sqrt( (2.14*sigma/(rho_l*dbi)) + 0.505*g*dbi);
                 u_rj = sqrt( (2.14*sigma./(rho_l*dbj)) + 0.505*g*dbj);
                 
-                % ----- collision area ----- 
+                % ----- collision area -----
                 Sij = pi/4*(rbi + rbj).^2;
                 
                 % ----- theta for buoyancy -----
@@ -2386,12 +2410,12 @@ for i = 1:N_full + 1
                 % prince + blanch, 1990, in turn from Levich, 1962
                 % note I added the 0.1 factor in front. P+B say this is
                 % really just an order of magnitude (if that) estimate
-                                 t_cont = 0.1*rb_eq.^(2/3) ./ turb_diss.^(1/3);
+                t_cont = 0.1*rb_eq.^(2/3) ./ turb_diss.^(1/3);
                 
                 % kamp & chesters, 2001
                 rho_c = rho_l;
                 C_vm = 0.8;
-%                 t_cont = sqrt( rho_c*C_vm/(3*sigma) * ( 2*dbi.*dbj./(dbi + dbj)).^3 );
+                %                 t_cont = sqrt( rho_c*C_vm/(3*sigma) * ( 2*dbi.*dbj./(dbi + dbj)).^3 );
                 
                 % film initial and final thicknesses
                 film_i = 1e-4;
@@ -2417,7 +2441,7 @@ for i = 1:N_full + 1
         
         %         if mom(i,V_moment_index) > 1e-6
         disp('coalescence isn''t conserving mass')
-%         keyboard
+        %         keyboard
         %         end
     end
     
@@ -2471,30 +2495,30 @@ for i = 1:N_full + 1
     %     death_term = death_int_s(4)*r_m^3;
     
     if i == N_full + 1
-%         bubbles leaving from free surface (m^3/(m^2 * s))
+        %         bubbles leaving from free surface (m^3/(m^2 * s))
         
-%         if we're looking at the bottom node, just take its value
-%         if i == 1
-            death_term = 4/3 * pi * sum(r_q(i,:).^(3) .* w_q(i,:) .* (u_rise(i,:) - u_LL) );
-%         else
-% %             if i == 2
-%             % above the bottom node, linearly interpolate/extrapolate to
-%             % get the value wherever the free surface is
-%             death_term_i = 4/3 * pi * sum(r_q(i,:).^(3) .* w_q(i,:) .* (u_rise(i,:) - u_LL) );
-%             death_term_im1 = 4/3 * pi * sum(r_q(i-1,:).^(3) .* w_q(i-1,:) .* (u_rise(i-1,:) - u_LL) );
-% %             if node_level(i) < 0.5
-% %                 death_term = (0.5 + node_level(i))*death_term_i + (0.5 - node_level(i))*death_term_im1;
-% %             else
-%                 death_term_slope = (death_term_i - death_term_im1)/1;
-%                 death_term = death_term_i + death_term_slope*( node_level(i) - 0.5 );
-% %             end
-% %             else
-% %                death_term_i = 4/3 * pi * sum(r_q(i,:).^(3) .* w_q(i,:) .* (u_rise(i,:) - u_bulk) );
-% %                death_term_im1 = 4/3 * pi * sum(r_q(i-1,:).^(3) .* w_q(i-1,:) .* (u_rise(i-1,:) - u_bulk) );
-% %                death_term_im2 = 4/3 * pi * sum(r_q(i-2,:).^(3) .* w_q(i-2,:) .* (u_rise(i-2,:) - u_bulk) );
-% %                death_term = interp1( [-2 -1 0], [death_term_im2, death_term_im1, death_term_i], (node_level(i)-0.5),'nearest','extrap');
-% %             end
-%         end
+        %         if we're looking at the bottom node, just take its value
+        %         if i == 1
+        death_term = 4/3 * pi * sum(r_q(i,:).^(3) .* w_q(i,:) .* (u_rise(i,:) - u_LL) );
+        %         else
+        % %             if i == 2
+        %             % above the bottom node, linearly interpolate/extrapolate to
+        %             % get the value wherever the free surface is
+        %             death_term_i = 4/3 * pi * sum(r_q(i,:).^(3) .* w_q(i,:) .* (u_rise(i,:) - u_LL) );
+        %             death_term_im1 = 4/3 * pi * sum(r_q(i-1,:).^(3) .* w_q(i-1,:) .* (u_rise(i-1,:) - u_LL) );
+        % %             if node_level(i) < 0.5
+        % %                 death_term = (0.5 + node_level(i))*death_term_i + (0.5 - node_level(i))*death_term_im1;
+        % %             else
+        %                 death_term_slope = (death_term_i - death_term_im1)/1;
+        %                 death_term = death_term_i + death_term_slope*( node_level(i) - 0.5 );
+        % %             end
+        % %             else
+        % %                death_term_i = 4/3 * pi * sum(r_q(i,:).^(3) .* w_q(i,:) .* (u_rise(i,:) - u_bulk) );
+        % %                death_term_im1 = 4/3 * pi * sum(r_q(i-1,:).^(3) .* w_q(i-1,:) .* (u_rise(i-1,:) - u_bulk) );
+        % %                death_term_im2 = 4/3 * pi * sum(r_q(i-2,:).^(3) .* w_q(i-2,:) .* (u_rise(i-2,:) - u_bulk) );
+        % %                death_term = interp1( [-2 -1 0], [death_term_im2, death_term_im1, death_term_i], (node_level(i)-0.5),'nearest','extrap');
+        % %             end
+        %         end
     else
         death_term = 0;
     end
@@ -2573,10 +2597,10 @@ Qdot_lw = C_qdot_lw * q_lw*A_l;
 Qdot_l = Qdot_lw;
 
 % HT into gas from wall
-Qdot_gw = Qdot('gw',T_tg,T_gw(1),rho_tg,m_tg,D_tank);
+Qdot_gw = 0;%Qdot('gw',T_tg,T_gw(1),rho_tg,m_tg,D_tank);
 % Qdot_gw = 0;
 % net HT into gas
-Qdot_tg = Qdot_gw;
+Qdot_tg = 0;%Qdot_gw;
 
 % not sure if this is correct... should it include a rhodot term?
 % probably!!!
@@ -2669,12 +2693,12 @@ if ~sum(isreal(dy(:))) || sum(isnan(dy(:)))
     disp('complex or nans in derivatives')
     error_flag = 1;
     
-%     if constants.t > 3
-%         beep
-%         beep
-%         beep
-%     keyboard
-%     end
+    %     if constants.t > 4.725
+    %         beep
+    %         beep
+    %         beep
+    %     keyboard
+    %     end
 end
 
 % correct for negative stuff
@@ -2746,7 +2770,7 @@ else
     debug_data.mdot_bub_tg = mdot_bub_tg;
     debug_data.mdot_l = mdot_l;
     
-%     debug_data.diff_eqns_error_flag = error_flag;
+    %     debug_data.diff_eqns_error_flag = error_flag;
     
     varargout{2} = debug_data;
 end
