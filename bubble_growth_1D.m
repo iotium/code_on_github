@@ -18,7 +18,7 @@ switch computer
         save_parameters_only = 0;
         plot_periodically = 0;
         time_out = 1;
-        max_comp_time = 6*60*60;
+        max_comp_time = 7*60*60;
         results_save_dir = pwd;
         
         
@@ -43,24 +43,23 @@ end
 current_dir = pwd;
 % constants.property_source = 'PDT';
 constants.fsolve_options = optimset('TolX',1e-12,'Display','off');
-constants.property_source = 'refprop';
+constants.property_source = 'PDT';
 constants.nuc_model = 'SJ';
-constants.r_dep_expression = 'without superheat';
+constants.r_dep_expression = 'with superheat';
 constants.ADQMOM_p = 1;
 p = constants.ADQMOM_p;
-fluid = 'CO2';
-constants.fluid = fluid;
+
 
 ADQMOM = 'off';
 
 if nargin == 0
     
-    N_nodes = 50;
-    N_mom = 4;
-    rel_tol = 5e-4;     % [] max relative error allowed in adaptive scheme
-    constants.C_qdot_lw = 2e-4;
+    N_nodes = 400;
+    N_mom = 6;
+    rel_tol = 1e-4;     % [] max relative error allowed in adaptive scheme
+    constants.C_qdot_lw = 6e-5;
     constants.C_coalescence = [1 1 1]; % collision efficiency, laminar shear, turbulence
-    constants.C_nuc_rate = 10; % had this at 6e4 using the r_dep with superheat
+    constants.C_nuc_rate = 5e4; % had this at 6e4 using the r_dep with superheat
     
 else
     inputs = varargin{1};
@@ -106,16 +105,14 @@ else
     constants.coalescence_switch = 'on';
 end
 save_filename = 'bubble_sim_data';
-d_inj = 0.0708 * 0.0254;
-% d_inj = 0.056 * 0.0254;
-A_inj = pi/4 * (d_inj^2);
-%     A_inj = 1.8e-8;
+
 specified_case = 12;
 
 constants.f_feedline = 0.0;
 constants.L_feedline = 5 * 0.0254;
 constants.D_feedline = (.375 - 2*0.049) * 0.0254;
 
+% parameters I can play around with
 if specified_case == 0
     % N2O test 2 from my data
     Ti = 283.7;           % [K] initial temperature
@@ -136,9 +133,11 @@ if specified_case == 0
 else
     
     [Ti, fill_level, V_tank, L_tank, ...
-        Cd, Po, T_air, rho_w, cv_w, t_w, D_tank, k_w] = initial_conditions(specified_case);
+        A_inj, Cd, Po, T_air, rho_w, cv_w, t_w, D_tank, k_w, fluid] = initial_conditions(specified_case);
     
 end
+
+constants.fluid = fluid;
 
 % divide the whole tank into nodes
 % L_node = L_tank*(1 + 20*alpha_ic)*fill_level/(N_nodes - 0.5);
@@ -156,7 +155,7 @@ min_error = 1e-4;   % [] min error (relative to error_tol) before step size is i
 h_max = 1;       % [s] max allowable time step
 h_min = 1e-16;      % [s] min allowable time step
 t_end = 1e3;         % [s] end time (if LRO doesn't happen first)
-LRO_tol = 2e-1;     % [s] tolerance for resolving the LRO point
+LRO_tol = 2e-2;     % [s] tolerance for resolving the LRO point
 dT_sup_tol = 1e-14;
 
 ode_solver = 'DP'; % [] options:
@@ -229,6 +228,9 @@ IC_moments = IC_moments * alpha_ic/alpha_mom;
 % [r_ic, w_ic] = PD_method(IC_moments);
 
 [r_ic, w_ic] = PD_method_alternative(IC_moments,p);
+
+r_ic = linspace(0.05e-3, 1e-3, N_ab);
+w_ic = ones(1,N_ab);
 
 % r_ic = logspace(-12,-9,N_ab);
 %
@@ -2134,6 +2136,11 @@ for i = 1:N_full + 1
         % radius of new bubbles
         r_nuc = C_r_nuc * 2*sigma*T_s/(rho_tg_v * h_lv * C_dTs * deltaT_sup_node);
         
+%         if constants.min_flag == 0
+%             % we're still increasing
+%             r_nuc = 2*r_nuc;
+%         end
+        
         % bubble radius rate of change
         
         % growth rate for a bubble at rest in an infinite fluid
@@ -2498,19 +2505,19 @@ for i = 1:N_full + 1
         %         bubbles leaving from free surface (m^3/(m^2 * s))
         
         %         if we're looking at the bottom node, just take its value
-        %         if i == 1
+                if i == 1
         death_term = 4/3 * pi * sum(r_q(i,:).^(3) .* w_q(i,:) .* (u_rise(i,:) - u_LL) );
-        %         else
+                else
         % %             if i == 2
         %             % above the bottom node, linearly interpolate/extrapolate to
         %             % get the value wherever the free surface is
-        %             death_term_i = 4/3 * pi * sum(r_q(i,:).^(3) .* w_q(i,:) .* (u_rise(i,:) - u_LL) );
-        %             death_term_im1 = 4/3 * pi * sum(r_q(i-1,:).^(3) .* w_q(i-1,:) .* (u_rise(i-1,:) - u_LL) );
+                    death_term_i = 4/3 * pi * sum(r_q(i,:).^(3) .* w_q(i,:) .* (u_rise(i,:) - u_LL) );
+                    death_term_im1 = 4/3 * pi * sum(r_q(i-1,:).^(3) .* w_q(i-1,:) .* (u_rise(i-1,:) - u_LL) );
         % %             if node_level(i) < 0.5
         % %                 death_term = (0.5 + node_level(i))*death_term_i + (0.5 - node_level(i))*death_term_im1;
         % %             else
-        %                 death_term_slope = (death_term_i - death_term_im1)/1;
-        %                 death_term = death_term_i + death_term_slope*( node_level(i) - 0.5 );
+                        death_term_slope = (death_term_i - death_term_im1)/1;
+                        death_term = death_term_i + death_term_slope*( node_level(i) - 0.5 );
         % %             end
         % %             else
         % %                death_term_i = 4/3 * pi * sum(r_q(i,:).^(3) .* w_q(i,:) .* (u_rise(i,:) - u_bulk) );
@@ -2518,7 +2525,7 @@ for i = 1:N_full + 1
         % %                death_term_im2 = 4/3 * pi * sum(r_q(i-2,:).^(3) .* w_q(i-2,:) .* (u_rise(i-2,:) - u_bulk) );
         % %                death_term = interp1( [-2 -1 0], [death_term_im2, death_term_im1, death_term_i], (node_level(i)-0.5),'nearest','extrap');
         % %             end
-        %         end
+                end
     else
         death_term = 0;
     end
