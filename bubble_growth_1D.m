@@ -54,21 +54,12 @@ ADQMOM = 'off';
 
 if nargin == 0
     
-<<<<<<< HEAD
-    N_nodes = 400;
-    N_mom = 6;
+    N_nodes = 100;
+    N_mom = 4;
     rel_tol = 1e-4;     % [] max relative error allowed in adaptive scheme
     constants.C_qdot_lw = 6e-5;
     constants.C_coalescence = [1 1 1]; % collision efficiency, laminar shear, turbulence
     constants.C_nuc_rate = 5e4; % had this at 6e4 using the r_dep with superheat
-=======
-    N_nodes = 50;
-    N_mom = 4;
-    rel_tol = 5e-4;     % [] max relative error allowed in adaptive scheme
-    constants.C_qdot_lw = 2e-5;
-    constants.C_coalescence = [1 1 1]; % collision efficiency, laminar shear, turbulence
-    constants.C_nuc_rate = 5e4; % had this at 6e4 using the r_dep with superheat, 50 without
->>>>>>> origin/ADQMOM
     
 else
     inputs = varargin{1};
@@ -1741,9 +1732,16 @@ for i = 1:N_full+1
         
         Re = rho_l*u_rise(i,:).*2.*r_q(i,:)./mu_mix;
         
+        N_mu = Mo^(1/4);
+        
         for j = 1:N_ab
             
-            if Re(j) > 1e3
+            
+            
+            %             if Re(j) > 1e3
+            r_d_star = r_q(i,j) * (rho_l * g * delta_rho/mu_l^2)^(1/3);
+            ksi = 0.55*( (1 + 0.08 * r_d_star^3)^(4/7) - 1)^(0.75);
+            if N_mu >= 0.11*(1 + ksi)/(ksi^(8/3));
                 E = ( (1 + 17.67*(1 - V_bubi(i)).^(6/7) )./(18.67*(1 - V_bubi(i)))).^2;
                 Eo = g*delta_rho*4*pi*r_q(i,j).^2/sigma;
                 Cd = 2/3*E.*Eo;
@@ -2060,14 +2058,14 @@ for i = 1:N_full + 1
             % bottom point
             % there's flux out the top and nothing out the bottom
             % also L_node = 1/2 L_node
-%             duw_dx(i,:) = uw_vec(i,:)/L_node;
-%             dug_dx(i,:) = ug_vec(i,:)/L_node;
+            %             duw_dx(i,:) = uw_vec(i,:)/L_node;
+            %             dug_dx(i,:) = ug_vec(i,:)/L_node;
             
             
             flux_bot = 0;%w_q(i-1,:).*0.5.*(u_vec(i,:) + u_vec(i-1,:));
             flux_top = w_q(i,:).*0.5.*(u_vec(i+1,:) + u_vec(i,:));
             duw_dx(i,:) = 2*(flux_top - flux_bot)/L_node;
-
+            
             flux_bot = 0;%g_q(i-1,:).*0.5.*(u_vec(i,:) + u_vec(i-1,:));
             flux_top = g_q(i,:).*0.5.*(u_vec(i+1,:) + u_vec(i,:));
             dug_dx(i,:) = 2*(flux_top - flux_bot)/L_node;
@@ -2078,8 +2076,8 @@ for i = 1:N_full + 1
         else
             if i == N_full + 1
                 % top point -> backwards difference
-%                 duw_dx(i,:) = ( uw_vec(i,:) - uw_vec(i-1,:) )/(L_node);
-%                 dug_dx(i,:) = ( ug_vec(i,:) - ug_vec(i-1,:) )/(L_node);
+                %                 duw_dx(i,:) = ( uw_vec(i,:) - uw_vec(i-1,:) )/(L_node);
+                %                 dug_dx(i,:) = ( ug_vec(i,:) - ug_vec(i-1,:) )/(L_node);
                 
                 flux_bot = w_q(i-1,:).*0.5.*(u_vec(i,:) + u_vec(i-1,:));
                 flux_top = w_q(i,:).*u_vec(i,:);
@@ -2152,10 +2150,10 @@ for i = 1:N_full + 1
         % radius of new bubbles
         r_nuc = C_r_nuc * 2*sigma*T_s/(rho_tg_v * h_lv * C_dTs * deltaT_sup_node);
         
-%         if constants.min_flag == 0
-%             % we're still increasing
-%             r_nuc = 2*r_nuc;
-%         end
+        %         if constants.min_flag == 0
+        %             % we're still increasing
+        %             r_nuc = 2*r_nuc;
+        %         end
         
         % bubble radius rate of change
         
@@ -2221,11 +2219,11 @@ for i = 1:N_full + 1
                     
                 end
                 
-%                 % hysteresis!
-%                 if constants.min_flag ~= 1
-%                     r_nuc = 2*r_nuc;
-%                     r_dep = 2*r_dep;
-%                 end
+                %                 % hysteresis!
+                %                 if constants.min_flag ~= 1
+                %                     r_nuc = 2*r_nuc;
+                %                     r_dep = 2*r_dep;
+                %                 end
                 
                 %                 if (i == 1 && constants.step == 1) && constants.t > 0.1
                 %                     fprintf('r_dep/r_dep1 = %0.4g\n', r_dep/r_dep1)
@@ -2395,7 +2393,7 @@ for i = 1:N_full + 1
         liquid_height = V_l_star/(pi*D_tank^2/4);
         
         P1 = P2 + rho_l*g*liquid_height;
-                
+        
         Q = V_tank/8; % volumetric gas flow rate. just assumed a constant value here
         
         turb_diss = Q*g * P2*log(P1/P2) / ( pi * (0.5*D_tank)^2 * (P1 - P2) );
@@ -2525,27 +2523,27 @@ for i = 1:N_full + 1
         %         bubbles leaving from free surface (m^3/(m^2 * s))
         
         %         if we're looking at the bottom node, just take its value
-                if i == 1
-        death_term = 4/3 * pi * sum(r_q(i,:).^(3) .* w_q(i,:) .* (u_rise(i,:) - u_LL) );
-                else
-        % %             if i == 2
-        %             % above the bottom node, linearly interpolate/extrapolate to
-        %             % get the value wherever the free surface is
-                    death_term_i = 4/3 * pi * sum(r_q(i,:).^(3) .* w_q(i,:) .* (u_rise(i,:) - u_LL) );
-                    death_term_im1 = 4/3 * pi * sum(r_q(i-1,:).^(3) .* w_q(i-1,:) .* (u_rise(i-1,:) - u_LL) );
-        % %             if node_level(i) < 0.5
-        % %                 death_term = (0.5 + node_level(i))*death_term_i + (0.5 - node_level(i))*death_term_im1;
-        % %             else
-                        death_term_slope = (death_term_i - death_term_im1)/1;
-                        death_term = death_term_i + death_term_slope*( node_level(i) - 0.5 );
-        % %             end
-        % %             else
-        % %                death_term_i = 4/3 * pi * sum(r_q(i,:).^(3) .* w_q(i,:) .* (u_rise(i,:) - u_bulk) );
-        % %                death_term_im1 = 4/3 * pi * sum(r_q(i-1,:).^(3) .* w_q(i-1,:) .* (u_rise(i-1,:) - u_bulk) );
-        % %                death_term_im2 = 4/3 * pi * sum(r_q(i-2,:).^(3) .* w_q(i-2,:) .* (u_rise(i-2,:) - u_bulk) );
-        % %                death_term = interp1( [-2 -1 0], [death_term_im2, death_term_im1, death_term_i], (node_level(i)-0.5),'nearest','extrap');
-        % %             end
-                end
+        if i == 1
+            death_term = 4/3 * pi * sum(r_q(i,:).^(3) .* w_q(i,:) .* (u_rise(i,:) - u_LL) );
+        else
+            % %             if i == 2
+            %             % above the bottom node, linearly interpolate/extrapolate to
+            %             % get the value wherever the free surface is
+            death_term_i = 4/3 * pi * sum(r_q(i,:).^(3) .* w_q(i,:) .* (u_rise(i,:) - u_LL) );
+            death_term_im1 = 4/3 * pi * sum(r_q(i-1,:).^(3) .* w_q(i-1,:) .* (u_rise(i-1,:) - u_LL) );
+            % %             if node_level(i) < 0.5
+            % %                 death_term = (0.5 + node_level(i))*death_term_i + (0.5 - node_level(i))*death_term_im1;
+            % %             else
+            death_term_slope = (death_term_i - death_term_im1)/1;
+            death_term = death_term_i + death_term_slope*( node_level(i) - 0.5 );
+            % %             end
+            % %             else
+            % %                death_term_i = 4/3 * pi * sum(r_q(i,:).^(3) .* w_q(i,:) .* (u_rise(i,:) - u_bulk) );
+            % %                death_term_im1 = 4/3 * pi * sum(r_q(i-1,:).^(3) .* w_q(i-1,:) .* (u_rise(i-1,:) - u_bulk) );
+            % %                death_term_im2 = 4/3 * pi * sum(r_q(i-2,:).^(3) .* w_q(i-2,:) .* (u_rise(i-2,:) - u_bulk) );
+            % %                death_term = interp1( [-2 -1 0], [death_term_im2, death_term_im1, death_term_i], (node_level(i)-0.5),'nearest','extrap');
+            % %             end
+        end
     else
         death_term = 0;
     end
