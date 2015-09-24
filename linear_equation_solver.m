@@ -1,6 +1,6 @@
 % iterative Ax=b solver
 
-function x = linear_equation_solver(A,b)
+function [x, error_flag] = linear_equation_solver(A,b)
 
 converged = 0;
 k = 1;
@@ -33,6 +33,7 @@ dx = A\( (A*x - b));
     
     if delta_new < 1e-6
         converged = 1;
+        error_flag = 0;
     end
     
     if k > 50 && switch_val == 0
@@ -41,14 +42,15 @@ dx = A\( (A*x - b));
         switch_val = 1;
     end
     
-    if k > 10 && abs(delta_new - delta_old)/delta_old < 1e-3
-        disp('stuck')
-    end
+%     if k > 10 && abs(delta_new - delta_old)/delta_old < 1e-3
+%         disp('stuck')
+%     end
     
     if k > 100
 %         error(['failed to converge, delta = ' num2str(delta_new)])
     disp('linear equation solver not converging')
     converged = 1;
+    error_flag = 1;
     
     end
     
