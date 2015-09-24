@@ -54,6 +54,7 @@ ADQMOM = 'off';
 
 if nargin == 0
     
+<<<<<<< HEAD
     N_nodes = 200;
     N_mom = 6;
     rel_tol = 1e-3;     % [] max relative error allowed in adaptive scheme
@@ -61,6 +62,14 @@ if nargin == 0
     constants.C_coalescence = [0 1 1]; % collision efficiency, laminar shear, turbulence
     constants.C_nuc_rate = 0.1; % had this at 6e4 using the r_dep with superheat
     
+=======
+    N_nodes = 100;
+    N_mom = 4;
+    rel_tol = 1e-4;     % [] max relative error allowed in adaptive scheme
+    constants.C_qdot_lw = 6e-5;
+    constants.C_coalescence = [1 1 1]; % collision efficiency, laminar shear, turbulence
+    constants.C_nuc_rate = 5e4; % had this at 6e4 using the r_dep with superheat
+>>>>>>> origin/ADQMOM
     
 else
     inputs = varargin{1};
@@ -1739,8 +1748,11 @@ for i = 1:N_full+1
         Re = rho_l*u_rise(i,:).*2.*r_q(i,:)./mu_mix;
         N_mu = Mo^(1/4);
         
+        N_mu = Mo^(1/4);
+        
         for j = 1:N_ab
             
+<<<<<<< HEAD
 %                         if Re(j) > 1e3
             r_d_star = r_q(i,j) * (rho_l * g * delta_rho/mu_l^2)^(1/3);
             psi = 0.55*( (1 + 0.08 * r_d_star^3)^(4/7) - 1)^(3/4);
@@ -1750,6 +1762,15 @@ for i = 1:N_full+1
                 end
                 f_alpha = sqrt(1 - V_bubi(i)) * mu_l/mu_mix(j);
                 E = ( (1 + 17.67*f_alpha.^(6/7) )./(18.67*f_alpha)).^2;
+=======
+            
+            
+            %             if Re(j) > 1e3
+            r_d_star = r_q(i,j) * (rho_l * g * delta_rho/mu_l^2)^(1/3);
+            ksi = 0.55*( (1 + 0.08 * r_d_star^3)^(4/7) - 1)^(0.75);
+            if N_mu >= 0.11*(1 + ksi)/(ksi^(8/3));
+                E = ( (1 + 17.67*(1 - V_bubi(i)).^(6/7) )./(18.67*(1 - V_bubi(i)))).^2;
+>>>>>>> origin/ADQMOM
                 Eo = g*delta_rho*4*pi*r_q(i,j).^2/sigma;
                 Cd = 2/3*E.*Eo;
                 u_rise(i,j) = sqrt(2/3 * delta_rho * g * r_q(i,j)./(rho_l * Cd));
@@ -1983,10 +2004,17 @@ for i = 1:N_full + 1
         % common expression
         r_nuc1 = C_r_nuc * 2*sigma*T_s/(rho_tg_v * h_lv * C_dTs * deltaT_sup_node);
         
+<<<<<<< HEAD
         % more advanced one. not sure where I got it from, but it seems to
         % be equal to about 2x the above (2.1 or 2.2 generally)
         r_nuc = (2*sigma*(1 + rho_tg_sat/rho_l)/P)...
             /( exp( h_lv * (deltaT_sup_node)/(Ru/MW * T_l*T_s)) - 1);
+=======
+        %         if constants.min_flag == 0
+        %             % we're still increasing
+        %             r_nuc = 2*r_nuc;
+        %         end
+>>>>>>> origin/ADQMOM
         
         if constants.step == 1 && i == 1
             fprintf('r_nuc / r_nuc(old) = %0.4g, r_nuc = %0.4g\n' , r_nuc/r_nuc1, r_nuc)
@@ -2055,11 +2083,19 @@ for i = 1:N_full + 1
                     
                 end
                 
+<<<<<<< HEAD
                 % hysteresis!
                 if constants.min_flag ~= 1
                     r_nuc = 2*r_nuc;
                     r_dep = 2*r_dep;
                 end
+=======
+                %                 % hysteresis!
+                %                 if constants.min_flag ~= 1
+                %                     r_nuc = 2*r_nuc;
+                %                     r_dep = 2*r_dep;
+                %                 end
+>>>>>>> origin/ADQMOM
                 
                 %                 if (i == 1 && constants.step == 1) && constants.t > 0.1
                 %                     fprintf('r_dep/r_dep1 = %0.4g\n', r_dep/r_dep1)
