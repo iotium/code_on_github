@@ -53,23 +53,13 @@ p = constants.ADQMOM_p;
 ADQMOM = 'off';
 
 if nargin == 0
-    
-<<<<<<< HEAD
+   
     N_nodes = 200;
     N_mom = 6;
     rel_tol = 1e-3;     % [] max relative error allowed in adaptive scheme
     constants.C_qdot_lw = 6e-5;
     constants.C_coalescence = [0 1 1]; % collision efficiency, laminar shear, turbulence
-    constants.C_nuc_rate = 0.1; % had this at 6e4 using the r_dep with superheat
-    
-=======
-    N_nodes = 100;
-    N_mom = 4;
-    rel_tol = 1e-4;     % [] max relative error allowed in adaptive scheme
-    constants.C_qdot_lw = 6e-5;
-    constants.C_coalescence = [1 1 1]; % collision efficiency, laminar shear, turbulence
-    constants.C_nuc_rate = 5e4; % had this at 6e4 using the r_dep with superheat
->>>>>>> origin/ADQMOM
+    constants.C_nuc_rate = 1e-12; % had this at 6e4 using the r_dep with superheat
     
 else
     inputs = varargin{1};
@@ -1752,7 +1742,6 @@ for i = 1:N_full+1
         
         for j = 1:N_ab
             
-<<<<<<< HEAD
 %                         if Re(j) > 1e3
             r_d_star = r_q(i,j) * (rho_l * g * delta_rho/mu_l^2)^(1/3);
             psi = 0.55*( (1 + 0.08 * r_d_star^3)^(4/7) - 1)^(3/4);
@@ -1762,15 +1751,6 @@ for i = 1:N_full+1
                 end
                 f_alpha = sqrt(1 - V_bubi(i)) * mu_l/mu_mix(j);
                 E = ( (1 + 17.67*f_alpha.^(6/7) )./(18.67*f_alpha)).^2;
-=======
-            
-            
-            %             if Re(j) > 1e3
-            r_d_star = r_q(i,j) * (rho_l * g * delta_rho/mu_l^2)^(1/3);
-            ksi = 0.55*( (1 + 0.08 * r_d_star^3)^(4/7) - 1)^(0.75);
-            if N_mu >= 0.11*(1 + ksi)/(ksi^(8/3));
-                E = ( (1 + 17.67*(1 - V_bubi(i)).^(6/7) )./(18.67*(1 - V_bubi(i)))).^2;
->>>>>>> origin/ADQMOM
                 Eo = g*delta_rho*4*pi*r_q(i,j).^2/sigma;
                 Cd = 2/3*E.*Eo;
                 u_rise(i,j) = sqrt(2/3 * delta_rho * g * r_q(i,j)./(rho_l * Cd));
@@ -2002,23 +1982,15 @@ for i = 1:N_full + 1
         
         % radius of new bubbles
         % common expression
-        r_nuc1 = C_r_nuc * 2*sigma*T_s/(rho_tg_v * h_lv * C_dTs * deltaT_sup_node);
-        
-<<<<<<< HEAD
-        % more advanced one. not sure where I got it from, but it seems to
+%         r_nuc = C_r_nuc * 2*sigma*T_s/(rho_tg_v * h_lv * C_dTs * deltaT_sup_node);
+                % more advanced one. not sure where I got it from, but it seems to
         % be equal to about 2x the above (2.1 or 2.2 generally)
+        % it's listed in hibiki & ishii 2003 paper they also show how it
+        % reduces to the common expression
         r_nuc = (2*sigma*(1 + rho_tg_sat/rho_l)/P)...
             /( exp( h_lv * (deltaT_sup_node)/(Ru/MW * T_l*T_s)) - 1);
-=======
-        %         if constants.min_flag == 0
-        %             % we're still increasing
-        %             r_nuc = 2*r_nuc;
-        %         end
->>>>>>> origin/ADQMOM
-        
-        if constants.step == 1 && i == 1
-            fprintf('r_nuc / r_nuc(old) = %0.4g, r_nuc = %0.4g\n' , r_nuc/r_nuc1, r_nuc)
-        end
+
+
         % bubble radius rate of change
         
         % growth rate for a bubble at rest in an infinite fluid
@@ -2083,32 +2055,25 @@ for i = 1:N_full + 1
                     
                 end
                 
-<<<<<<< HEAD
-                % hysteresis!
-                if constants.min_flag ~= 1
-                    r_nuc = 2*r_nuc;
-                    r_dep = 2*r_dep;
-                end
-=======
-                %                 % hysteresis!
-                %                 if constants.min_flag ~= 1
-                %                     r_nuc = 2*r_nuc;
-                %                     r_dep = 2*r_dep;
-                %                 end
->>>>>>> origin/ADQMOM
+%                 % hysteresis!
+%                 if constants.min_flag ~= 1
+%                     r_nuc = 2*r_nuc;
+%                     r_dep = 2*r_dep;
+%                 end
                 
                 %                 if (i == 1 && constants.step == 1) && constants.t > 0.1
                 %                     fprintf('r_dep/r_dep1 = %0.4g\n', r_dep/r_dep1)
                 %                 end
                 
                 
-                % nucleation density (shin and jones 1993)
+                % nucleation density (shin and jones 1993) and (blinkov,
+                % jones, nigmatulin, 1993)
                 
                 % non-dimensional cavity size (ie bubble nucleation size)
                 r_c_star = r_nuc / r_dep;
                 
                 % non-dimensional nucleation rate
-                N_ns_star = 1e-7 * r_c_star;
+                N_ns_star = 1e-7 * r_c_star^-4;
                 
                 % nucleation site density [1/m^2]
                 nuc_density = N_ns_star * ( 0.5 / r_dep )^2; % original expression
@@ -2118,27 +2083,40 @@ for i = 1:N_full + 1
                 %                 nuc_density = 1e-4 * ( 0.5 / r_nuc )^2;
                 
                 
-                % fancy expression for nucleation density
+                % fancy expression for nucleation density 
+                % (hibiki & ishii, 2003)
+                
+                % originally thought:
+                % gives much larger values than the shin/jones one
+                % roughly 10^10 larger, with actual values around 10^8
+                
+                % then found I left out the ^-4 on the N_ns_star relation
+                % givens much smaller values, by about 10^-6
+                % actual values around 10^5
+                
                 % depends on the contact angle - I found a paper where
                 % they measured contact angle of CO2 on SS316 and made a
                 % curve fit from their results
                 N_nbar = 4.72e5;
                 mu_HI = 0.722;
                 lambda_prime = 2.5e-6;
+                % advancing and receding contact angles (in degrees)
                 ACA = -0.003417*(T_s - 273.15)^2 - 0.2873*(T_s - 273.15) + 29.83;
                 RCA = -0.004171*(T_s - 273.15)^2 - 0.3386*(T_s - 273.15) + 16.38;
                 theta_HI = deg2rad(mean([ACA RCA]));
                 
-                %                 R_c = 2*sigma*(1 + rho_tg_sat/rho_l)/P...
-                %                     /( exp( h_lv * (deltaT_sup_node)/(Ru/MW * T_l*T_s)) - 1);
-                R_c = 100*r_nuc;
+                R_c = r_nuc;
                 
                 rho_plus = log10(delta_rho/rho_tg_sat);
                 
                 f_rho_plus = -0.01064 + 0.48246*rho_plus - 0.22712*rho_plus^2 + 0.05468*rho_plus^3;
                 
-                nuc_density = N_nbar *( 1 - exp( - theta_HI^2/(8*mu_HI^2) ) )...
+                nuc_density1 = N_nbar *( 1 - exp( - theta_HI^2/(8*mu_HI^2) ) )...
                     *(exp( f_rho_plus*lambda_prime/R_c) - 1);
+                
+                if constants.step ==1 && i==1
+                    fprintf('new nuc density/old = %0.4g, new = %0.4g\n', nuc_density1/nuc_density, nuc_density1)
+                end
                 
                 
                 % nucleation frequency (shin and jones also)
