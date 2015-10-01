@@ -54,12 +54,12 @@ ADQMOM = 'off';
 
 if nargin == 0
    
-    N_nodes = 200;
+    N_nodes = 100;
     N_mom = 6;
-    rel_tol = 1e-3;     % [] max relative error allowed in adaptive scheme
+    rel_tol = 1e-4;     % [] max relative error allowed in adaptive scheme
     constants.C_qdot_lw = 6e-5;
     constants.C_coalescence = [0 1 1]; % collision efficiency, laminar shear, turbulence
-    constants.C_nuc_rate = 0.1; % had this at 6e4 using the r_dep with superheat
+    constants.C_nuc_rate = 1e-11; % had this at 6e4 using the r_dep with superheat
     
 else
     inputs = varargin{1};
@@ -1707,44 +1707,56 @@ for i = 1:N_full+1
     if V_bubi(i) > constants.CD_churn_turb_boundary
         Eprime = (1 - V_bubi(i)).^2;
         Cd = 8*Eprime/3;
-        u_rise(i,:) = sqrt(2/3 * delta_rho * g * r_q(i,:)./(rho_l * Cd));
+        u_rise(i,:) = sqrt(8/3 * delta_rho * g * r_q(i,:)./(rho_l * Cd));
     else
         
-        
-        % fit from fan and tsuchiya
-        %
-        
-        De = 2*r_q(i,:);
-        
-        De_ND = De*sqrt(rho_l*g/sigma);
-        
-        
-        u_rise_ND = ( (Mo^-0.25/Kb_FT * ( delta_rho/rho_l )^(5/4) * De_ND.^2 ).^-n_FT ...
-            + ( 2*c_FT./De_ND + ( delta_rho/rho_l ) * De_ND/2 ).^(-n_FT/2) ).^(-1/n_FT);
-        
-        u_rise_FT = u_rise_ND/(rho_l/(sigma*g))^(1/4);
-        
-        % u_rise = constants.C_u_rise * u_rise;%.*(( (1 - V_bubi.^(5/3))./(1 - V_bubi).^2) * ones(size(u_rise(1,:))) ).^(-0.5);
+        % only use ishii and zuber
         
         alpha_IZ = V_bubi(i)*ones(1,N_ab);
         
         mu_mix = mu_l*(1 - alpha_IZ).^(-2.5*(mu_tg + 0.4*mu_l)/(mu_tg + mu_l));
         
-        Re_inf = rho_l * u_rise_FT .* 2 .* r_q(i,:)./mu_l;
-        
-        u_rise(i,:) = u_rise_FT.* (1 - alpha_IZ).*mu_l./mu_mix .* ...
-            (1 + 0.1*Re_inf.^0.75)./(1 + 0.1*Re_inf.^0.75.*( sqrt(1 - alpha_IZ).*mu_l./mu_mix).^(6/7));
-        
-        Re = rho_l*u_rise(i,:).*2.*r_q(i,:)./mu_mix;
-        N_mu = Mo^(1/4);
+        % a guess at u, found from assuming C_D = 24/Re
+        u_guess = 1/9 * r_q(i,:).^2 * (rho_l - rho_v) * g/mu_mix;
         
         N_mu = Mo^(1/4);
         
+        
+        
+        
+        % fit from fan and tsuchiya to get the single particle rise u
+        % then use ishii and zuber to get the mixture result
+        
+%         De = 2*r_q(i,:);
+%         
+%         De_ND = De*sqrt(rho_l*g/sigma);
+%         
+%         
+%         u_rise_ND = ( (Mo^-0.25/Kb_FT * ( delta_rho/rho_l )^(5/4) * De_ND.^2 ).^-n_FT ...
+%             + ( 2*c_FT./De_ND + ( delta_rho/rho_l ) * De_ND/2 ).^(-n_FT/2) ).^(-1/n_FT);
+%         
+%         u_rise_FT = u_rise_ND/(rho_l/(sigma*g))^(1/4);
+%         
+%         % u_rise = constants.C_u_rise * u_rise;%.*(( (1 - V_bubi.^(5/3))./(1 - V_bubi).^2) * ones(size(u_rise(1,:))) ).^(-0.5);
+%         
+%         alpha_IZ = V_bubi(i)*ones(1,N_ab);
+%         
+%         mu_mix = mu_l*(1 - alpha_IZ).^(-2.5*(mu_tg + 0.4*mu_l)/(mu_tg + mu_l));
+%         
+%         Re_inf = rho_l * u_rise_FT .* 2 .* r_q(i,:)./mu_l;
+%         
+%         u_rise(i,:) = u_rise_FT.* (1 - alpha_IZ).*mu_l./mu_mix .* ...
+%             (1 + 0.1*Re_inf.^0.75)./(1 + 0.1*Re_inf.^0.75.*( sqrt(1 - alpha_IZ).*mu_l./mu_mix).^(6/7));
+%                
+% 
+%         N_mu = Mo^(1/4);
+%                 
         for j = 1:N_ab
             
-%                         if Re(j) > 1e3
             r_d_star = r_q(i,j) * (rho_l * g * delta_rho/mu_l^2)^(1/3);
             psi = 0.55*( (1 + 0.08 * r_d_star^3)^(4/7) - 1)^(3/4);
+            % note the 0.61 was originally 0.11, but I had to use 0.61 to
+            % replicate ishii and zuber's plots
             if N_mu > 0.11 * (1 + psi)/psi^(8/3)
                 if( constants.step == 1 && i == 1 ) 
                     disp('distorted')
@@ -1752,10 +1764,20 @@ for i = 1:N_full+1
                 f_alpha = sqrt(1 - V_bubi(i)) * mu_l/mu_mix(j);
                 E = ( (1 + 17.67*f_alpha.^(6/7) )./(18.67*f_alpha)).^2;
                 Eo = g*delta_rho*4*pi*r_q(i,j).^2/sigma;
-                Cd = 2/3*E.*Eo;
-                u_rise(i,j) = sqrt(2/3 * delta_rho * g * r_q(i,j)./(rho_l * Cd));
+                Cd = 2/3*E*Eo;
                 
-            end
+                if Cd > 8/3  * (1- V_bubi(i))^2
+                    Cd = 8/3  * (1- V_bubi(i))^2;
+                end
+                
+                u_rise(i,j) = sqrt(8/3 * delta_rho * g * r_q(i,j)./(rho_l * Cd));
+                
+            else
+                        u_guess = 1/9 * r_q(i,:).^2 * (rho_l - rho_v) * g/mu_mix;
+
+                        ishii_zuber_fn = @(u) 24/(rho_l*r*u/mu_m)*(1 + 0.1*(rho_l*r*u/mu_m)^0.75) - 8/3*r*delta_rho*g/(u^2*rho_l);
+                        u = fzero(@(u)ishii_zuber_fn(u), u_guess);
+                        u_ri
             
         end
         
@@ -2055,11 +2077,11 @@ for i = 1:N_full + 1
                     
                 end
                 
-                % hysteresis!
-                if constants.min_flag ~= 1
-                    r_nuc = 2*r_nuc;
-                    r_dep = 2*r_dep;
-                end
+%                 % hysteresis!
+%                 if constants.min_flag ~= 1
+%                     r_nuc = 2*r_nuc;
+%                     r_dep = 2*r_dep;
+%                 end
                 
                 %                 if (i == 1 && constants.step == 1) && constants.t > 0.1
                 %                     fprintf('r_dep/r_dep1 = %0.4g\n', r_dep/r_dep1)
@@ -2076,7 +2098,7 @@ for i = 1:N_full + 1
                 N_ns_star = 1e-7 * r_c_star^-4;
                 
                 % nucleation site density [1/m^2]
-                nuc_density = N_ns_star * ( 0.5 / r_dep )^2; % original expression
+                nuc_density1 = N_ns_star * ( 0.5 / r_dep )^2; % original expression
                 
                 % other ones I've tried
                 %                 nuc_density = N_ns_star * ( 0.5 / r_nuc )^2;
@@ -2111,12 +2133,8 @@ for i = 1:N_full + 1
                 
                 f_rho_plus = -0.01064 + 0.48246*rho_plus - 0.22712*rho_plus^2 + 0.05468*rho_plus^3;
                 
-                nuc_density1 = N_nbar *( 1 - exp( - theta_HI^2/(8*mu_HI^2) ) )...
+                nuc_density = N_nbar *( 1 - exp( - theta_HI^2/(8*mu_HI^2) ) )...
                     *(exp( f_rho_plus*lambda_prime/R_c) - 1);
-                
-                if constants.step ==1 && i==1
-                    fprintf('new nuc density/old = %0.4g, new = %0.4g\n', nuc_density1/nuc_density, nuc_density1)
-                end
                 
                 
                 % nucleation frequency (shin and jones also)
@@ -2375,6 +2393,16 @@ for i = 1:N_full + 1
     %     alpha_q = A\beta_q;
     [alpha_q, error_flag] = linear_equation_solver(A,beta_q);
     
+        dr = diff(r_s);
+        for k = 1:length(dr)
+            rbar = mean([r_s(k) r_s(k+1)]);
+        end
+    if error_flag == 1
+        fprintf('linear equation solver not converging, rcond = %0.4g, min dr/r = %0.4g\n',rcond(A), min(abs(dr./rbar)) )
+        alpha_q = A\beta_q;
+    else
+        fprintf('linear equation solver IS converging, rcond = %0.4g, min dr/r = %0.4g\n',rcond(A), min(abs(dr./rbar)) )
+    end
     a_q = alpha_q(1:N_ab);
     b_q_s = alpha_q(N_ab+1:end);
     %     b_q = b_q_s.*r_q(i,:)'; % go from scaled b (ie b*) back to the real thing

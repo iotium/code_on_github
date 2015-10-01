@@ -48,7 +48,7 @@ dx = A\( (A*x - b));
     
     if k > 100
 %         error(['failed to converge, delta = ' num2str(delta_new)])
-    disp('linear equation solver not converging')
+%     disp('linear equation solver not converging')
     converged = 1;
     error_flag = 1;
     
