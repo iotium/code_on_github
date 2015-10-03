@@ -22,7 +22,7 @@ while converged == 0;
 %     
 %     dx = U\dy;
 
-dx = A\( (A*x - b));
+    dx = A\( (A*x - b));
     
     x = x - dx;
     
@@ -46,7 +46,7 @@ dx = A\( (A*x - b));
 %         disp('stuck')
 %     end
     
-    if k > 100
+    if k > 200
 %         error(['failed to converge, delta = ' num2str(delta_new)])
 %     disp('linear equation solver not converging')
     converged = 1;

@@ -43,9 +43,13 @@ end
 current_dir = pwd;
 % constants.property_source = 'PDT';
 constants.fsolve_options = optimset('TolX',1e-12,'Display','off');
-constants.property_source = 'PDT';
+constants.property_source = 'refprop';
 constants.nuc_model = 'SJ';
-constants.r_dep_expression = 'with superheat';
+constants.r_dep_expression = 'without superheat';
+constants.nuc_density_expression = 'hibiki and ishii';
+constants.include_rdot_rhodot = 0;
+constants.include_hysteresis = 0;
+constants.include_u_bulk = 0;
 constants.ADQMOM_p = 1;
 p = constants.ADQMOM_p;
 
@@ -53,13 +57,13 @@ p = constants.ADQMOM_p;
 ADQMOM = 'off';
 
 if nargin == 0
-   
+    
     N_nodes = 100;
     N_mom = 6;
     rel_tol = 1e-4;     % [] max relative error allowed in adaptive scheme
-    constants.C_qdot_lw = 6e-5;
+    constants.C_qdot_lw = 6e-6;
     constants.C_coalescence = [0 1 1]; % collision efficiency, laminar shear, turbulence
-    constants.C_nuc_rate = 1e-11; % had this at 6e4 using the r_dep with superheat
+    constants.C_nuc_rate = 1e-15; % had this at 6e4 using the r_dep with superheat
     
 else
     inputs = varargin{1};
@@ -90,7 +94,7 @@ clock_start = clock;
 clock_plot = clock;
 
 % close all
-N_rw = 20;
+N_rw = 25;
 constants.N_rw = N_rw;
 
 constants.C_rdot = 1;%(3/(2*pi));%2.5*pi;
@@ -224,15 +228,15 @@ V_moment_index = constants.V_moment_index;
 % generate initial condition for weights and abscissas
 
 % IC_moments = gamma_dist_moments( 5e-10, 1e-3, N_mom, p);
-% 
+%
 % alpha_ic = 1e-12;
 
 % alpha_mom = 4/3 * pi * IC_moments(V_moment_index);
-% 
+%
 % IC_moments = IC_moments * alpha_ic/alpha_mom;
-% 
+%
 % % [r_ic, w_ic] = PD_method(IC_moments);
-% 
+%
 % [r_ic, w_ic] = PD_method_alternative(IC_moments,p);
 
 % based on what r_nuc is initially I would like to make r_ic smaller, but
@@ -577,16 +581,23 @@ while running == 1;
         % if error is < min_error
         if max(abs_err/abs_tol,rel_err/rel_tol) < min_error
             % also check that we didn't just recover from an error
+            fprintf('error < min_error. ')
             if error_flag ~= 1
                 % and make sure we didn't increase the step size too
                 % recently
+                
                 if n > n_increase + 5
-                    
+                    fprintf('step size increased.\n')
                     % make h bigger
                     h = min(4*h,h_max);
                     n_increase = n; % store the n at which we last increased step size
+                else
+                    fprintf('waiting till n = 5.\n')
                 end
+            else
+                fprintf('error_flag = 1 so keeping h constant.\n')
             end
+            
             
         end
         
@@ -662,9 +673,10 @@ while running == 1;
             
             constants.h = h;
             
-            if h < 1e-15
-                keyboard
-            end
+            %             if h < 1e-15
+            %                 disp('step size got too small')
+            %                 keyboard
+            %             end
             
             error_flag = 0;
             
@@ -686,8 +698,10 @@ while running == 1;
                             [f, debug_data] = diffeqns(y(:,n), constants, guesses, PDT);
                             if debug_data.diff_eqns_error_flag
                                 error_flag = 1;
+                                disp('error_flag tripped in diffeqns')
                             end
                         catch
+                            disp('threw an error calling diffeqns')
                             error_flag = 1;
                         end
                     end
@@ -718,7 +732,6 @@ while running == 1;
                     % (min(y_new) < 0),
                     
                     if sum(error_conditions) > 0
-                        error_conditions(:)'
                         disp('we''re taking a bad step')
                         f = ones(size(f));
                         error_flag = 1;
@@ -736,8 +749,11 @@ while running == 1;
                                 constants, guesses, PDT);
                             if debug_data.diff_eqns_error_flag
                                 error_flag = 1;
+                                disp('error_flag tripped in diffeqns')
+                                
                             end
                         catch
+                            disp('threw an error calling diffeqns')
                             error_flag = 1;
                         end
                         
@@ -782,9 +798,7 @@ while running == 1;
                     error_flag = 1;
                 end
             end
-            if error_flag
-                disp(['error flag = ' num2str(error_flag)])
-            end
+            
             if adaptive == 1
                 % using adaptive scheme, need to check error
                 
@@ -830,6 +844,7 @@ while running == 1;
                 % recomuputed
                 if error_conditions2 > 0
                     rel_err = 1;
+                    disp('encountered a problem with the error terms')
                 end
                 
                 if ( rel_err < rel_tol && abs_err < abs_tol) || (h < 1.25*h_min)
@@ -840,7 +855,7 @@ while running == 1;
                     if ((n > 1) && ((h_LRO < LRO_tol) && (h_LRO > 0))) && (fill_level(n) < 0.01)
                         % distance to LRO is less than LRO_tol
                         running = 0;
-                        %                     disp('reached LRO')
+                        %                                             disp('reached LRO')
                     end
                     
                     if h < 2*h_min
@@ -849,6 +864,8 @@ while running == 1;
                     end
                     
                 else
+                    
+                    unpack_y(y(:,n+1), constants, ind_max_rel_err(n+1), rel_err);
                     
                     %                 fprintf(['max rel err = %6.4g, ind of max rel err = %6.4g\n'...
                     %                     'err(ind_max_rel_err) = %8.6g, y(ind_max_rel_err,n+1) = '...
@@ -861,7 +878,7 @@ while running == 1;
                     
                     if rel_err == 0 || abs_err == 0
                         % something odd happened, so reduce step size a lot
-                        
+                        disp('something weird happened. reducing step size')
                         sh = 0.1;
                         
                     else
@@ -870,6 +887,7 @@ while running == 1;
                             % if relative error is a bigger problem than
                             % absolute, update step size based on relative
                             % error. Else, use absolute
+                            disp('refining step size')
                             
                             sh = 0.84*( rel_tol*h / (2*rel_err) )^(1/4);
                         else
@@ -926,6 +944,7 @@ while running == 1;
         
         f_np1 = f;
         f_np1(1) = nan;
+        disp('error in calling diffeqns to get the debug data, not integrating')
     end
     
     diff_eqns_error_flag = 0;
@@ -1670,33 +1689,20 @@ mdot_out_vap = x_out*mdot_out_mix;
 % mdot_out = A_inj*Cd*injector_flow(Po, P, T_l, rho_l, P_sat, s_l, h_l);
 
 % bulk flow velocity out the bottom
+if constants.include_u_bulk
 u_bulk = mdot_out_mix / rho_l / (0.25 * pi * D_tank^2);
-% u_bulk = 0;
+else
+u_bulk = 0;
+end
 
 Mo = g*mu_l^4*(rho_l - rho_tg_sat)/(rho_l^2*sigma^3);
 
-Ja = Cp_l * rho_l * deltaT_sup/(rho_tg_v * h_lv);
-
-% rise velocity due to buoyancy
-% u_rise = sqrt( 2.14*sigma./( rho_l*(2*abs(r_q) ) + 0.505*g*( 2*abs(r_q) ) ) );
-% u_rise = 4 * 0.71*sqrt(g*2*abs(r_q));
-% u_rise = 2*g*rho_l*r_q.^2./(9*sigma);
-
-
-% using fits compiled from complicated correlations
-% u_rise = constants.C_u_rise * bubble_rise_velocity(r_q, T_tg);
-% u_rise = constants.C_u_rise * exp( bubble_rise_velocity_fit(log(r_q), T_tg*ones(size(r_q)) ));
-%
-% % have to do this because the velocity fit is bad in this region
-% u_rise(r_q < 1e-6) = 0;
-
 % parameters for fan-tsuchiya rise velocity expression
 
-n_FT = 1.6;
-c_FT = 1.2;
-Kbo_FT = 10.2;
-Kb_FT = max([ Kbo_FT*Mo^-0.038, 12]);
-
+% n_FT = 1.6;
+% c_FT = 1.2;
+% Kbo_FT = 10.2;
+% Kb_FT = max([ Kbo_FT*Mo^-0.038, 12]);
 
 u_rise = zeros(size(r_q));
 
@@ -1717,67 +1723,69 @@ for i = 1:N_full+1
         mu_mix = mu_l*(1 - alpha_IZ).^(-2.5*(mu_tg + 0.4*mu_l)/(mu_tg + mu_l));
         
         % a guess at u, found from assuming C_D = 24/Re
-%         u_guess = 1/9 * r_q(i,:).^2 * (rho_l - rho_v) * g/mu_mix;
+        %         u_guess = 1/9 * r_q(i,:).^2 * (rho_l - rho_v) * g/mu_mix;
         
         N_mu = Mo^(1/4);
         
-        
+        r_d_star = r_q(i,:) * (rho_l * g * delta_rho/mu_l^2)^(1/3);
+        psi = 0.55*( (1 + 0.08 * r_d_star.^3).^(4/7) - 1).^(3/4);
+        u_rise(i,:) = 10.8*mu_l./(rho_l * r_q(i,:)) .* mu_l./mu_mix .*(1-alpha_IZ).^2 ...
+            .* psi.^(4/3) .* (1 + psi) ./ ...
+            (1 + psi.*( mu_l./mu_mix .*(1 - alpha_IZ).^0.5).^(6/7) );
         
         
         % fit from fan and tsuchiya to get the single particle rise u
         % then use ishii and zuber to get the mixture result
         
-%         De = 2*r_q(i,:);
-%         
-%         De_ND = De*sqrt(rho_l*g/sigma);
-%         
-%         
-%         u_rise_ND = ( (Mo^-0.25/Kb_FT * ( delta_rho/rho_l )^(5/4) * De_ND.^2 ).^-n_FT ...
-%             + ( 2*c_FT./De_ND + ( delta_rho/rho_l ) * De_ND/2 ).^(-n_FT/2) ).^(-1/n_FT);
-%         
-%         u_rise_FT = u_rise_ND/(rho_l/(sigma*g))^(1/4);
-%         
-%         % u_rise = constants.C_u_rise * u_rise;%.*(( (1 - V_bubi.^(5/3))./(1 - V_bubi).^2) * ones(size(u_rise(1,:))) ).^(-0.5);
-%         
-%         alpha_IZ = V_bubi(i)*ones(1,N_ab);
-%         
-%         mu_mix = mu_l*(1 - alpha_IZ).^(-2.5*(mu_tg + 0.4*mu_l)/(mu_tg + mu_l));
-%         
-%         Re_inf = rho_l * u_rise_FT .* 2 .* r_q(i,:)./mu_l;
-%         
-%         u_rise(i,:) = u_rise_FT.* (1 - alpha_IZ).*mu_l./mu_mix .* ...
-%             (1 + 0.1*Re_inf.^0.75)./(1 + 0.1*Re_inf.^0.75.*( sqrt(1 - alpha_IZ).*mu_l./mu_mix).^(6/7));
-%                
-% 
-%         N_mu = Mo^(1/4);
-%                 
+        %         De = 2*r_q(i,:);
+        %
+        %         De_ND = De*sqrt(rho_l*g/sigma);
+        %
+        %
+        %         u_rise_ND = ( (Mo^-0.25/Kb_FT * ( delta_rho/rho_l )^(5/4) * De_ND.^2 ).^-n_FT ...
+        %             + ( 2*c_FT./De_ND + ( delta_rho/rho_l ) * De_ND/2 ).^(-n_FT/2) ).^(-1/n_FT);
+        %
+        %         u_rise_FT = u_rise_ND/(rho_l/(sigma*g))^(1/4);
+        %
+        %         % u_rise = constants.C_u_rise * u_rise;%.*(( (1 - V_bubi.^(5/3))./(1 - V_bubi).^2) * ones(size(u_rise(1,:))) ).^(-0.5);
+        %
+        %         alpha_IZ = V_bubi(i)*ones(1,N_ab);
+        %
+        %         mu_mix = mu_l*(1 - alpha_IZ).^(-2.5*(mu_tg + 0.4*mu_l)/(mu_tg + mu_l));
+        %
+        %         Re_inf = rho_l * u_rise_FT .* 2 .* r_q(i,:)./mu_l;
+        %
+        %         u_rise(i,:) = u_rise_FT.* (1 - alpha_IZ).*mu_l./mu_mix .* ...
+        %             (1 + 0.1*Re_inf.^0.75)./(1 + 0.1*Re_inf.^0.75.*( sqrt(1 - alpha_IZ).*mu_l./mu_mix).^(6/7));
+        %
+        %
+        %         N_mu = Mo^(1/4);
+        %
         for j = 1:N_ab
             
             r_d_star = r_q(i,j) * (rho_l * g * delta_rho/mu_l^2)^(1/3);
             psi = 0.55*( (1 + 0.08 * r_d_star^3)^(4/7) - 1)^(3/4);
-            % note the 0.61 was originally 0.11, but I had to use 0.61 to
-            % replicate ishii and zuber's plots
+            
+            
             if N_mu > 0.11 * (1 + psi)/psi^(8/3)
-                if( constants.step == 1 && i == 1 ) 
-                    disp('distorted')
-                end
+                
                 f_alpha = sqrt(1 - V_bubi(i)) * mu_l/mu_mix(j);
                 E = ( (1 + 17.67*f_alpha.^(6/7) )./(18.67*f_alpha)).^2;
                 Eo = g*delta_rho*4*pi*r_q(i,j).^2/sigma;
                 Cd = 2/3*E*Eo;
                 
-                if Cd > 8/3  * (1- V_bubi(i))^2
-                    Cd = 8/3  * (1- V_bubi(i))^2;
+                if Cd > 8/3  * (1 - V_bubi(i))^2
+                    Cd = 8/3  * (1 - V_bubi(i))^2;
                 end
                 
                 u_rise(i,j) = sqrt(8/3 * delta_rho * g * r_q(i,j)./(rho_l * Cd));
                 
-            else
-                        u_guess = 1/9 * r_q(i,j).^2 * delta_rho * g/mu_mix(j);
-
-                        ishii_zuber_fn = @(u) 24/(rho_l*r_q(i,j)*u/mu_mix(j))*(1 + 0.1*(rho_l*r_q(i,j)*u/mu_mix(j))^0.75) - 8/3*r_q(i,j)*delta_rho*g/(u^2*rho_l);
-                        u_rise(i,j) = fzero(@(u)ishii_zuber_fn(u), u_guess);
-    
+                %             else
+                %                         u_guess = 1/9 * r_q(i,j).^2 * delta_rho * g/mu_mix(j);
+                %
+                %                         ishii_zuber_fn = @(u) 24/(rho_l*r_q(i,j)*u/mu_mix(j))*(1 + 0.1*(rho_l*r_q(i,j)*u/mu_mix(j))^0.75) - 8/3*r_q(i,j)*delta_rho*g/(u^2*rho_l);
+                %                         u_rise(i,j) = fzero(@(u)ishii_zuber_fn(u), u_guess);
+                %
             end
         end
         
@@ -2004,21 +2012,21 @@ for i = 1:N_full + 1
         
         % radius of new bubbles
         % common expression
-%         r_nuc = C_r_nuc * 2*sigma*T_s/(rho_tg_v * h_lv * C_dTs * deltaT_sup_node);
-                % more advanced one. not sure where I got it from, but it seems to
+        %         r_nuc = C_r_nuc * 2*sigma*T_s/(rho_tg_v * h_lv * C_dTs * deltaT_sup_node);
+        % more advanced one. not sure where I got it from, but it seems to
         % be equal to about 2x the above (2.1 or 2.2 generally)
         % it's listed in hibiki & ishii 2003 paper they also show how it
         % reduces to the common expression
         r_nuc = (2*sigma*(1 + rho_tg_sat/rho_l)/P)...
             /( exp( h_lv * (deltaT_sup_node)/(Ru/MW * T_l*T_s)) - 1);
-
-
+        
+        
         % bubble radius rate of change
         
         % growth rate for a bubble at rest in an infinite fluid
         % simplified model: plesset & zwick
         % more complicated: scriven
-%         rdot_rest_plesset = C_rdot * Ja_T^2 * alpha_l ./ r_q(i,:); % bubble at rest
+        %         rdot_rest_plesset = C_rdot * Ja_T^2 * alpha_l ./ r_q(i,:); % bubble at rest
         
         % equation 47 from scriven
         beta_47 = sqrt(0.5*Ja_T./(1 + (Cp_l - Cp_tg)/Cp_l * rho_tg_v/rho_l * Ja_T));
@@ -2061,81 +2069,90 @@ for i = 1:N_full + 1
                 % departure diameter [m]
                 % correlation from Jensen & Memmel, 1986
                 % gives values on the order of 10-20 microns
-                if strcmp(constants.r_dep_expression, 'without superheat')
-                    
-                    r_dep = 0.5 * 2.97e4 * (P/P_cr)^-1.09 * ( K_b * T_cr / (P_cr * MW) )^(1/3);
-                    
-                elseif strcmp(constants.r_dep_expression, 'with superheat')
-                    
-                    Ja_wall = (T_lw(1) - (T_s + dT_sat_depth)) * rho_l * Cp_l/(rho_tg_v*h_lv);
-                    
-                    K_1 = (Ja_wall/Pr_l)*( g*rho_l*(rho_l-rho_tg_v)/mu_l^2 * (sigma/(g*(rho_l-rho_tg_v)))^(3/2) )^(-1);
-                    
-                    Eo_dep = ( 0.19*( 1.8 + 1e5*K_1)^(2/3) )^2;
-                    
-                    r_dep = 0.5 * (Eo_dep*sigma /(g*(rho_l - rho_tg_v)) )^0.5;
-                    
+                switch constants.r_dep_expression
+                    case 'without superheat'
+                        
+                        r_dep = 0.5 * 2.97e4 * (P/P_cr)^-1.09 * ( K_b * T_cr / (P_cr * MW) )^(1/3);
+                        
+                    case 'with superheat'
+                        
+                        Ja_wall = (T_lw(1) - (T_s + dT_sat_depth)) * rho_l * Cp_l/(rho_tg_v*h_lv);
+                        
+                        K_1 = (Ja_wall/Pr_l)*( g*rho_l*(rho_l-rho_tg_v)/mu_l^2 * (sigma/(g*(rho_l-rho_tg_v)))^(3/2) )^(-1);
+                        
+                        Eo_dep = ( 0.19*( 1.8 + 1e5*K_1)^(2/3) )^2;
+                        
+                        r_dep = 0.5 * (Eo_dep*sigma /(g*(rho_l - rho_tg_v)) )^0.5;
+                        
+                    otherwise
+                        error('invalid constants.r_dep_expression. try ''without superheat'' or ''with superheat''')
                 end
                 
-%                 % hysteresis!
-%                 if constants.min_flag ~= 1
-%                     r_nuc = 2*r_nuc;
-%                     r_dep = 2*r_dep;
-%                 end
+                %                 % hysteresis!
+                if constants.include_hysteresis
+                                if constants.min_flag ~= 1
+                                    r_nuc = 2*r_nuc;
+%                                     r_dep = 2*r_dep;
+                                end
+                end
                 
                 %                 if (i == 1 && constants.step == 1) && constants.t > 0.1
                 %                     fprintf('r_dep/r_dep1 = %0.4g\n', r_dep/r_dep1)
                 %                 end
                 
-                
-                % nucleation density (shin and jones 1993) and (blinkov,
-                % jones, nigmatulin, 1993)
-                
-                % non-dimensional cavity size (ie bubble nucleation size)
-                r_c_star = r_nuc / r_dep;
-                
-                % non-dimensional nucleation rate
-                N_ns_star = 1e-7 * r_c_star^-4;
-                
-                % nucleation site density [1/m^2]
-                nuc_density1 = N_ns_star * ( 0.5 / r_dep )^2; % original expression
-                
-                % other ones I've tried
-                %                 nuc_density = N_ns_star * ( 0.5 / r_nuc )^2;
-                %                 nuc_density = 1e-4 * ( 0.5 / r_nuc )^2;
-                
-                
-                % fancy expression for nucleation density 
-                % (hibiki & ishii, 2003)
-                
-                % originally thought:
-                % gives much larger values than the shin/jones one
-                % roughly 10^10 larger, with actual values around 10^8
-                
-                % then found I left out the ^-4 on the N_ns_star relation
-                % givens much smaller values, by about 10^-6
-                % actual values around 10^5
-                
-                % depends on the contact angle - I found a paper where
-                % they measured contact angle of CO2 on SS316 and made a
-                % curve fit from their results
-                N_nbar = 4.72e5;
-                mu_HI = 0.722;
-                lambda_prime = 2.5e-6;
-                % advancing and receding contact angles (in degrees)
-                ACA = -0.003417*(T_s - 273.15)^2 - 0.2873*(T_s - 273.15) + 29.83;
-                RCA = -0.004171*(T_s - 273.15)^2 - 0.3386*(T_s - 273.15) + 16.38;
-                theta_HI = deg2rad(mean([ACA RCA]));
-                
-                R_c = r_nuc;
-                
-                rho_plus = log10(delta_rho/rho_tg_sat);
-                
-                f_rho_plus = -0.01064 + 0.48246*rho_plus - 0.22712*rho_plus^2 + 0.05468*rho_plus^3;
-                
-                nuc_density = N_nbar *( 1 - exp( - theta_HI^2/(8*mu_HI^2) ) )...
-                    *(exp( f_rho_plus*lambda_prime/R_c) - 1);
-                
+                switch constants.nuc_density_expression
+                    
+                    case 'shin and jones'
+                        % nucleation density (shin and jones 1993) and (blinkov,
+                        % jones, nigmatulin, 1993)
+                        
+                        % non-dimensional cavity size (ie bubble nucleation size)
+                        r_c_star = r_nuc / r_dep;
+                        
+                        % non-dimensional nucleation rate
+                        N_ns_star = 1e-7 * r_c_star^-4;
+                        
+                        % nucleation site density [1/m^2]
+                        nuc_density = N_ns_star * ( 0.5 / r_dep )^2; % original expression
+                        
+                        % other ones I've tried
+                        %                 nuc_density = N_ns_star * ( 0.5 / r_nuc )^2;
+                        %                 nuc_density = 1e-4 * ( 0.5 / r_nuc )^2;
+                        
+                    case 'hibiki and ishii'
+                        % fancy expression for nucleation density
+                        % (hibiki & ishii, 2003)
+                        
+                        % originally thought:
+                        % gives much larger values than the shin/jones one
+                        % roughly 10^10 larger, with actual values around 10^8
+                        
+                        % then found I left out the ^-4 on the N_ns_star relation
+                        % givens much smaller values, by about 10^-6
+                        % actual values around 10^5
+                        
+                        % depends on the contact angle - I found a paper where
+                        % they measured contact angle of CO2 on SS316 and made a
+                        % curve fit from their results
+                        N_nbar = 4.72e5;
+                        mu_HI = 0.722;
+                        lambda_prime = 2.5e-6;
+                        % advancing and receding contact angles (in degrees)
+                        ACA = -0.003417*(T_s - 273.15)^2 - 0.2873*(T_s - 273.15) + 29.83;
+                        RCA = -0.004171*(T_s - 273.15)^2 - 0.3386*(T_s - 273.15) + 16.38;
+                        theta_HI = deg2rad(mean([ACA RCA]));
+                        
+                        R_c = r_nuc;
+                        
+                        rho_plus = log10(delta_rho/rho_tg_sat);
+                        
+                        f_rho_plus = -0.01064 + 0.48246*rho_plus - 0.22712*rho_plus^2 + 0.05468*rho_plus^3;
+                        
+                        nuc_density = N_nbar *( 1 - exp( - theta_HI^2/(8*mu_HI^2) ) )...
+                            *(exp( f_rho_plus*lambda_prime/R_c) - 1);
+                    otherwise
+                        error('invalid constants.nuc_density_expression. try ''shin and jones'' or ''hibiki and ishii''')
+                end
                 
                 % nucleation frequency (shin and jones also)
                 
@@ -2177,7 +2194,7 @@ for i = 1:N_full + 1
         if constants.step == 1 && J_hom/nuc_rate > 1e-6
             disp('we''ve got some homogeneous nucleation happening')
         end
-
+        
         %         if constants.step == 1 && i == 1
         %             fprintf('J_hom/NR = %0.4g\n', J_hom/nuc_rate);
         %         end
@@ -2198,11 +2215,11 @@ for i = 1:N_full + 1
     end
     
     % rdot term based on rho_dot
-    
-    if ~isnan(guesses.rhodot_tg_sat)
-        rdot_rhodot = -guesses.rhodot_tg_sat/rho_tg_sat * r_q(i,:)/3;
-    else
-        rdot_rhodot = 0;
+    rdot_rhodot = 0;
+    if constants.include_rdot_rhodot
+        if ~isnan(guesses.rhodot_tg_sat)
+            rdot_rhodot = -guesses.rhodot_tg_sat/rho_tg_sat * r_q(i,:)/3;
+        end
     end
     
     % generat scaled abscissas for more accurate calculations
@@ -2367,41 +2384,55 @@ for i = 1:N_full + 1
     end
     
     dmom_dt_s = birth_int_s(:) + growth_int_s(:) + coal_birth_s(:) - coal_death_s(:);
-    
-    r_sp = r_s;
-    % pre allocate
-    A1 = zeros(2*N_ab, N_ab);
-    A2 = A1;
-    for j = 0:(2*N_ab - 1)
-
-        if j == 0
-            A1(1,:) = ones(1,N_ab);
-            A2(1,:) = zeros(1,N_ab);
-        elseif j == 1
-            A1(2,:) = (p-1)/p * r_sp.^(1/p);
-            A2(2,:) = (1/p) * r_sp.^(1/p - 1);
-        else
-            A1(j+1,:) = (1 - j/p) * r_sp.^(j/p);
-            A2(j+1,:) = (j/p) * r_sp.^(j/p - 1);
-        end
-    end
-    
-    A = [A1 A2];
-    
     beta_q = dmom_dt_s;
     
-    %     alpha_q = A\beta_q;
-    [alpha_q, error_flag] = linear_equation_solver(A,beta_q);
-    
+    not_converging = 1;
+    linear_eqn_counter = 0;
+            r_sp = r_s;
+
+    while not_converging
+        
+        % pre allocate
+        A1 = zeros(2*N_ab, N_ab);
+        A2 = A1;
+        for j = 0:(2*N_ab - 1)
+            
+            if j == 0
+                A1(1,:) = ones(1,N_ab);
+                A2(1,:) = zeros(1,N_ab);
+            elseif j == 1
+                A1(2,:) = (p-1)/p * r_sp.^(1/p);
+                A2(2,:) = (1/p) * r_sp.^(1/p - 1);
+            else
+                A1(j+1,:) = (1 - j/p) * r_sp.^(j/p);
+                A2(j+1,:) = (j/p) * r_sp.^(j/p - 1);
+            end
+        end
+        
+        A = [A1 A2];
+        
+        %     alpha_q = A\beta_q;
+        [alpha_q, error_flag] = linear_equation_solver(A,beta_q);
+        
         dr = diff(r_s);
         for k = 1:length(dr)
             rbar = mean([r_s(k) r_s(k+1)]);
         end
-    if error_flag == 1
-        fprintf('linear equation solver not converging, rcond = %0.4g, min dr/r = %0.4g\n',rcond(A), min(abs(dr./rbar)) )
-        alpha_q = A\beta_q;
-    else
-%         fprintf('linear equation solver IS converging, rcond = %0.4g, min dr/r = %0.4g\n',rcond(A), min(abs(dr./rbar)) )
+        if error_flag == 1
+%             disp('jiggling the abscissas')
+            r_sp = r_s + (rand(size(r_s)) - 0.5).*abs(r_s)*1e-6;
+            linear_eqn_counter = linear_eqn_counter + 1;
+            if linear_eqn_counter == 25
+                fprintf('linear equation solver not converging, rcond = %0.4g, min dr/r = %0.4g\n',rcond(A), min(abs(dr./rbar)) )
+                alpha_q = A\beta_q;
+                keyboard
+            end
+            
+        else
+            not_converging = 0;
+            
+        end
+        
     end
     a_q = alpha_q(1:N_ab);
     b_q_s = alpha_q(N_ab+1:end);
@@ -2416,8 +2447,8 @@ for i = 1:N_full + 1
     
     
     % only include birth/death/growth (ie 0D)
-%         dw_dt(ind_node) = a_q;
-%         dg_dt(ind_node) = b_q;
+    %         dw_dt(ind_node) = a_q;
+    %         dg_dt(ind_node) = b_q;
     
     % include flux of bubbles in physical space
     dw_dt(ind_node) = a_q - duw_dx(i,:)';
@@ -2637,6 +2668,7 @@ if ~isempty(ind_negative) && sum( dy(ind_negative) < 0 ) > 0
         end
     end
     error_flag = 1;
+    disp('negative stuff in diffeqns')
 end
 
 
