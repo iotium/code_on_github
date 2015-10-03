@@ -47,7 +47,8 @@ Pi = fzero(@equations_to_solve, P_guess, constants.fsolve_options);
         U_tg = m_tg * u_tg;
         T_l = Ti;
         
-        P2 = get_P_from_mU_mT(m_tg, U_tg, m_l, T_l, V_bubi, PDT, constants, guesses);
+        P2 = get_P_from_mU_mT(m_tg, U_tg, m_l, T_l, ...
+            V_tank, V_node, V_bubi, fluid, PDT, constants, guesses);
         
         E = (P1 - P2)/P1;
         

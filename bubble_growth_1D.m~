@@ -1993,7 +1993,10 @@ for i = 1:N_full + 1
     %         T_sat = 19.6426*(P/1e3)^0.2499 + 122.3663;
     
     % depth from surface
-    depth = sum(node_level(i:N_full+1).*L_node(i:N_full+1));
+    if i <= N-
+    
+    depth = sum( (i < N_full).*(N_full - i).*L_node(1:N_full - i) ) + ...
+        node_level(N_full+1)*L_node(N_full + 1);
     
     dP_depth = rho_l*g*depth;
     

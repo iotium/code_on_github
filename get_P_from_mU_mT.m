@@ -1,9 +1,12 @@
 % calculate system P based on m_tg, U_tg, m_l, T_l
 % used for non-saturated liquid, saturated ullage
 % should work for 0D or 1D
-function P = get_P_from_mU_mT(m_tg, U_tg, m_l, T_l, V_tank, ...
-    V_node, V_bubi, fluid, PDT, constants, guesses)
+function P = get_P_from_mU_mT(m_tg, U_tg, m_l, T_l, ...
+    V_bubi, PDT, constants, guesses)
 
+fluid = constants.fluid;
+V_node = constants.V_node;
+V_tank = constants.V_tank;
 
 test_val = eqns_to_solve(guesses.P);
 
@@ -63,7 +66,7 @@ end
             V_bub = V_bubi*V_l/(1 - V_bubi);
         else
             
-            node_level = get_node_levels(V_l, V_bubi, V_node, guesses.node_level);
+            node_level = get_node_levels(V_l, V_bubi, V_node);%, guesses.node_level);
             %             V_bub = sum(node_level.*V_bubi*V_node);
             V_bub = sum_over_nodes(V_bubi, node_level, V_node);
             
