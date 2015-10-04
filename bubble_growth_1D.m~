@@ -45,21 +45,21 @@ current_dir = pwd;
 constants.fsolve_options = optimset('TolX',1e-12,'Display','off');
 constants.property_source = 'refprop';
 constants.nuc_model = 'SJ';
-constants.r_dep_expression = 'without superheat';
+constants.r_dep_expression = 'with superheat';
 constants.nuc_density_expression = 'hibiki and ishii';
 constants.include_rdot_rhodot = 0;
-constants.include_hysteresis = 0;
+constants.include_hysteresis = 1;
 constants.include_u_bulk = 0;
 constants.ADQMOM_p = 1;
 p = constants.ADQMOM_p;
 
-spatial_rel_delta_tol = 1.5;
+spatial_rel_delta_tol = 2;
 
 ADQMOM = 'off';
 
 if nargin == 0
     
-    N_nodes = 40;
+    N_nodes = 20;
     N_mom = 4;
     rel_tol = 1e-4;     % [] max relative error allowed in adaptive scheme
     constants.C_qdot_lw = 6e-6;
@@ -79,7 +79,6 @@ else
 end
 
 constants.N_nodes = N_nodes;
-
 
 
 N_ab = N_mom/2;
@@ -160,7 +159,7 @@ constants.V_node = V_node;
 h = 1e-12;           % [s] initial time step
 running = 1;        % [] switch, 1 = program running, 0 = program stopped
 abs_tol = 1e9;     % [] max absolute error allowed in adaptive scheme
-min_error = 1e-4;   % [] min error (relative to error_tol) before step size is increased
+min_error = 1e-3;   % [] min error (relative to error_tol) before step size is increased
 h_max = 1;       % [s] max allowable time step
 h_min = 1e-16;      % [s] min allowable time step
 t_end = 1e3;         % [s] end time (if LRO doesn't happen first)
@@ -211,7 +210,7 @@ PDT.P = Pgrid_table;
 
 constants.error_detected = 0;
 
-k = zeros(N_dim,s);
+k_ode = zeros(N_dim,s);
 ti = 0;
 n = 1;              % [] counter
 
@@ -280,6 +279,8 @@ V_l = fill_level*V_tank;
 
 node_level = get_node_levels(V_l, V_bubi{1}, constants.V_node);%, V_l/constants.V_node);
 guesses.node_level = node_level;
+
+N_full = sum(node_level == 1);
 
 V_bub = sum_over_nodes(V_bubi{1}, node_level, constants.V_node);
 
@@ -582,7 +583,7 @@ while running == 1;
                 if t(n) < 1e-4 || n > n_increase + 5
                     fprintf('step size increased.\n')
                     % make h bigger
-                    h = min(4*h,h_max);
+                    h = min(5*h,h_max);
                     n_increase = n; % store the n at which we last increased step size
                 else
                     fprintf('waiting till n = 5.\n')
@@ -674,6 +675,7 @@ while running == 1;
         if exist('k_ode','var')
             clear k_ode
         end
+        
         for i = 1:s
             % s = number of stages in the scheme
             
@@ -701,6 +703,7 @@ while running == 1;
                     end
                 end
             else
+                    
                 
                 % f for k(2) = f( t(n) + c(2)*h , y(n) + a(2,1)*k(1) )
                 % f for k(3) = f( t(n) + c(3)*h , y(n) + a(3,1)*k(1) + a(3,2)*k(2) )
@@ -731,6 +734,9 @@ while running == 1;
                     disp('we''re taking a bad step')
                     f = ones(size(f));
                     error_flag = 1;
+                    % need to fill out k_ode otherwise the dimensions will
+                    % be wrong and I'll get another error
+                    k_ode = ones(N_dim, s);
                     break
                 else
                     
@@ -769,6 +775,11 @@ while running == 1;
         %         k6 = h*diffeqns(y(:,n) + a(6,1)*k1 + a(6,2)*k2 + a(6,3)*k3 + a(6,4)*k4 + a(6,5)*k5);
         %
         %         k = [k1, k2, k3, k4, k5, k6];
+        
+        if length(k_ode(1,:)) ~= length(b)
+            disp('dimensions are wrong')
+            keyboard
+        end
         
         y_new = y_current + (k_ode*b);
         
@@ -932,10 +943,9 @@ while running == 1;
                 points_to_refine = 0;
                 
                 % need to be careful about the points at the liquid level
-                % w and g go to zero on the other side
-                
-                % N_full = ???
-                
+                % w and g go to zero on the other side. using N_full from
+                % last step
+                                
                 % loop through and find relative change between two points
                 % (relative to the interface between them)
                 % then if the diff is too high, tag for refinement
@@ -983,7 +993,8 @@ while running == 1;
                         k = points_to_refine(j) + j - 1;
                         
                         if k > N_full(n) - 1
-                            disp('
+                            disp('trying to refine point near the liquid level.')
+                        end
                         
                         % calculate values at new points
                         w_bar(1,:) = w_q_new(k,:) + (w_q_new(k+1,:) - w_q_new(k,:))./...
@@ -1097,11 +1108,11 @@ while running == 1;
                     fprintf('refined %0.d points. N_nodes = %0.d\n', length(points_to_refine), N_nodes);
                     figure(48)
                     subplot(3,1,1)
-                    plot(L_node)
+                    plot(log10(L_node))
                     subplot(3,1,2)
-                    plot(w_q_new)
+                    plot(log10(w_q_new))
                     subplot(3,1,3)
-                    plot(g_q_new)
+                    plot(log10(g_q_new))
                 end
                 
             end
@@ -2033,134 +2044,187 @@ ug_vec = (u_rise).*g_q;
 for i = 1:N_full + 1
     % fluxes in and out of node
     
-    % MUSCL
-    if i > 2 && i < N_full
-        % interior grid points
-        
-        for j = 1:N_ab
-            
-            % vector of the abscissas and weights
-            U = [w_q(:,j)'; g_q(:,j)'];
-            
-            % flow velocity
-            u = u_vec(:,j)';
-            
-            % flux limiters
-            r_U = (U(:,i) - U(:,i-1))./(U(:,i+1) - U(:,i));
-            r_u = (u(i) - u(i-1))/(u(i+1) - u(i));
-            
-            flux_limiter_ui = max([0, min(1, r_u)]);
-            flux_limiter_Ui(1) = max([0, min(1, r_U(1))]);
-            flux_limiter_Ui(2) = max([0, min(1, r_U(2))]);
-            
-            r_U = (U(:,i+1) - U(:,i))./(U(:,i+2) - U(:,i+1));
-            r_u = (u(i+1) - u(i))/(u(i+2) - u(i+1));
-            
-            flux_limiter_uip1 = max([0, min(1, r_u)]);
-            flux_limiter_Uip1(1) = max([0, min(1, r_U(1))]);
-            flux_limiter_Uip1(2) = max([0, min(1, r_U(2))]);
-            
-            r_U = (U(:,i-1) - U(:,i-2))./(U(:,i) - U(:,i-1));
-            r_u = (u(i-1) - u(i-2))/(u(i) - u(i-1));
-            
-            flux_limiter_uim1 = max([0, min(1, r_u)]);
-            flux_limiter_Uim1(1) = max([0, min(1, r_U(1))]);
-            flux_limiter_Uim1(2) = max([0, min(1, r_U(2))]);
-            
-            % flux through top(i + 1/2)
-            uL = u(i) + 0.5*flux_limiter_ui*(u(i+1) - u(i));
-            uR = u(i+1) - 0.5*flux_limiter_uip1*(u(i+2) - u(i+1));
-            
-            UL = U(:,i) + 0.5*flux_limiter_Ui'.*(U(:,i+1) - U(:,i));
-            UR = U(:,i+1) - 0.5*flux_limiter_Uip1'.*(U(:,i+2) - U(:,i+1));
-            
-            a = max([abs(uL), abs(uR)]);
-            
-            FR = uR*UR;
-            FL = uL*UL;
-            
-            F_star_top = 0.5*( (FR + FL) - a*(UR - UL) );
-            
-            % flux through bottom(i - 1/2)
-            uL = u(i-1) + 0.5*flux_limiter_uim1*(u(i) - u(i-1));
-            uR = u(i) - 0.5*flux_limiter_ui*(u(i+1) - u(i));
-            
-            UL = U(:,i-1) + 0.5*flux_limiter_Uim1'.*(U(:,i) - U(:,i-1));
-            UR = U(:,i) - 0.5*flux_limiter_Ui'.*(U(:,i+1) - U(:,i));
-            
-            a = max([abs(uL), abs(uR)]);
-            
-            FR = uR*UR;
-            FL = uL*UL;
-            
-            F_star_bot = 0.5*( (FR + FL) - a*(UR - UL) );
-            
-            dF_dx = (F_star_top - F_star_bot)/L_node(i);
-            
-            duw_dx(i,j) = dF_dx(1);
-            dug_dx(i,j) = dF_dx(2);
-            
-        end
-        
-    else
-        
-        if i == 1
-            % bottom point
-            % there's flux out the top and nothing out the bottom
-            % also L_node = 1/2 L_node
-            %             duw_dx(i,:) = uw_vec(i,:)/L_node;
-            %             dug_dx(i,:) = ug_vec(i,:)/L_node;
-            
-            
-            flux_bot = 0;%w_q(i-1,:).*0.5.*(u_vec(i,:) + u_vec(i-1,:));
-            flux_top = w_q(i,:).*0.5.*(u_vec(i+1,:) + u_vec(i,:));
-            duw_dx(i,:) = 2*(flux_top - flux_bot)/L_node(i);
-            
-            flux_bot = 0;%g_q(i-1,:).*0.5.*(u_vec(i,:) + u_vec(i-1,:));
-            flux_top = g_q(i,:).*0.5.*(u_vec(i+1,:) + u_vec(i,:));
-            dug_dx(i,:) = 2*(flux_top - flux_bot)/L_node(i);
-            
-            
-            %             duw_dx(i,:) = (uw_vec(i+1,:) - uw_vec(i,:))/L_node;
-            %             dug_dx(i,:) = (ug_vec(i+1,:) - ug_vec(i,:))/L_node;
-        else
-            if i == N_full + 1
-                % top point -> backwards difference
-                %                 duw_dx(i,:) = ( uw_vec(i,:) - uw_vec(i-1,:) )/(L_node);
-                %                 dug_dx(i,:) = ( ug_vec(i,:) - ug_vec(i-1,:) )/(L_node);
-                
-                flux_bot = w_q(i-1,:).*0.5.*(u_vec(i,:) + u_vec(i-1,:));
-                flux_top = w_q(i,:).*u_vec(i,:);
-                duw_dx(i,:) = (flux_top - flux_bot)/L_node(i);
-                
-                flux_bot = g_q(i-1,:).*0.5.*(u_vec(i,:) + u_vec(i-1,:));
-                flux_top = g_q(i,:).*u_vec(i,:);
-                dug_dx(i,:) = (flux_top - flux_bot)/L_node(i);
+        %     1st order upwind
+            if i > 1 && i < N_full + 1
+        %         interior grid points
+    
+                for j = 1:N_ab
+%                     if u_rise(i,j) - u_bulk > 0
+    %                     rising: flux in is from -x
+                        u_top = u_vec(i,j) + (u_vec(i+1,j) - u_vec(i,j))/(L_node(i+1) + L_node(i)) * L_node(i);
+                        u_bot = u_vec(i-1,j) + (u_vec(i,j) - u_vec(i-1,j))/(L_node(i) + L_node(i-1)) * L_node(i-1);
+                        flux_top = u_top*w_q(i,j);
+                        flux_bot = u_bot*w_q(i-1,j);
+%                                                 
+%                         flux_bot = w_q(i-1,j)*0.5*(u_vec(i,j) + u_vec(i-1,j));
+%                         flux_top = w_q(i,j)*0.5*(u_vec(i+1,j) + u_vec(i,j));
+                        duw_dx(i,j) = (flux_top - flux_bot)/L_node(i);
+                        
+                        flux_top = u_top*g_q(i,j);
+                        flux_bot = u_bot*g_q(i-1,j);
+    
+%                         flux_bot = g_q(i-1,j)*0.5*(u_vec(i,j) + u_vec(i-1,j));
+%                         flux_top = g_q(i,j)*0.5*(u_vec(i+1,j) + u_vec(i,j));
+                        dug_dx(i,j) = (flux_top - flux_bot)/L_node(i);
+%                     else
+%     %                     falling: flux in is from +x
+%                         flux_top = w_q(i+1,j)*0.5*(u_vec(i+1,j) + u_vec(i,j));
+%                         flux_bot = w_q(i,j)*0.5*(u_vec(i,j) + u_vec(i-1,j));
+%                         duw_dx(i,j) = (flux_top - flux_bot)/L_node;
+%     
+%                         flux_top = g_q(i+1,j)*0.5*(u_vec(i+1,j) + u_vec(i,j));
+%                         flux_bot = g_q(i,j)*0.5*(u_vec(i,j) + u_vec(i-1,j));
+%                         dug_dx(i,j) = (flux_top - flux_bot)/L_node;
+%                     end
+    
+                end
+    
             else
-                % upwind it
-                
-                % %      rising: flux in is from -x
-                flux_bot = w_q(i-1,:).*0.5.*(u_vec(i,:) + u_vec(i-1,:));
-                flux_top = w_q(i,:).*0.5.*(u_vec(i+1,:) + u_vec(i,:));
-                duw_dx(i,:) = (flux_top - flux_bot)/L_node(i);
-                
-                flux_bot = g_q(i-1,:).*0.5.*(u_vec(i,:) + u_vec(i-1,:));
-                flux_top = g_q(i,:).*0.5.*(u_vec(i+1,:) + u_vec(i,:));
-                dug_dx(i,:) = (flux_top - flux_bot)/L_node(i);
-                
-                %             if i == 2
-                %                 duw_dx(i,:) = (uw_vec(i,:) - uw_vec(i-1,:))/L_node;
-                %                 dug_dx(i,:) = (ug_vec(i,:) - ug_vec(i-1,:))/L_node;
-                %             else
-                %                 % top 2 points
-                %                 %             duw_dx(i,:) = ( uw_vec(i,:) - uw_vec(i-1,:) )/(L_node);
-                %                 %             dug_dx(i,:) = ( ug_vec(i,:) - ug_vec(i-1,:) )/(L_node);
-                %                 duw_dx(i,:) = zeros(size(uw_vec(i,:)));
-                %                 dug_dx(i,:) = zeros(size(ug_vec(i,:)));
-                %             end
+    
+                if i == 1
+    %                 bottom point
+    
+                    duw_dx(i,:) = uw_vec(i,:)/L_node(i);
+                    dug_dx(i,:) = ug_vec(i,:)/L_node(i);
+    %                             duw_dx(i,:) = (uw_vec(i+1,:) - uw_vec(i,:))/L_node;
+    %                             dug_dx(i,:) = (ug_vec(i+1,:) - ug_vec(i,:))/L_node;
+                else
+    %                 top point
+                                duw_dx(i,:) = ( uw_vec(i,:) - uw_vec(i-1,:) )/(L_node(i));
+                                dug_dx(i,:) = ( ug_vec(i,:) - ug_vec(i-1,:) )/(L_node(i));
+%                     duw_dx(i,:) = zeros(size(uw_vec(i,:)));
+%                     dug_dx(i,:) = zeros(size(ug_vec(i,:)));
+                end
             end
-        end
-    end
+    
+%     % MUSCL
+%     if i > 2 && i < N_full
+%         % interior grid points
+%         
+%         for j = 1:N_ab
+%             
+%             % vector of the abscissas and weights
+%             U = [w_q(:,j)'; g_q(:,j)'];
+%             
+%             % flow velocity
+%             u = u_vec(:,j)';
+%             
+%             % flux limiters
+%             r_U = (U(:,i) - U(:,i-1))./(U(:,i+1) - U(:,i));
+%             r_u = (u(i) - u(i-1))/(u(i+1) - u(i));
+%             
+%             flux_limiter_ui = max([0, min(1, r_u)]);
+%             flux_limiter_Ui(1) = max([0, min(1, r_U(1))]);
+%             flux_limiter_Ui(2) = max([0, min(1, r_U(2))]);
+%             
+%             r_U = (U(:,i+1) - U(:,i))./(U(:,i+2) - U(:,i+1));
+%             r_u = (u(i+1) - u(i))/(u(i+2) - u(i+1));
+%             
+%             flux_limiter_uip1 = max([0, min(1, r_u)]);
+%             flux_limiter_Uip1(1) = max([0, min(1, r_U(1))]);
+%             flux_limiter_Uip1(2) = max([0, min(1, r_U(2))]);
+%             
+%             r_U = (U(:,i-1) - U(:,i-2))./(U(:,i) - U(:,i-1));
+%             r_u = (u(i-1) - u(i-2))/(u(i) - u(i-1));
+%             
+%             flux_limiter_uim1 = max([0, min(1, r_u)]);
+%             flux_limiter_Uim1(1) = max([0, min(1, r_U(1))]);
+%             flux_limiter_Uim1(2) = max([0, min(1, r_U(2))]);
+%             
+%             % flux through top(i + 1/2)
+%             uL = u(i) + 0.5*flux_limiter_ui*(u(i+1) - u(i));
+%             uR = u(i+1) - 0.5*flux_limiter_uip1*(u(i+2) - u(i+1));
+%             
+%             UL = U(:,i) + 0.5*flux_limiter_Ui'.*(U(:,i+1) - U(:,i));
+%             UR = U(:,i+1) - 0.5*flux_limiter_Uip1'.*(U(:,i+2) - U(:,i+1));
+%             
+%             a = max([abs(uL), abs(uR)]);
+%             
+%             FR = uR*UR;
+%             FL = uL*UL;
+%             
+%             F_star_top = 0.5*( (FR + FL) - a*(UR - UL) );
+%             
+%             % flux through bottom(i - 1/2)
+%             uL = u(i-1) + 0.5*flux_limiter_uim1*(u(i) - u(i-1));
+%             uR = u(i) - 0.5*flux_limiter_ui*(u(i+1) - u(i));
+%             
+%             UL = U(:,i-1) + 0.5*flux_limiter_Uim1'.*(U(:,i) - U(:,i-1));
+%             UR = U(:,i) - 0.5*flux_limiter_Ui'.*(U(:,i+1) - U(:,i));
+%             
+%             a = max([abs(uL), abs(uR)]);
+%             
+%             FR = uR*UR;
+%             FL = uL*UL;
+%             
+%             F_star_bot = 0.5*( (FR + FL) - a*(UR - UL) );
+%             
+%             dF_dx = (F_star_top - F_star_bot)/L_node(i);
+%             
+%             duw_dx(i,j) = dF_dx(1);
+%             dug_dx(i,j) = dF_dx(2);
+%             
+%         end
+%         
+%     else
+%         
+%         if i == 1
+%             % bottom point
+%             % there's flux out the top and nothing out the bottom
+%             % also L_node = 1/2 L_node
+%             %             duw_dx(i,:) = uw_vec(i,:)/L_node;
+%             %             dug_dx(i,:) = ug_vec(i,:)/L_node;
+%             
+%             
+%             flux_bot = 0;%w_q(i-1,:).*0.5.*(u_vec(i,:) + u_vec(i-1,:));
+%             flux_top = w_q(i,:).*0.5.*(u_vec(i+1,:) + u_vec(i,:));
+%             duw_dx(i,:) = 2*(flux_top - flux_bot)/L_node(i);
+%             
+%             flux_bot = 0;%g_q(i-1,:).*0.5.*(u_vec(i,:) + u_vec(i-1,:));
+%             flux_top = g_q(i,:).*0.5.*(u_vec(i+1,:) + u_vec(i,:));
+%             dug_dx(i,:) = 2*(flux_top - flux_bot)/L_node(i);
+%             
+%             
+%             %             duw_dx(i,:) = (uw_vec(i+1,:) - uw_vec(i,:))/L_node;
+%             %             dug_dx(i,:) = (ug_vec(i+1,:) - ug_vec(i,:))/L_node;
+%         else
+%             if i == N_full + 1
+%                 % top point -> backwards difference
+%                 %                 duw_dx(i,:) = ( uw_vec(i,:) - uw_vec(i-1,:) )/(L_node);
+%                 %                 dug_dx(i,:) = ( ug_vec(i,:) - ug_vec(i-1,:) )/(L_node);
+%                 
+%                 flux_bot = w_q(i-1,:).*0.5.*(u_vec(i,:) + u_vec(i-1,:));
+%                 flux_top = w_q(i,:).*u_vec(i,:);
+%                 duw_dx(i,:) = (flux_top - flux_bot)/L_node(i);
+%                 
+%                 flux_bot = g_q(i-1,:).*0.5.*(u_vec(i,:) + u_vec(i-1,:));
+%                 flux_top = g_q(i,:).*u_vec(i,:);
+%                 dug_dx(i,:) = (flux_top - flux_bot)/L_node(i);
+%             else
+%                 % upwind it
+%                 
+%                 % %      rising: flux in is from -x
+%                 flux_bot = w_q(i-1,:).*0.5.*(u_vec(i,:) + u_vec(i-1,:));
+%                 flux_top = w_q(i,:).*0.5.*(u_vec(i+1,:) + u_vec(i,:));
+%                 duw_dx(i,:) = (flux_top - flux_bot)/L_node(i);
+%                 
+%                 flux_bot = g_q(i-1,:).*0.5.*(u_vec(i,:) + u_vec(i-1,:));
+%                 flux_top = g_q(i,:).*0.5.*(u_vec(i+1,:) + u_vec(i,:));
+%                 dug_dx(i,:) = (flux_top - flux_bot)/L_node(i);
+%                 
+%                 %             if i == 2
+%                 %                 duw_dx(i,:) = (uw_vec(i,:) - uw_vec(i-1,:))/L_node;
+%                 %                 dug_dx(i,:) = (ug_vec(i,:) - ug_vec(i-1,:))/L_node;
+%                 %             else
+%                 %                 % top 2 points
+%                 %                 %             duw_dx(i,:) = ( uw_vec(i,:) - uw_vec(i-1,:) )/(L_node);
+%                 %                 %             dug_dx(i,:) = ( ug_vec(i,:) - ug_vec(i-1,:) )/(L_node);
+%                 %                 duw_dx(i,:) = zeros(size(uw_vec(i,:)));
+%                 %                 dug_dx(i,:) = zeros(size(ug_vec(i,:)));
+%                 %             end
+%             end
+%         end
+%     end
     
     
 end
