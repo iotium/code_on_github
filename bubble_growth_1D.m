@@ -46,7 +46,8 @@ constants.fsolve_options = optimset('TolX',1e-12,'Display','off');
 constants.property_source = 'refprop';
 constants.nuc_model = 'SJ';
 constants.r_dep_expression = 'with superheat';
-constants.nuc_density_expression = 'shin and jones';
+constants.nuc_density_expression = 'hibiki and ishii';
+constants.nuc_frequency_expression = 'saddy and jameson';
 constants.include_rdot_rhodot = 0;
 constants.include_hysteresis = 1;
 constants.include_u_bulk = 0;
@@ -66,8 +67,8 @@ if nargin == 0
     N_mom = 4;
     rel_tol = 1e-4;     % [] max relative error allowed in adaptive scheme
     constants.C_qdot_lw = 6e-6;
-    constants.C_coalescence = [1 1 1]; % collision efficiency, laminar shear, turbulence
-    constants.C_nuc_rate = 1e-12; % had this at 6e4 using the r_dep with superheat
+    constants.C_coalescence = [0 1 1]; % collision efficiency, laminar shear, turbulence
+    constants.C_nuc_rate = 1e0; % had this at 6e4 using the r_dep with superheat
     
 else
     inputs = varargin{1};
@@ -742,6 +743,7 @@ while running == 1;
                     end
                 end
             else
+                                   
                 
                 % f for k(2) = f( t(n) + c(2)*h , y(n) + a(2,1)*k(1) )
                 % f for k(3) = f( t(n) + c(3)*h , y(n) + a(3,1)*k(1) + a(3,2)*k(2) )
@@ -2424,17 +2426,7 @@ for i = 1:N_full + 1
         % jakob number
         Ja_T = Cp_l * rho_l * C_dTs * deltaT_sup_node/(rho_tg_v * h_lv);
         
-        % radius of new bubbles
-        % common expression
-        %         r_nuc = C_r_nuc * 2*sigma*T_s/(rho_tg_v * h_lv * C_dTs * deltaT_sup_node);
-        % more advanced one. not sure where I got it from, but it seems to
-        % be equal to about 2x the above (2.1 or 2.2 generally)
-        % it's listed in hibiki & ishii 2003 paper they also show how it
-        % reduces to the common expression
-        r_nuc = (2*sigma*(1 + rho_tg_sat/rho_l)/P)...
-            /( exp( h_lv * (deltaT_sup_node)/(Ru/MW * T_l*T_s)) - 1);
-        
-        
+                
         % bubble radius rate of change
         
         % growth rate for a bubble at rest in an infinite fluid
@@ -2503,17 +2495,29 @@ for i = 1:N_full + 1
                         error('invalid constants.r_dep_expression. try ''without superheat'' or ''with superheat''')
                 end
                 
-                %                 % hysteresis!
+                
+                
+                % radius of new bubbles
+                % common expression
+                %         r_nuc = C_r_nuc * 2*sigma*T_s/(rho_tg_v * h_lv * C_dTs * deltaT_sup_node);
+                % more advanced one. not sure where I got it from, but it seems to
+                % be equal to about 2x the above (2.1 or 2.2 generally)
+                % it's listed in hibiki & ishii 2003 paper they also show how it
+                % reduces to the common expression
+                r_nuc = (2*sigma*(1 + rho_tg_sat/rho_l)/P)...
+                    /( exp( h_lv * (deltaT_sup_node)/(Ru/MW * T_l*T_s)) - 1);
+        
+                
+                % hysteresis!
+                % see Qi & Klausner, 2005
+                % basically, if we're depressurizing, the meniscus is
+                % concave and you need 2x the superheat to activate it
                 if constants.include_hysteresis
-                    if constants.min_flag ~= 1
+                    if constants.min_flag == 0
                         r_nuc = 2*r_nuc;
-                        %                                     r_dep = 2*r_dep;
                     end
                 end
                 
-                %                 if (i == 1 && constants.step == 1) && constants.t > 0.1
-                %                     fprintf('r_dep/r_dep1 = %0.4g\n', r_dep/r_dep1)
-                %                 end
                 
                 switch constants.nuc_density_expression
                     
@@ -2569,10 +2573,20 @@ for i = 1:N_full + 1
                         error('invalid constants.nuc_density_expression. try ''shin and jones'' or ''hibiki and ishii''')
                 end
                 
+                
+                switch constants.nuc_frequency_expression
+                    case 'shin and jones'
+                
                 % nucleation frequency (shin and jones also)
                 
                 % nucleation frequency [Hz]
                 nuc_freq = 1e4 * C_dTs * deltaT_sup_node^n_nuc_freq;
+                
+                    case 'saddy and jameson'
+                        nuc_freq = r_dep^2;
+                    otherwise
+                        error('invalid constants.nuc_frequency expression. try ''shin and jones'' or ''saddy and jameson''')
+                end
                 
                 % nucleation rate [Hz]
                 nuc_rate = C_nuc_rate * nuc_density * nuc_freq * A_l;
@@ -2835,7 +2849,7 @@ for i = 1:N_full + 1
             if linear_eqn_counter == 25
                 fprintf('linear equation solver not converging, rcond = %0.4g, min dr/r = %0.4g\n',rcond(A), min(abs(dr./rbar)) )
                 alpha_q = A\beta_q;
-                keyboard
+%                 keyboard
             end
             
         else
@@ -3073,12 +3087,6 @@ end
 if ~sum(isreal(dy(:))) || sum(isnan(dy(:)))
     disp('complex or nans in derivatives')
     error_flag = 1;
-    %     if constants.t > 4.725
-    %         beep
-    %         beep
-    %         beep
-    %     keyboard
-    %     end
 end
 
 % correct for negative stuff
@@ -3092,7 +3100,6 @@ if ~isempty(ind_negative) && sum( dy(ind_negative) < 0 ) > 0
     error_flag = 1;
     disp('negative stuff in diffeqns')
 end
-
 
 if nargout == 1
     
