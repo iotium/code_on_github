@@ -12,7 +12,7 @@ switch computer
         % on server
         addpath('~/refprop/refprop');
         t_save = 60*60; % save interval in seconds
-        plot_stuff = 0;
+        plot_stuff = 1;
         save_stuff = 1;
         save_periodically = 0;
         save_parameters_only = 0;
@@ -46,25 +46,28 @@ constants.fsolve_options = optimset('TolX',1e-12,'Display','off');
 constants.property_source = 'refprop';
 constants.nuc_model = 'SJ';
 constants.r_dep_expression = 'with superheat';
-constants.nuc_density_expression = 'hibiki and ishii';
+constants.nuc_density_expression = 'shin and jones';
 constants.include_rdot_rhodot = 0;
 constants.include_hysteresis = 1;
 constants.include_u_bulk = 0;
 constants.ADQMOM_p = 1;
 p = constants.ADQMOM_p;
 
-spatial_rel_delta_tol = 2;
+max_spatial_rel_delta_tol = 2;
+min_spatial_rel_delta_tol = 0.025;
+max_L = 0.1;
+Pmin_tol = 1e-9;
 
 ADQMOM = 'off';
 
 if nargin == 0
     
-    N_nodes = 20;
+    N_nodes = 10;
     N_mom = 4;
     rel_tol = 1e-4;     % [] max relative error allowed in adaptive scheme
     constants.C_qdot_lw = 6e-6;
-    constants.C_coalescence = [0 1 1]; % collision efficiency, laminar shear, turbulence
-    constants.C_nuc_rate = 1e-15; % had this at 6e4 using the r_dep with superheat
+    constants.C_coalescence = [1 1 1]; % collision efficiency, laminar shear, turbulence
+    constants.C_nuc_rate = 1e-12; % had this at 6e4 using the r_dep with superheat
     
 else
     inputs = varargin{1};
@@ -141,7 +144,7 @@ else
     
 end
 constants.V_tank = V_tank;
-
+max_L = max_L*L_tank;
 constants.fluid = fluid;
 
 % divide the whole tank into nodes
@@ -413,7 +416,7 @@ filter_design = design(filter_handle,'butter');
 
 diff_eqns_error_flag = 0;
 n_increase = 0;
-
+n_coarsened = 0;
 y_current = y;
 %% ODE solver
 
@@ -583,7 +586,7 @@ while running == 1;
                 if t(n) < 1e-4 || n > n_increase + 5
                     fprintf('step size increased.\n')
                     % make h bigger
-                    h = min(5*h,h_max);
+                    h = min(4*h,h_max);
                     n_increase = n; % store the n at which we last increased step size
                 else
                     fprintf('waiting till n = 5.\n')
@@ -655,6 +658,42 @@ while running == 1;
         end
         
         
+        % also check if we're close to Pmin (it's been crashing there...)
+        if constants.min_flag == 0 && t(n) > 0.15
+            % slope of Pdot curve
+            k = 1;
+            clear Pdot2
+            for j = n-20:n
+                Pdot2(k) = bdiff(P,j-3,j,t,adaptive);
+                k = k + 1;
+            end
+            
+%             % fit parabola
+%             parabola_pars = polyfit(t(n-10:n),Pdot2,2);
+%             t_Pd = -parabola_pars(2)/(2*parabola_pars(1));
+
+            % fit line
+            fit_line_data = [ones(k-1,1) t(n-(k-2):n)']\Pdot2';
+            t_Pd = -fit_line_data(1)/fit_line_data(2);
+
+            
+%             Pdot_slope = bdiff(Pdot,starti,n,t,adaptive);
+            
+            % projected t_sup (t when Pdot = 0)
+%             t_Pd = -Pdot(n)/Pdot_slope + t(n);
+            
+            
+            h_Pd = t_Pd - t(n); % distance to t_sup
+            
+            if (h > 0.01 * h_Pd && h > Pmin_tol) && h_Pd > 0
+                h = h_Pd/5;
+                disp('refining because close to Pmin')
+%                 keyboard
+            end
+            
+        end
+        
+        
     end
     
     error_OK = 0;
@@ -703,7 +742,6 @@ while running == 1;
                     end
                 end
             else
-                    
                 
                 % f for k(2) = f( t(n) + c(2)*h , y(n) + a(2,1)*k(1) )
                 % f for k(3) = f( t(n) + c(3)*h , y(n) + a(3,1)*k(1) + a(3,2)*k(2) )
@@ -941,16 +979,16 @@ while running == 1;
                 
                 % first check spatial error
                 points_to_refine = 0;
+                points_to_coarsen = 0;
                 
                 % need to be careful about the points at the liquid level
                 % w and g go to zero on the other side. using N_full from
                 % last step
-                                
+                
                 % loop through and find relative change between two points
                 % (relative to the interface between them)
                 % then if the diff is too high, tag for refinement
-                for k = 1:N_full
-                    
+                for k = 1:N_full(n)
                     
                     dw = w_q_new(k+1,:) - w_q_new(k,:);
                     dg = g_q_new(k+1,:) - g_q_new(k,:);
@@ -966,11 +1004,21 @@ while running == 1;
                     
                     max_delta_rel = max( abs([ rel_dw(:) rel_dg(:)]) );
                     
-                    if max_delta_rel > spatial_rel_delta_tol 
+                    if max_delta_rel > max_spatial_rel_delta_tol
                         if points_to_refine(end) ~= k
                             points_to_refine = [points_to_refine; k];
                         end
                     end
+                    
+                    %                     if n > n_coarsened + 3
+                    %                         if max_delta_rel < min_spatial_rel_delta_tol
+                    %                             if length(points_to_coarsen) < 2 && L_node(k) < max_L
+                    %                                 if points_to_coarsen(end) ~= k
+                    %                                     points_to_coarsen = [points_to_coarsen; k];
+                    %                                 end
+                    %                             end
+                    %                         end
+                    %                     end
                 end
                 
                 if length(points_to_refine) > 1
@@ -985,6 +1033,10 @@ while running == 1;
                     g_q_new = variables.g_q;
                     w_q_new = variables.w_q;
                     
+                    y_old = y_current;
+                    L_node_old = L_node;
+                    V_node_old = V_node;
+                    N_nodes_old = N_nodes;
                     
                     for j = 1:length(points_to_refine)
                         
@@ -993,7 +1045,7 @@ while running == 1;
                         k = points_to_refine(j) + j - 1;
                         
                         if k > N_full(n) - 1
-                            disp('trying to refine point near the liquid level.')
+                            disp('Warning! Trying to refine point near the liquid level.')
                         end
                         
                         % calculate values at new points
@@ -1105,7 +1157,15 @@ while running == 1;
                         
                         
                     end
-                    fprintf('refined %0.d points. N_nodes = %0.d\n', length(points_to_refine), N_nodes);
+                    fprintf('refined %0.d points: ', length(points_to_refine));
+                    fprintf('%0.d, ', points_to_refine);
+                    fprintf('N_nodes = %0.d\n', N_nodes);
+                    
+                    x_node(1) = L_node(1)/2;
+                    for l = 2:N_nodes
+                        x_node(l) = x_node(l-1) + (L_node(l) + L_node(l-1))/2;
+                    end
+                    
                     figure(48)
                     subplot(3,1,1)
                     plot(log10(L_node))
@@ -1113,10 +1173,96 @@ while running == 1;
                     plot(log10(w_q_new))
                     subplot(3,1,3)
                     plot(log10(g_q_new))
+                    %                     keyboard
                 end
                 
+                
+                %                 if length(points_to_coarsen) > 1
+                %                     % remove the zero
+                %                     points_to_coarsen = points_to_coarsen(2:end);
+                %                     spatial_error_OK = 0;
+                %                     error_OK = 0;
+                %                     n_coarsened = n;
+                %
+                %                     % use old points to refine space, not new points
+                %                     variables = unpack_y(y_current, constants);
+                %
+                %                     g_q_new = variables.g_q;
+                %                     w_q_new = variables.w_q;
+                %
+                %                     y_old = y_current;
+                %                     L_node_old = L_node;
+                %                     V_node_old = V_node;
+                %                     N_nodes_old = N_nodes;
+                %
+                %                     for j = 1:length(points_to_coarsen)
+                %
+                %                         % the point to coarsen (merge k and k+1)
+                %                         % need to correct for points already removed -> j-1
+                %                         k = points_to_coarsen(j) - (j - 1);
+                %
+                %                         % calculate values at new point
+                %                         w_bar(1,:) = w_q_new(k,:) + (w_q_new(k+1,:) - w_q_new(k,:))./...
+                %                             (L_node(k+1) + L_node(k)) * L_node(k+1);
+                %
+                %                         g_bar(1,:) = g_q_new(k,:) + (g_q_new(k+1,:) - g_q_new(k,:))/...
+                %                             (L_node(k+1) + L_node(k)) * L_node(k+1);
+                %
+                %
+                %                         % modify L_node, V_node
+                %                         L_node(k) = L_node(k) + L_node(k+1);
+                %                         L_node(k+1) = [];
+                %
+                %                         V_node(k) = V_node(k) + V_node(k+1);
+                %                         V_node(k+1) = [];
+                %
+                %                         N_nodes = length(L_node);
+                %
+                %                         constants.L_node = L_node;
+                %                         constants.V_node = V_node;
+                %                         constants.N_nodes = N_nodes;
+                %                         % now need to update y...
+                %                         % and constants...
+                %                         % and N_nodes (outside of constants)
+                %
+                %                         % find index of the kth node's w and g
+                %
+                %                         % have to put this in the right place
+                %                         % for i = 1, it should be 1, 2, ... N_ab
+                %                         % for i = 2, N_ab+1, N+2, ... N_ab+N_ab
+                %                         % for i = i, it's (i-1)*N_ab, ... i*N_ab;%
+                %                         ind_w_star = (k-1)*N_ab + [1:N_ab];
+                %
+                %                         % now have to add the temps and m, and U and
+                %                         % such, but remember N_nodes has been changed!
+                %                         ind_w_star = ind_w_star + 4+2*N_rw;
+                %                         ind_g_star = (N_nodes+1)*N_ab + (k-1)*N_ab + [1:N_ab] + 4+2*N_rw;
+                %
+                %                         % index for the old point that's been shifted
+                %                         % have to use (N_nodes-1) because N_nodes has
+                %                         % already been incremenented
+                %                         ind_w_kp1 = (k)*N_ab + [1:N_ab] + 4+2*N_rw;
+                %                         ind_g_kp1 = (N_nodes+1)*N_ab + (k)*N_ab + [1:N_ab] + 4+2*N_rw;
+                %
+                %                         % put these into y_current as opposed to y_new
+                %                         % because I'll have to redo the current step
+                %
+                %                         % modify the kth point
+                %                         y_current(ind_w_star) = w_bar(:);
+                %                         y_current(ind_g_star) = g_bar(:);
+                %
+                %                         % remove k+1 point
+                %                         y_current(ind_w_kp1) = [];
+                %                         y_current(ind_g_kp1) = [];
+                %
+                %                     end
+                %                     fprintf('removed %0.d points: ', length(points_to_coarsen));
+                %                 fprintf('%0.d, ', points_to_coarsen);
+                %                 fprintf('N_nodes = %0.d\n', N_nodes);
+                %
+                %                 end
+                
             end
-            
         else
             % not using adaptive scheme, don't need to check error
             error_OK = 1;
@@ -1699,6 +1845,7 @@ end
 if max(V_bubi) > 1
     disp('V_bubi > 1!!')
     V_bubi(V_bubi>1) = 0.99;
+%     keyboard
 end
 
 % get system pressure
@@ -1973,8 +2120,8 @@ for i = 1:N_full+1
                 
                 f_alpha = sqrt(1 - V_bubi(i)) * mu_l/mu_mix(j);
                 E = ( (1 + 17.67*f_alpha.^(6/7) )./(18.67*f_alpha)).^2;
-                Eo = g*delta_rho*4*pi*r_q(i,j).^2/sigma;
-                Cd = 2/3*E*Eo;
+                Eo = g*delta_rho*4*r_q(i,j).^2/sigma;
+                Cd = 2/3*E*sqrt(Eo);
                 
                 if Cd > 8/3  * (1 - V_bubi(i))^2
                     Cd = 8/3  * (1 - V_bubi(i))^2;
@@ -2044,147 +2191,161 @@ ug_vec = (u_rise).*g_q;
 for i = 1:N_full + 1
     % fluxes in and out of node
     
-        %     1st order upwind
-            if i > 1 && i < N_full + 1
+    %     1st order upwind
+    if i > 1 && i < N_full + 1
         %         interior grid points
+        
+        for j = 1:N_ab
+            %                     if u_rise(i,j) - u_bulk > 0
+            %                     rising: flux in is from -x
+            u_top = u_vec(i,j) + (u_vec(i+1,j) - u_vec(i,j))/(L_node(i+1) + L_node(i)) * L_node(i);
+            u_bot = u_vec(i-1,j) + (u_vec(i,j) - u_vec(i-1,j))/(L_node(i) + L_node(i-1)) * L_node(i-1);
+            flux_top = u_top*w_q(i,j);
+            flux_bot = u_bot*w_q(i-1,j);
+            %
+            %                         flux_bot = w_q(i-1,j)*0.5*(u_vec(i,j) + u_vec(i-1,j));
+            %                         flux_top = w_q(i,j)*0.5*(u_vec(i+1,j) + u_vec(i,j));
+            duw_dx(i,j) = (flux_top - flux_bot)/L_node(i);
+            
+            flux_top = u_top*g_q(i,j);
+            flux_bot = u_bot*g_q(i-1,j);
+            
+            %                         flux_bot = g_q(i-1,j)*0.5*(u_vec(i,j) + u_vec(i-1,j));
+            %                         flux_top = g_q(i,j)*0.5*(u_vec(i+1,j) + u_vec(i,j));
+            dug_dx(i,j) = (flux_top - flux_bot)/L_node(i);
+            %                     else
+            %     %                     falling: flux in is from +x
+            %                         flux_top = w_q(i+1,j)*0.5*(u_vec(i+1,j) + u_vec(i,j));
+            %                         flux_bot = w_q(i,j)*0.5*(u_vec(i,j) + u_vec(i-1,j));
+            %                         duw_dx(i,j) = (flux_top - flux_bot)/L_node;
+            %
+            %                         flux_top = g_q(i+1,j)*0.5*(u_vec(i+1,j) + u_vec(i,j));
+            %                         flux_bot = g_q(i,j)*0.5*(u_vec(i,j) + u_vec(i-1,j));
+            %                         dug_dx(i,j) = (flux_top - flux_bot)/L_node;
+            %                     end
+            
+        end
+        
+    else
+        
+        if i == 1
+            %                 bottom point
+            % try to use outflow as bottom BC
+            u_top = u_vec(i,:) + (u_vec(i+1,:) - u_vec(i,:))/(L_node(i+1) + L_node(i)) * L_node(i);
+            u_out = -mdot_out_mix / rho_liq_mix / (0.25 * pi * D_tank^2);
+            flux_top = u_top.*w_q(i,:);
+            flux_bot = u_out.*w_q(i,:);
+            
+            duw_dx(i,:) = (flux_top - flux_bot)/L_node(i);
+            
+            flux_top = u_top.*g_q(i,:);
+            flux_bot = u_out.*g_q(i,:);
+            
+            dug_dx(i,:) = (flux_top - flux_bot)/L_node(i);
+            
+            
+            %                     duw_dx(i,:) = uw_vec(i,:)/L_node(i);
+            %                     dug_dx(i,:) = ug_vec(i,:)/L_node(i);
+            %                             duw_dx(i,:) = (uw_vec(i+1,:) - uw_vec(i,:))/L_node;
+            %                             dug_dx(i,:) = (ug_vec(i+1,:) - ug_vec(i,:))/L_node;
+        else
+            %                 top point
+            duw_dx(i,:) = ( uw_vec(i,:) - uw_vec(i-1,:) )/(L_node(i));
+            dug_dx(i,:) = ( ug_vec(i,:) - ug_vec(i-1,:) )/(L_node(i));
+            %                     duw_dx(i,:) = zeros(size(uw_vec(i,:)));
+            %                     dug_dx(i,:) = zeros(size(ug_vec(i,:)));
+        end
+    end
     
-                for j = 1:N_ab
-%                     if u_rise(i,j) - u_bulk > 0
-    %                     rising: flux in is from -x
-                        u_top = u_vec(i,j) + (u_vec(i+1,j) - u_vec(i,j))/(L_node(i+1) + L_node(i)) * L_node(i);
-                        u_bot = u_vec(i-1,j) + (u_vec(i,j) - u_vec(i-1,j))/(L_node(i) + L_node(i-1)) * L_node(i-1);
-                        flux_top = u_top*w_q(i,j);
-                        flux_bot = u_bot*w_q(i-1,j);
-%                                                 
-%                         flux_bot = w_q(i-1,j)*0.5*(u_vec(i,j) + u_vec(i-1,j));
-%                         flux_top = w_q(i,j)*0.5*(u_vec(i+1,j) + u_vec(i,j));
-                        duw_dx(i,j) = (flux_top - flux_bot)/L_node(i);
-                        
-                        flux_top = u_top*g_q(i,j);
-                        flux_bot = u_bot*g_q(i-1,j);
-    
-%                         flux_bot = g_q(i-1,j)*0.5*(u_vec(i,j) + u_vec(i-1,j));
-%                         flux_top = g_q(i,j)*0.5*(u_vec(i+1,j) + u_vec(i,j));
-                        dug_dx(i,j) = (flux_top - flux_bot)/L_node(i);
-%                     else
-%     %                     falling: flux in is from +x
-%                         flux_top = w_q(i+1,j)*0.5*(u_vec(i+1,j) + u_vec(i,j));
-%                         flux_bot = w_q(i,j)*0.5*(u_vec(i,j) + u_vec(i-1,j));
-%                         duw_dx(i,j) = (flux_top - flux_bot)/L_node;
-%     
-%                         flux_top = g_q(i+1,j)*0.5*(u_vec(i+1,j) + u_vec(i,j));
-%                         flux_bot = g_q(i,j)*0.5*(u_vec(i,j) + u_vec(i-1,j));
-%                         dug_dx(i,j) = (flux_top - flux_bot)/L_node;
-%                     end
-    
-                end
-    
-            else
-    
-                if i == 1
-    %                 bottom point
-    
-                    duw_dx(i,:) = uw_vec(i,:)/L_node(i);
-                    dug_dx(i,:) = ug_vec(i,:)/L_node(i);
-    %                             duw_dx(i,:) = (uw_vec(i+1,:) - uw_vec(i,:))/L_node;
-    %                             dug_dx(i,:) = (ug_vec(i+1,:) - ug_vec(i,:))/L_node;
-                else
-    %                 top point
-                                duw_dx(i,:) = ( uw_vec(i,:) - uw_vec(i-1,:) )/(L_node(i));
-                                dug_dx(i,:) = ( ug_vec(i,:) - ug_vec(i-1,:) )/(L_node(i));
-%                     duw_dx(i,:) = zeros(size(uw_vec(i,:)));
-%                     dug_dx(i,:) = zeros(size(ug_vec(i,:)));
-                end
-            end
-    
-%     % MUSCL
+    %     % MUSCL
+    %{
 %     if i > 2 && i < N_full
 %         % interior grid points
-%         
+%
 %         for j = 1:N_ab
-%             
+%
 %             % vector of the abscissas and weights
 %             U = [w_q(:,j)'; g_q(:,j)'];
-%             
+%
 %             % flow velocity
 %             u = u_vec(:,j)';
-%             
+%
 %             % flux limiters
 %             r_U = (U(:,i) - U(:,i-1))./(U(:,i+1) - U(:,i));
 %             r_u = (u(i) - u(i-1))/(u(i+1) - u(i));
-%             
+%
 %             flux_limiter_ui = max([0, min(1, r_u)]);
 %             flux_limiter_Ui(1) = max([0, min(1, r_U(1))]);
 %             flux_limiter_Ui(2) = max([0, min(1, r_U(2))]);
-%             
+%
 %             r_U = (U(:,i+1) - U(:,i))./(U(:,i+2) - U(:,i+1));
 %             r_u = (u(i+1) - u(i))/(u(i+2) - u(i+1));
-%             
+%
 %             flux_limiter_uip1 = max([0, min(1, r_u)]);
 %             flux_limiter_Uip1(1) = max([0, min(1, r_U(1))]);
 %             flux_limiter_Uip1(2) = max([0, min(1, r_U(2))]);
-%             
+%
 %             r_U = (U(:,i-1) - U(:,i-2))./(U(:,i) - U(:,i-1));
 %             r_u = (u(i-1) - u(i-2))/(u(i) - u(i-1));
-%             
+%
 %             flux_limiter_uim1 = max([0, min(1, r_u)]);
 %             flux_limiter_Uim1(1) = max([0, min(1, r_U(1))]);
 %             flux_limiter_Uim1(2) = max([0, min(1, r_U(2))]);
-%             
+%
 %             % flux through top(i + 1/2)
 %             uL = u(i) + 0.5*flux_limiter_ui*(u(i+1) - u(i));
 %             uR = u(i+1) - 0.5*flux_limiter_uip1*(u(i+2) - u(i+1));
-%             
+%
 %             UL = U(:,i) + 0.5*flux_limiter_Ui'.*(U(:,i+1) - U(:,i));
 %             UR = U(:,i+1) - 0.5*flux_limiter_Uip1'.*(U(:,i+2) - U(:,i+1));
-%             
+%
 %             a = max([abs(uL), abs(uR)]);
-%             
+%
 %             FR = uR*UR;
 %             FL = uL*UL;
-%             
+%
 %             F_star_top = 0.5*( (FR + FL) - a*(UR - UL) );
-%             
+%
 %             % flux through bottom(i - 1/2)
 %             uL = u(i-1) + 0.5*flux_limiter_uim1*(u(i) - u(i-1));
 %             uR = u(i) - 0.5*flux_limiter_ui*(u(i+1) - u(i));
-%             
+%
 %             UL = U(:,i-1) + 0.5*flux_limiter_Uim1'.*(U(:,i) - U(:,i-1));
 %             UR = U(:,i) - 0.5*flux_limiter_Ui'.*(U(:,i+1) - U(:,i));
-%             
+%
 %             a = max([abs(uL), abs(uR)]);
-%             
+%
 %             FR = uR*UR;
 %             FL = uL*UL;
-%             
+%
 %             F_star_bot = 0.5*( (FR + FL) - a*(UR - UL) );
-%             
+%
 %             dF_dx = (F_star_top - F_star_bot)/L_node(i);
-%             
+%
 %             duw_dx(i,j) = dF_dx(1);
 %             dug_dx(i,j) = dF_dx(2);
-%             
+%
 %         end
-%         
+%
 %     else
-%         
+%
 %         if i == 1
 %             % bottom point
 %             % there's flux out the top and nothing out the bottom
 %             % also L_node = 1/2 L_node
 %             %             duw_dx(i,:) = uw_vec(i,:)/L_node;
 %             %             dug_dx(i,:) = ug_vec(i,:)/L_node;
-%             
-%             
+%
+%
 %             flux_bot = 0;%w_q(i-1,:).*0.5.*(u_vec(i,:) + u_vec(i-1,:));
 %             flux_top = w_q(i,:).*0.5.*(u_vec(i+1,:) + u_vec(i,:));
 %             duw_dx(i,:) = 2*(flux_top - flux_bot)/L_node(i);
-%             
+%
 %             flux_bot = 0;%g_q(i-1,:).*0.5.*(u_vec(i,:) + u_vec(i-1,:));
 %             flux_top = g_q(i,:).*0.5.*(u_vec(i+1,:) + u_vec(i,:));
 %             dug_dx(i,:) = 2*(flux_top - flux_bot)/L_node(i);
-%             
-%             
+%
+%
 %             %             duw_dx(i,:) = (uw_vec(i+1,:) - uw_vec(i,:))/L_node;
 %             %             dug_dx(i,:) = (ug_vec(i+1,:) - ug_vec(i,:))/L_node;
 %         else
@@ -2192,26 +2353,26 @@ for i = 1:N_full + 1
 %                 % top point -> backwards difference
 %                 %                 duw_dx(i,:) = ( uw_vec(i,:) - uw_vec(i-1,:) )/(L_node);
 %                 %                 dug_dx(i,:) = ( ug_vec(i,:) - ug_vec(i-1,:) )/(L_node);
-%                 
+%
 %                 flux_bot = w_q(i-1,:).*0.5.*(u_vec(i,:) + u_vec(i-1,:));
 %                 flux_top = w_q(i,:).*u_vec(i,:);
 %                 duw_dx(i,:) = (flux_top - flux_bot)/L_node(i);
-%                 
+%
 %                 flux_bot = g_q(i-1,:).*0.5.*(u_vec(i,:) + u_vec(i-1,:));
 %                 flux_top = g_q(i,:).*u_vec(i,:);
 %                 dug_dx(i,:) = (flux_top - flux_bot)/L_node(i);
 %             else
 %                 % upwind it
-%                 
+%
 %                 % %      rising: flux in is from -x
 %                 flux_bot = w_q(i-1,:).*0.5.*(u_vec(i,:) + u_vec(i-1,:));
 %                 flux_top = w_q(i,:).*0.5.*(u_vec(i+1,:) + u_vec(i,:));
 %                 duw_dx(i,:) = (flux_top - flux_bot)/L_node(i);
-%                 
+%
 %                 flux_bot = g_q(i-1,:).*0.5.*(u_vec(i,:) + u_vec(i-1,:));
 %                 flux_top = g_q(i,:).*0.5.*(u_vec(i+1,:) + u_vec(i,:));
 %                 dug_dx(i,:) = (flux_top - flux_bot)/L_node(i);
-%                 
+%
 %                 %             if i == 2
 %                 %                 duw_dx(i,:) = (uw_vec(i,:) - uw_vec(i-1,:))/L_node;
 %                 %                 dug_dx(i,:) = (ug_vec(i,:) - ug_vec(i-1,:))/L_node;
@@ -2225,7 +2386,7 @@ for i = 1:N_full + 1
 %             end
 %         end
 %     end
-    
+    %}
     
 end
 
@@ -2344,7 +2505,7 @@ for i = 1:N_full + 1
                 
                 %                 % hysteresis!
                 if constants.include_hysteresis
-                    if constants.min_flag ~= 1
+                    if constants.min_flag == 0
                         r_nuc = 2*r_nuc;
                         %                                     r_dep = 2*r_dep;
                     end
@@ -2445,14 +2606,9 @@ for i = 1:N_full + 1
         
         nuc_rate = nuc_rate + J_hom * V_node(i);
         
-        if constants.step == 1 && J_hom/nuc_rate > 1e-6
+        if constants.step == 1 && J_hom * V_node(i)/nuc_rate > 1e-6
             disp('we''ve got some homogeneous nucleation happening')
         end
-        
-        %         if constants.step == 1 && i == 1
-        %             fprintf('J_hom/NR = %0.4g\n', J_hom/nuc_rate);
-        %         end
-        % %
         
         
     else
@@ -2745,11 +2901,11 @@ for i = 1:N_full + 1
     end
     
     if i == 1
-        % bubbles being convected out the bottom of the tank
-        death_term_injector = 4/3 * pi * sum(r_q(i,:).^(3) .* w_q(i,:) .* (-u_rise(i,:) + u_bulk) );
-        if death_term_injector < 0
-            death_term_injector = 0;
-        end
+        %         % bubbles being convected out the bottom of the tank
+        %         death_term_injector = 4/3 * pi * sum(r_q(i,:).^(3) .* w_q(i,:) .* (-u_rise(i,:) + u_bulk) );
+        %         if death_term_injector < 0
+        death_term_injector = 0;
+        %         end
     end
     
     % mdot into bubbles from liquid
@@ -2798,6 +2954,7 @@ mdot_l = - sum(mdot_bub_l) - mdot_out_liq;
 % HT from wall to liquid
 % Qdot_lw = Qdot('lw',T_l,T_lw(1),rho_l,m_l,D_tank);
 
+% boiling heat transfer model from Gorenflo and Kotthoff, 2005
 Pr = P/P_cr;
 h_20_lw = 1e3 * exp( 0.3092*log(Pr)^3 + 1.649*log(Pr)^2 + 3.641*log(Pr) + 5.272);
 n_lw = 1 - 0.3*Pr^0.3;
@@ -2905,6 +3062,13 @@ dy = [mdot_tg;
     Tdot_lw;
     dw_dt';
     dg_dt'];
+
+y_predictions = y + dy * constants.h;
+
+if min(y_predictions) < 0
+    disp('predicting y < 0')
+    %     keyboard
+end
 
 if ~sum(isreal(dy(:))) || sum(isnan(dy(:)))
     disp('complex or nans in derivatives')
