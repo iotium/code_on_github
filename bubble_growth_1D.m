@@ -52,6 +52,8 @@ constants.include_rdot_rhodot = 0;
 constants.include_hysteresis = 1;
 constants.include_u_bulk = 0;
 constants.ADQMOM_p = 1;
+constants.adaptive_mesh_refinement = 0;
+
 p = constants.ADQMOM_p;
 
 max_spatial_rel_delta_tol = 2;
@@ -67,7 +69,7 @@ if nargin == 0
     N_mom = 4;
     rel_tol = 1e-4;     % [] max relative error allowed in adaptive scheme
     constants.C_qdot_lw = 1e-5;
-    constants.C_coalescence = [1 0 1e3]; % collision efficiency, laminar shear, turbulence (buoyancy is the third)
+    constants.C_coalescence = [1e2 0 0]; % collision efficiency, laminar shear, turbulence (buoyancy is the third)
     constants.C_nuc_rate = 1e5; % had this at 6e4 using the r_dep with superheat
     
 else
@@ -407,6 +409,7 @@ f = zeros(N_dim,1);
 
 constants.min_flag = 0;
 constants.peak_flag = 0;
+constants.deltaT_sup_max = 0;
 
 f_cutoff_norm = 1e-1; % supposed to be filter cutoff f / (1/2 sample f)
 % so it's basically = 2*dt*f_cutoff
@@ -504,10 +507,11 @@ while running == 1;
             disp('P min')
             t_min = t(n);
             n_min = n;
-            %             running = 0;
-            deltaT_sup_max = deltaT_sup(n);
-            constants.deltaT_sup_max = deltaT_sup_max;
         end
+    end
+    
+    if deltaT_sup(n) > constants.deltaT_sup_max
+        constants.deltaT_sup_max = deltaT_sup(n);
     end
     
     % check for peak
@@ -974,6 +978,8 @@ while running == 1;
                 
             end
             
+            if constants.adaptive_mesh_refinement
+            
             % refine in space
             spatial_error_OK = 1;
             
@@ -1266,6 +1272,8 @@ while running == 1;
                 %
                 %                 end
                 
+            end
+            
             end
         else
             % not using adaptive scheme, don't need to check error
@@ -2151,6 +2159,8 @@ u_rise(N_full+2:end,:) = 0;
 
 u_rise = constants.C_u_rise*u_rise;
 
+u_rise = u_rise - u_bulk;
+
 if constants.step == 1
     
     %     u_max = max(u_rise(:));
@@ -2236,7 +2246,7 @@ for i = 1:N_full + 1
             %                 bottom point
             % try to use outflow as bottom BC
             u_top = u_vec(i,:) + (u_vec(i+1,:) - u_vec(i,:))/(L_node(i+1) + L_node(i)) * L_node(i);
-            u_out = -mdot_out_mix / rho_liq_mix / (0.25 * pi * D_tank^2);
+            u_out = -u_bulk;
             flux_top = u_top.*w_q(i,:);
             flux_bot = u_out.*w_q(i,:);
             
@@ -2515,7 +2525,7 @@ for i = 1:N_full + 1
                 % basically, if we're depressurizing, the meniscus is
                 % concave and you need 2x the superheat to activate it
                 if constants.include_hysteresis
-                    if constants.min_flag == 1
+                    if constants.deltaT_sup_node < constants.deltaT_sup_max
                         % we're past max superheat
 %                         r_nuc = 2*r_nuc;
                         r_nuc_max = (4*sigma*(1 + rho_tg_sat/rho_l)/P)...
@@ -2766,8 +2776,10 @@ for i = 1:N_full + 1
                 qLS = C_coalescence(2) * 4/3*(rbi + rbj).^3*mean_shear;
                 
                 % rise velocity for bubble i and j
-                u_ri = sqrt( (2.14*sigma/(rho_l*dbi)) + 0.505*g*dbi);
-                u_rj = sqrt( (2.14*sigma./(rho_l*dbj)) + 0.505*g*dbj);
+%                 u_ri = sqrt( (2.14*sigma/(rho_l*dbi)) + 0.505*g*dbi);
+%                 u_rj = sqrt( (2.14*sigma./(rho_l*dbj)) + 0.505*g*dbj);
+u_ri = u_rise(i,l);
+u_rj = u_rise(i,:);
                 
                 % ----- collision area -----
                 Sij = pi/4*(rbi + rbj).^2;
@@ -2789,12 +2801,12 @@ for i = 1:N_full + 1
                 t_cont = 0.1*rb_eq.^(2/3) ./ turb_diss.^(1/3);
                 
                 % kamp & chesters, 2001
-                rho_c = rho_l;
-                C_vm = 0.8;
+%                 rho_c = rho_l;
+%                 C_vm = 0.8;
                 %                 t_cont = sqrt( rho_c*C_vm/(3*sigma) * ( 2*dbi.*dbj./(dbi + dbj)).^3 );
                 
                 % film initial and final thicknesses
-                film_i = 1e-4;
+                film_i = 1e-4; % wild guess
                 film_f = (C_hamaker * rb_eq./(8*pi*sigma)).^(1/3);
                 
                 % time required for coalescence
