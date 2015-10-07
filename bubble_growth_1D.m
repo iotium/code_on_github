@@ -66,9 +66,9 @@ if nargin == 0
     N_nodes = 10;
     N_mom = 4;
     rel_tol = 1e-4;     % [] max relative error allowed in adaptive scheme
-    constants.C_qdot_lw = 6e-6;
-    constants.C_coalescence = [0 1 1]; % collision efficiency, laminar shear, turbulence
-    constants.C_nuc_rate = 1e0; % had this at 6e4 using the r_dep with superheat
+    constants.C_qdot_lw = 1e-5;
+    constants.C_coalescence = [1 0 1e3]; % collision efficiency, laminar shear, turbulence (buoyancy is the third)
+    constants.C_nuc_rate = 1e5; % had this at 6e4 using the r_dep with superheat
     
 else
     inputs = varargin{1};
@@ -505,6 +505,8 @@ while running == 1;
             t_min = t(n);
             n_min = n;
             %             running = 0;
+            deltaT_sup_max = deltaT_sup(n);
+            constants.deltaT_sup_max = deltaT_sup_max;
         end
     end
     
@@ -1057,7 +1059,7 @@ while running == 1;
                         g_bar(1,:) = g_q_new(k,:) + (g_q_new(k+1,:) - g_q_new(k,:))/...
                             (L_node(k+1) + L_node(k)) * mean(L_node(k:(k+1)));
                         
-                        if L_node(k) >= L_node(k+1)
+                        if (L_node(k) >= L_node(k+1)) || (k > N_full(n) - 1)
                             % divide k in half
                             
                             % values at the new point
@@ -2464,9 +2466,9 @@ for i = 1:N_full + 1
         % surface area of node[m^2]
         A_l = pi * D_tank * L_l;% + pi * 0.25 * D_tank^2;
         
-        if i == 1
-            A_l = A_l + 0.25*pi*D_tank^2;
-        end
+%         if i == 1
+%             A_l = A_l + 0.25*pi*D_tank^2;
+%         end
         
         switch constants.nuc_model
             
@@ -2483,9 +2485,9 @@ for i = 1:N_full + 1
                         
                     case 'with superheat'
                         
-                        Ja_wall = (T_lw(1) - (T_s + dT_sat_depth)) * rho_l * Cp_l/(rho_tg_v*h_lv);
-                        
-                        K_1 = (Ja_wall/Pr_l)*( g*rho_l*(rho_l-rho_tg_v)/mu_l^2 * (sigma/(g*(rho_l-rho_tg_v)))^(3/2) )^(-1);
+%                         Ja_wall = (T_lw(1) - (T_s + dT_sat_depth)) * rho_l * Cp_l/(rho_tg_v*h_lv);
+                        Ja_wall = Ja_T;
+                        K_1 = (Ja_wall/Pr_l)^2*( g*rho_l*(rho_l-rho_tg_v)/mu_l^2 * (sigma/(g*(rho_l-rho_tg_v)))^(3/2) )^(-1);
                         
                         Eo_dep = ( 0.19*( 1.8 + 1e5*K_1)^(2/3) )^2;
                         
@@ -2513,7 +2515,15 @@ for i = 1:N_full + 1
                 % basically, if we're depressurizing, the meniscus is
                 % concave and you need 2x the superheat to activate it
                 if constants.include_hysteresis
-                    if constants.min_flag == 0
+                    if constants.min_flag == 1
+                        % we're past max superheat
+%                         r_nuc = 2*r_nuc;
+                        r_nuc_max = (4*sigma*(1 + rho_tg_sat/rho_l)/P)...
+                                    /( exp( h_lv * (constants.deltaT_sup_max)...
+                                    /(Ru/MW * T_l*T_s)) - 1);
+                        r_nuc = max([ r_nuc, r_nuc_max ]);
+                    else
+                        % we haven't reached max superheat yet
                         r_nuc = 2*r_nuc;
                     end
                 end
@@ -2620,7 +2630,7 @@ for i = 1:N_full + 1
         
         nuc_rate = nuc_rate + J_hom * V_node(i);
         
-        if constants.step == 1 && J_hom * V_node(i)/nuc_rate > 1e-6
+        if constants.step == 1 && (J_hom * V_node(i)/nuc_rate > 1e-6)
             disp('we''ve got some homogeneous nucleation happening')
         end
         
@@ -2688,12 +2698,12 @@ for i = 1:N_full + 1
             % if nucleation happens only at r_nuc
             birth_int_s_delta = (r_nuc/r_m).^((k-1)/p) * spec_nuc_rate;
             
-            %                 % exponential distribution
-            %                 r_a = 10*r_nuc;
-            %
-            %                 birth_int_s_exp = (r_a/r_m)^((k-1)/p) * spec_nuc_rate * exp( r_nuc/r_a ) ...
-            %                     * gamma(1+((k-1)/p)) * gammainc(r_nuc/r_a, 1+((k-1)/p), 'upper');
-            %         %
+%                             % exponential distribution
+%                             r_a = 10*r_nuc;
+%             
+%                             birth_int_s_exp = (r_a/r_m)^((k-1)/p) * spec_nuc_rate * exp( r_nuc/r_a ) ...
+%                                 * gamma(1+((k-1)/p)) * gammainc(r_nuc/r_a, 1+((k-1)/p), 'upper');
+%                     %
             %         uniform distribution
             %                 dr = 100*r_nuc;
             %                 birth_int_s_uni = (1/r_m)^((k-1)/p) * spec_nuc_rate/dr * 1/( (k-1)/p + 1)*...
@@ -2846,10 +2856,11 @@ for i = 1:N_full + 1
             %             disp('jiggling the abscissas')
             r_sp = r_s + (rand(size(r_s)) - 0.5).*abs(r_s)*1e-6;
             linear_eqn_counter = linear_eqn_counter + 1;
-            if linear_eqn_counter == 25
+            if linear_eqn_counter >= 25
                 fprintf('linear equation solver not converging, rcond = %0.4g, min dr/r = %0.4g\n',rcond(A), min(abs(dr./rbar)) )
                 alpha_q = A\beta_q;
 %                 keyboard
+not_converging = 0;
             end
             
         else

@@ -46,8 +46,8 @@ constants.fsolve_options = optimset('TolX',1e-12,'Display','off');
 constants.property_source = 'refprop';
 constants.nuc_model = 'SJ';
 constants.r_dep_expression = 'with superheat';
-constants.nuc_density_expression = 'shin and jones';
-constants.nuc_freq_expression = 'saddy and jameson';
+constants.nuc_density_expression = 'hibiki and ishii';
+constants.nuc_frequency_expression = 'saddy and jameson';
 constants.include_rdot_rhodot = 0;
 constants.include_hysteresis = 1;
 constants.include_u_bulk = 0;
@@ -66,9 +66,9 @@ if nargin == 0
     N_nodes = 10;
     N_mom = 4;
     rel_tol = 1e-4;     % [] max relative error allowed in adaptive scheme
-    constants.C_qdot_lw = 6e-6;
-    constants.C_coalescence = [0 1 1]; % collision efficiency, laminar shear, turbulence
-    constants.C_nuc_rate = 1e-12; % had this at 6e4 using the r_dep with superheat
+    constants.C_qdot_lw = 1e-5;
+    constants.C_coalescence = [1 0 1e3]; % collision efficiency, laminar shear, turbulence (buoyancy is the third)
+    constants.C_nuc_rate = 1e-1; % had this at 6e4 using the r_dep with superheat
     
 else
     inputs = varargin{1};
@@ -743,8 +743,7 @@ while running == 1;
                     end
                 end
             else
-                
-                if t(n) 
+                                   
                 
                 % f for k(2) = f( t(n) + c(2)*h , y(n) + a(2,1)*k(1) )
                 % f for k(3) = f( t(n) + c(3)*h , y(n) + a(3,1)*k(1) + a(3,2)*k(2) )
@@ -1058,7 +1057,7 @@ while running == 1;
                         g_bar(1,:) = g_q_new(k,:) + (g_q_new(k+1,:) - g_q_new(k,:))/...
                             (L_node(k+1) + L_node(k)) * mean(L_node(k:(k+1)));
                         
-                        if L_node(k) >= L_node(k+1)
+                        if (L_node(k) >= L_node(k+1)) || (k > N_full(n) - 1)
                             % divide k in half
                             
                             % values at the new point
@@ -2465,9 +2464,9 @@ for i = 1:N_full + 1
         % surface area of node[m^2]
         A_l = pi * D_tank * L_l;% + pi * 0.25 * D_tank^2;
         
-        if i == 1
-            A_l = A_l + 0.25*pi*D_tank^2;
-        end
+%         if i == 1
+%             A_l = A_l + 0.25*pi*D_tank^2;
+%         end
         
         switch constants.nuc_model
             
@@ -2484,9 +2483,9 @@ for i = 1:N_full + 1
                         
                     case 'with superheat'
                         
-                        Ja_wall = (T_lw(1) - (T_s + dT_sat_depth)) * rho_l * Cp_l/(rho_tg_v*h_lv);
-                        
-                        K_1 = (Ja_wall/Pr_l)*( g*rho_l*(rho_l-rho_tg_v)/mu_l^2 * (sigma/(g*(rho_l-rho_tg_v)))^(3/2) )^(-1);
+%                         Ja_wall = (T_lw(1) - (T_s + dT_sat_depth)) * rho_l * Cp_l/(rho_tg_v*h_lv);
+                        Ja_wall = Ja_T;
+                        K_1 = (Ja_wall/Pr_l)^2*( g*rho_l*(rho_l-rho_tg_v)/mu_l^2 * (sigma/(g*(rho_l-rho_tg_v)))^(3/2) )^(-1);
                         
                         Eo_dep = ( 0.19*( 1.8 + 1e5*K_1)^(2/3) )^2;
                         
@@ -2621,7 +2620,7 @@ for i = 1:N_full + 1
         
         nuc_rate = nuc_rate + J_hom * V_node(i);
         
-        if constants.step == 1 && J_hom * V_node(i)/nuc_rate > 1e-6
+        if constants.step == 1 && (J_hom * V_node(i)/nuc_rate > 1e-6)
             disp('we''ve got some homogeneous nucleation happening')
         end
         
@@ -2847,10 +2846,11 @@ for i = 1:N_full + 1
             %             disp('jiggling the abscissas')
             r_sp = r_s + (rand(size(r_s)) - 0.5).*abs(r_s)*1e-6;
             linear_eqn_counter = linear_eqn_counter + 1;
-            if linear_eqn_counter == 25
+            if linear_eqn_counter >= 25
                 fprintf('linear equation solver not converging, rcond = %0.4g, min dr/r = %0.4g\n',rcond(A), min(abs(dr./rbar)) )
                 alpha_q = A\beta_q;
 %                 keyboard
+not_converging = 0;
             end
             
         else
