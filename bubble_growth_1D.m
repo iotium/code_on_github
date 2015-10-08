@@ -675,19 +675,19 @@ while running == 1;
                 k = k + 1;
             end
             
-%             % fit parabola
-%             parabola_pars = polyfit(t(n-10:n),Pdot2,2);
-%             t_Pd = -parabola_pars(2)/(2*parabola_pars(1));
-
+            %             % fit parabola
+            %             parabola_pars = polyfit(t(n-10:n),Pdot2,2);
+            %             t_Pd = -parabola_pars(2)/(2*parabola_pars(1));
+            
             % fit line
             fit_line_data = [ones(k-1,1) t(n-(k-2):n)']\Pdot2';
             t_Pd = -fit_line_data(1)/fit_line_data(2);
-
             
-%             Pdot_slope = bdiff(Pdot,starti,n,t,adaptive);
+            
+            %             Pdot_slope = bdiff(Pdot,starti,n,t,adaptive);
             
             % projected t_sup (t when Pdot = 0)
-%             t_Pd = -Pdot(n)/Pdot_slope + t(n);
+            %             t_Pd = -Pdot(n)/Pdot_slope + t(n);
             
             
             h_Pd = t_Pd - t(n); % distance to t_sup
@@ -695,7 +695,7 @@ while running == 1;
             if (h > 0.01 * h_Pd && h > Pmin_tol) && h_Pd > 0
                 h = h_Pd/5;
                 disp('refining because close to Pmin')
-%                 keyboard
+                %                 keyboard
             end
             
         end
@@ -749,7 +749,7 @@ while running == 1;
                     end
                 end
             else
-                                   
+                
                 
                 % f for k(2) = f( t(n) + c(2)*h , y(n) + a(2,1)*k(1) )
                 % f for k(3) = f( t(n) + c(3)*h , y(n) + a(3,1)*k(1) + a(3,2)*k(2) )
@@ -800,8 +800,9 @@ while running == 1;
                             disp(['error_flag tripped in diffeqns, i = ' num2str(i)])
                             
                         end
-                    catch
+                    catch ME
                         disp(['threw an error calling diffeqns, i = ' num2str(i)])
+                        disp( getReport(ME))
                         error_flag = 1;
                     end
                     
@@ -979,301 +980,301 @@ while running == 1;
             end
             
             if constants.adaptive_mesh_refinement
-            
-            % refine in space
-            spatial_error_OK = 1;
-            
-            if error_OK == 1
-                % only bother to refine in space if we're taking an OK
-                % step already
                 
-                % first check spatial error
-                points_to_refine = 0;
-                points_to_coarsen = 0;
+                % refine in space
+                spatial_error_OK = 1;
                 
-                % need to be careful about the points at the liquid level
-                % w and g go to zero on the other side. using N_full from
-                % last step
-                
-                % loop through and find relative change between two points
-                % (relative to the interface between them)
-                % then if the diff is too high, tag for refinement
-                for k = 1:N_full(n)
+                if error_OK == 1
+                    % only bother to refine in space if we're taking an OK
+                    % step already
                     
-                    dw = w_q_new(k+1,:) - w_q_new(k,:);
-                    dg = g_q_new(k+1,:) - g_q_new(k,:);
+                    % first check spatial error
+                    points_to_refine = 0;
+                    points_to_coarsen = 0;
                     
-                    w_bar = w_q_new(k,:) + (w_q_new(k+1,:) - w_q_new(k,:))/...
-                        (L_node(k+1) + L_node(k)) * L_node(k);
+                    % need to be careful about the points at the liquid level
+                    % w and g go to zero on the other side. using N_full from
+                    % last step
                     
-                    g_bar = g_q_new(k,:) + (g_q_new(k+1,:) - g_q_new(k,:))/...
-                        (L_node(k+1) + L_node(k)) * L_node(k);
-                    
-                    rel_dw = dw./w_bar;
-                    rel_dg = dg./g_bar;
-                    
-                    max_delta_rel = max( abs([ rel_dw(:) rel_dg(:)]) );
-                    
-                    if max_delta_rel > max_spatial_rel_delta_tol
-                        if points_to_refine(end) ~= k
-                            points_to_refine = [points_to_refine; k];
+                    % loop through and find relative change between two points
+                    % (relative to the interface between them)
+                    % then if the diff is too high, tag for refinement
+                    for k = 1:N_full(n)
+                        
+                        dw = w_q_new(k+1,:) - w_q_new(k,:);
+                        dg = g_q_new(k+1,:) - g_q_new(k,:);
+                        
+                        w_bar = w_q_new(k,:) + (w_q_new(k+1,:) - w_q_new(k,:))/...
+                            (L_node(k+1) + L_node(k)) * L_node(k);
+                        
+                        g_bar = g_q_new(k,:) + (g_q_new(k+1,:) - g_q_new(k,:))/...
+                            (L_node(k+1) + L_node(k)) * L_node(k);
+                        
+                        rel_dw = dw./w_bar;
+                        rel_dg = dg./g_bar;
+                        
+                        max_delta_rel = max( abs([ rel_dw(:) rel_dg(:)]) );
+                        
+                        if max_delta_rel > max_spatial_rel_delta_tol
+                            if points_to_refine(end) ~= k
+                                points_to_refine = [points_to_refine; k];
+                            end
                         end
+                        
+                        %                     if n > n_coarsened + 3
+                        %                         if max_delta_rel < min_spatial_rel_delta_tol
+                        %                             if length(points_to_coarsen) < 2 && L_node(k) < max_L
+                        %                                 if points_to_coarsen(end) ~= k
+                        %                                     points_to_coarsen = [points_to_coarsen; k];
+                        %                                 end
+                        %                             end
+                        %                         end
+                        %                     end
                     end
                     
-                    %                     if n > n_coarsened + 3
-                    %                         if max_delta_rel < min_spatial_rel_delta_tol
-                    %                             if length(points_to_coarsen) < 2 && L_node(k) < max_L
-                    %                                 if points_to_coarsen(end) ~= k
-                    %                                     points_to_coarsen = [points_to_coarsen; k];
-                    %                                 end
-                    %                             end
-                    %                         end
-                    %                     end
-                end
-                
-                if length(points_to_refine) > 1
-                    % remove the zero
-                    points_to_refine = points_to_refine(2:end);
-                    spatial_error_OK = 0;
-                    error_OK = 0;
-                    
-                    % use old points to refine space, not new points
-                    variables = unpack_y(y_current, constants);
-                    
-                    g_q_new = variables.g_q;
-                    w_q_new = variables.w_q;
-                    
-                    y_old = y_current;
-                    L_node_old = L_node;
-                    V_node_old = V_node;
-                    N_nodes_old = N_nodes;
-                    
-                    for j = 1:length(points_to_refine)
+                    if length(points_to_refine) > 1
+                        % remove the zero
+                        points_to_refine = points_to_refine(2:end);
+                        spatial_error_OK = 0;
+                        error_OK = 0;
                         
-                        % the point to refine (between k and k+1)
-                        % need to correct for points already added -> j-1
-                        k = points_to_refine(j) + j - 1;
+                        % use old points to refine space, not new points
+                        variables = unpack_y(y_current, constants);
                         
-                        if k > N_full(n) - 1
-                            disp('Warning! Trying to refine point near the liquid level.')
-                        end
+                        g_q_new = variables.g_q;
+                        w_q_new = variables.w_q;
                         
-                        % calculate values at new points
-                        w_bar(1,:) = w_q_new(k,:) + (w_q_new(k+1,:) - w_q_new(k,:))./...
-                            (L_node(k+1) + L_node(k)) * mean(L_node(k:(k+1)));
+                        y_old = y_current;
+                        L_node_old = L_node;
+                        V_node_old = V_node;
+                        N_nodes_old = N_nodes;
                         
-                        g_bar(1,:) = g_q_new(k,:) + (g_q_new(k+1,:) - g_q_new(k,:))/...
-                            (L_node(k+1) + L_node(k)) * mean(L_node(k:(k+1)));
-                        
-                        if (L_node(k) >= L_node(k+1)) || (k > N_full(n) - 1)
-                            % divide k in half
+                        for j = 1:length(points_to_refine)
                             
-                            % values at the new point
-                            w_star = w_q_new(k,:) + (w_q_new(k+1,:) - w_q_new(k,:))./...
-                                (L_node(k+1)/2 + L_node(k)/2) * L_node(k)*0.25;
+                            % the point to refine (between k and k+1)
+                            % need to correct for points already added -> j-1
+                            k = points_to_refine(j) + j - 1;
                             
-                            g_star = g_q_new(k,:) + (g_q_new(k+1,:) - g_q_new(k,:))/...
-                                (L_node(k+1)/2 + L_node(k)/2) * L_node(k)*0.25;
-                            
-                            % values at shifted k point
-                            % point k was shifted back by L/4
-                            % interpolate between k and k-1
-                            
-                            if k ~= 1
-                                
-                                w_old = w_q_new(k-1,:) + (w_q_new(k,:) - w_q_new(k-1,:))./...
-                                    (L_node(k)/2 + L_node(k-1)/2) * (L_node(k-1)/2 + 0.25 * L_node(k));
-                                
-                                g_old = g_q_new(k-1,:) + (g_q_new(k,:) - g_q_new(k-1,:))/...
-                                    (L_node(k)/2 + L_node(k-1)/2) * (L_node(k-1)/2 + 0.25 * L_node(k));
-                                
-                            else
-                                w_old = w_q_new(1,:);
-                                g_old = g_q_new(1,:);
+                            if k > N_full(n) - 1
+                                disp('Warning! Trying to refine point near the liquid level.')
                             end
                             
-                            ind_div = k;
+                            % calculate values at new points
+                            w_bar(1,:) = w_q_new(k,:) + (w_q_new(k+1,:) - w_q_new(k,:))./...
+                                (L_node(k+1) + L_node(k)) * mean(L_node(k:(k+1)));
                             
-                        else
-                            % divide k+1 in half
+                            g_bar(1,:) = g_q_new(k,:) + (g_q_new(k+1,:) - g_q_new(k,:))/...
+                                (L_node(k+1) + L_node(k)) * mean(L_node(k:(k+1)));
                             
-                            % values at the new point
-                            w_star = w_q_new(k,:) + (w_q_new(k+1,:) - w_q_new(k,:))./...
-                                (L_node(k+1)/2 + L_node(k)/2) * (L_node(k)/2 + 0.25*L_node(k+1));
+                            if (L_node(k) >= L_node(k+1)) || (k > N_full(n) - 1)
+                                % divide k in half
+                                
+                                % values at the new point
+                                w_star = w_q_new(k,:) + (w_q_new(k+1,:) - w_q_new(k,:))./...
+                                    (L_node(k+1)/2 + L_node(k)/2) * L_node(k)*0.25;
+                                
+                                g_star = g_q_new(k,:) + (g_q_new(k+1,:) - g_q_new(k,:))/...
+                                    (L_node(k+1)/2 + L_node(k)/2) * L_node(k)*0.25;
+                                
+                                % values at shifted k point
+                                % point k was shifted back by L/4
+                                % interpolate between k and k-1
+                                
+                                if k ~= 1
+                                    
+                                    w_old = w_q_new(k-1,:) + (w_q_new(k,:) - w_q_new(k-1,:))./...
+                                        (L_node(k)/2 + L_node(k-1)/2) * (L_node(k-1)/2 + 0.25 * L_node(k));
+                                    
+                                    g_old = g_q_new(k-1,:) + (g_q_new(k,:) - g_q_new(k-1,:))/...
+                                        (L_node(k)/2 + L_node(k-1)/2) * (L_node(k-1)/2 + 0.25 * L_node(k));
+                                    
+                                else
+                                    w_old = w_q_new(1,:);
+                                    g_old = g_q_new(1,:);
+                                end
+                                
+                                ind_div = k;
+                                
+                            else
+                                % divide k+1 in half
+                                
+                                % values at the new point
+                                w_star = w_q_new(k,:) + (w_q_new(k+1,:) - w_q_new(k,:))./...
+                                    (L_node(k+1)/2 + L_node(k)/2) * (L_node(k)/2 + 0.25*L_node(k+1));
+                                
+                                g_star = g_q_new(k,:) + (g_q_new(k+1,:) - g_q_new(k,:))/...
+                                    (L_node(k+1)/2 + L_node(k)/2) * (L_node(k)/2 + 0.25*L_node(k+1));
+                                
+                                % values at shifted k+1 point
+                                % point k+1 was shifted up by L/4
+                                % interpolate between k+1 and k+2
+                                w_old = w_q_new(k+1,:) + (w_q_new(k+2,:) - w_q_new(k+1,:))./...
+                                    (L_node(k+2)/2 + L_node(k+1)/2) * L_node(k+1)*0.25;
+                                
+                                g_old = g_q_new(k+1,:) + (g_q_new(k+2,:) - g_q_new(k+1,:))/...
+                                    (L_node(k+2)/2 + L_node(k+1)/2) * L_node(k+1)*0.25;
+                                
+                                ind_div = k+1;
+                                
+                            end
                             
-                            g_star = g_q_new(k,:) + (g_q_new(k+1,:) - g_q_new(k,:))/...
-                                (L_node(k+1)/2 + L_node(k)/2) * (L_node(k)/2 + 0.25*L_node(k+1));
                             
-                            % values at shifted k+1 point
-                            % point k+1 was shifted up by L/4
-                            % interpolate between k+1 and k+2
-                            w_old = w_q_new(k+1,:) + (w_q_new(k+2,:) - w_q_new(k+1,:))./...
-                                (L_node(k+2)/2 + L_node(k+1)/2) * L_node(k+1)*0.25;
+                            % add to L_node, V_node
+                            L_node(ind_div) = L_node(ind_div)/2;
+                            L_node = [L_node(1:ind_div); L_node(ind_div); L_node(ind_div+1:end)];
                             
-                            g_old = g_q_new(k+1,:) + (g_q_new(k+2,:) - g_q_new(k+1,:))/...
-                                (L_node(k+2)/2 + L_node(k+1)/2) * L_node(k+1)*0.25;
+                            V_node(ind_div) = V_node(ind_div)/2;
+                            V_node = [V_node(1:ind_div); V_node(ind_div); V_node(ind_div+1:end)];
                             
-                            ind_div = k+1;
+                            N_nodes = length(L_node);
+                            
+                            constants.L_node = L_node;
+                            constants.V_node = V_node;
+                            constants.N_nodes = N_nodes;
+                            % now need to update y...
+                            % and constants...
+                            % and N_nodes (outside of constants)
+                            
+                            % find index of the kth node's w and g
+                            
+                            % have to put this in the right place
+                            % for i = 1, it should be 1, 2, ... N_ab
+                            % for i = 2, N_ab+1, N+2, ... N_ab+N_ab
+                            % for i = i, it's (i-1)*N_ab, ... i*N_ab;%
+                            ind_w_star = (k-1)*N_ab + [1:N_ab];
+                            
+                            % now have to add the temps and m, and U and
+                            % such
+                            ind_w_star = ind_w_star + 4+2*N_rw;
+                            ind_g_star = (N_nodes-1)*N_ab + (k-1)*N_ab + [1:N_ab] + 4+2*N_rw;
+                            
+                            % index for the old point that's been shifted
+                            % have to use (N_nodes-1) because N_nodes has
+                            % already been incremenented
+                            ind_w_old = (ind_div-1)*N_ab + [1:N_ab] + 4+2*N_rw;
+                            ind_g_old = (N_nodes-1)*N_ab + (ind_div-1)*N_ab + [1:N_ab] + 4+2*N_rw;
+                            
+                            % put these into y_current as opposed to y_new
+                            % because I'll have to redo the current step
+                            
+                            % insert the shifted existing point
+                            y_current(ind_w_old) = w_old(:);
+                            y_current(ind_g_old) = g_old(:);
+                            
+                            % insert the new point after the kth point
+                            y_current = [y_current(1:ind_w_star(end)); ...
+                                w_star(:); y_current(ind_w_star(end)+1:ind_g_star(end));...
+                                g_star(:); y_current(ind_g_star(end)+1:end)];
+                            
                             
                         end
+                        fprintf('refined %0.d points: ', length(points_to_refine));
+                        fprintf('%0.d, ', points_to_refine);
+                        fprintf('N_nodes = %0.d\n', N_nodes);
                         
+                        x_node(1) = L_node(1)/2;
+                        for l = 2:N_nodes
+                            x_node(l) = x_node(l-1) + (L_node(l) + L_node(l-1))/2;
+                        end
                         
-                        % add to L_node, V_node
-                        L_node(ind_div) = L_node(ind_div)/2;
-                        L_node = [L_node(1:ind_div); L_node(ind_div); L_node(ind_div+1:end)];
-                        
-                        V_node(ind_div) = V_node(ind_div)/2;
-                        V_node = [V_node(1:ind_div); V_node(ind_div); V_node(ind_div+1:end)];
-                        
-                        N_nodes = length(L_node);
-                        
-                        constants.L_node = L_node;
-                        constants.V_node = V_node;
-                        constants.N_nodes = N_nodes;
-                        % now need to update y...
-                        % and constants...
-                        % and N_nodes (outside of constants)
-                        
-                        % find index of the kth node's w and g
-                        
-                        % have to put this in the right place
-                        % for i = 1, it should be 1, 2, ... N_ab
-                        % for i = 2, N_ab+1, N+2, ... N_ab+N_ab
-                        % for i = i, it's (i-1)*N_ab, ... i*N_ab;%
-                        ind_w_star = (k-1)*N_ab + [1:N_ab];
-                        
-                        % now have to add the temps and m, and U and
-                        % such
-                        ind_w_star = ind_w_star + 4+2*N_rw;
-                        ind_g_star = (N_nodes-1)*N_ab + (k-1)*N_ab + [1:N_ab] + 4+2*N_rw;
-                        
-                        % index for the old point that's been shifted
-                        % have to use (N_nodes-1) because N_nodes has
-                        % already been incremenented
-                        ind_w_old = (ind_div-1)*N_ab + [1:N_ab] + 4+2*N_rw;
-                        ind_g_old = (N_nodes-1)*N_ab + (ind_div-1)*N_ab + [1:N_ab] + 4+2*N_rw;
-                        
-                        % put these into y_current as opposed to y_new
-                        % because I'll have to redo the current step
-                        
-                        % insert the shifted existing point
-                        y_current(ind_w_old) = w_old(:);
-                        y_current(ind_g_old) = g_old(:);
-                        
-                        % insert the new point after the kth point
-                        y_current = [y_current(1:ind_w_star(end)); ...
-                            w_star(:); y_current(ind_w_star(end)+1:ind_g_star(end));...
-                            g_star(:); y_current(ind_g_star(end)+1:end)];
-                        
-                        
-                    end
-                    fprintf('refined %0.d points: ', length(points_to_refine));
-                    fprintf('%0.d, ', points_to_refine);
-                    fprintf('N_nodes = %0.d\n', N_nodes);
-                    
-                    x_node(1) = L_node(1)/2;
-                    for l = 2:N_nodes
-                        x_node(l) = x_node(l-1) + (L_node(l) + L_node(l-1))/2;
+                        figure(48)
+                        subplot(3,1,1)
+                        plot(log10(L_node))
+                        subplot(3,1,2)
+                        plot(log10(w_q_new))
+                        subplot(3,1,3)
+                        plot(log10(g_q_new))
+                        %                     keyboard
                     end
                     
-                    figure(48)
-                    subplot(3,1,1)
-                    plot(log10(L_node))
-                    subplot(3,1,2)
-                    plot(log10(w_q_new))
-                    subplot(3,1,3)
-                    plot(log10(g_q_new))
-                    %                     keyboard
+                    
+                    %                 if length(points_to_coarsen) > 1
+                    %                     % remove the zero
+                    %                     points_to_coarsen = points_to_coarsen(2:end);
+                    %                     spatial_error_OK = 0;
+                    %                     error_OK = 0;
+                    %                     n_coarsened = n;
+                    %
+                    %                     % use old points to refine space, not new points
+                    %                     variables = unpack_y(y_current, constants);
+                    %
+                    %                     g_q_new = variables.g_q;
+                    %                     w_q_new = variables.w_q;
+                    %
+                    %                     y_old = y_current;
+                    %                     L_node_old = L_node;
+                    %                     V_node_old = V_node;
+                    %                     N_nodes_old = N_nodes;
+                    %
+                    %                     for j = 1:length(points_to_coarsen)
+                    %
+                    %                         % the point to coarsen (merge k and k+1)
+                    %                         % need to correct for points already removed -> j-1
+                    %                         k = points_to_coarsen(j) - (j - 1);
+                    %
+                    %                         % calculate values at new point
+                    %                         w_bar(1,:) = w_q_new(k,:) + (w_q_new(k+1,:) - w_q_new(k,:))./...
+                    %                             (L_node(k+1) + L_node(k)) * L_node(k+1);
+                    %
+                    %                         g_bar(1,:) = g_q_new(k,:) + (g_q_new(k+1,:) - g_q_new(k,:))/...
+                    %                             (L_node(k+1) + L_node(k)) * L_node(k+1);
+                    %
+                    %
+                    %                         % modify L_node, V_node
+                    %                         L_node(k) = L_node(k) + L_node(k+1);
+                    %                         L_node(k+1) = [];
+                    %
+                    %                         V_node(k) = V_node(k) + V_node(k+1);
+                    %                         V_node(k+1) = [];
+                    %
+                    %                         N_nodes = length(L_node);
+                    %
+                    %                         constants.L_node = L_node;
+                    %                         constants.V_node = V_node;
+                    %                         constants.N_nodes = N_nodes;
+                    %                         % now need to update y...
+                    %                         % and constants...
+                    %                         % and N_nodes (outside of constants)
+                    %
+                    %                         % find index of the kth node's w and g
+                    %
+                    %                         % have to put this in the right place
+                    %                         % for i = 1, it should be 1, 2, ... N_ab
+                    %                         % for i = 2, N_ab+1, N+2, ... N_ab+N_ab
+                    %                         % for i = i, it's (i-1)*N_ab, ... i*N_ab;%
+                    %                         ind_w_star = (k-1)*N_ab + [1:N_ab];
+                    %
+                    %                         % now have to add the temps and m, and U and
+                    %                         % such, but remember N_nodes has been changed!
+                    %                         ind_w_star = ind_w_star + 4+2*N_rw;
+                    %                         ind_g_star = (N_nodes+1)*N_ab + (k-1)*N_ab + [1:N_ab] + 4+2*N_rw;
+                    %
+                    %                         % index for the old point that's been shifted
+                    %                         % have to use (N_nodes-1) because N_nodes has
+                    %                         % already been incremenented
+                    %                         ind_w_kp1 = (k)*N_ab + [1:N_ab] + 4+2*N_rw;
+                    %                         ind_g_kp1 = (N_nodes+1)*N_ab + (k)*N_ab + [1:N_ab] + 4+2*N_rw;
+                    %
+                    %                         % put these into y_current as opposed to y_new
+                    %                         % because I'll have to redo the current step
+                    %
+                    %                         % modify the kth point
+                    %                         y_current(ind_w_star) = w_bar(:);
+                    %                         y_current(ind_g_star) = g_bar(:);
+                    %
+                    %                         % remove k+1 point
+                    %                         y_current(ind_w_kp1) = [];
+                    %                         y_current(ind_g_kp1) = [];
+                    %
+                    %                     end
+                    %                     fprintf('removed %0.d points: ', length(points_to_coarsen));
+                    %                 fprintf('%0.d, ', points_to_coarsen);
+                    %                 fprintf('N_nodes = %0.d\n', N_nodes);
+                    %
+                    %                 end
+                    
                 end
                 
-                
-                %                 if length(points_to_coarsen) > 1
-                %                     % remove the zero
-                %                     points_to_coarsen = points_to_coarsen(2:end);
-                %                     spatial_error_OK = 0;
-                %                     error_OK = 0;
-                %                     n_coarsened = n;
-                %
-                %                     % use old points to refine space, not new points
-                %                     variables = unpack_y(y_current, constants);
-                %
-                %                     g_q_new = variables.g_q;
-                %                     w_q_new = variables.w_q;
-                %
-                %                     y_old = y_current;
-                %                     L_node_old = L_node;
-                %                     V_node_old = V_node;
-                %                     N_nodes_old = N_nodes;
-                %
-                %                     for j = 1:length(points_to_coarsen)
-                %
-                %                         % the point to coarsen (merge k and k+1)
-                %                         % need to correct for points already removed -> j-1
-                %                         k = points_to_coarsen(j) - (j - 1);
-                %
-                %                         % calculate values at new point
-                %                         w_bar(1,:) = w_q_new(k,:) + (w_q_new(k+1,:) - w_q_new(k,:))./...
-                %                             (L_node(k+1) + L_node(k)) * L_node(k+1);
-                %
-                %                         g_bar(1,:) = g_q_new(k,:) + (g_q_new(k+1,:) - g_q_new(k,:))/...
-                %                             (L_node(k+1) + L_node(k)) * L_node(k+1);
-                %
-                %
-                %                         % modify L_node, V_node
-                %                         L_node(k) = L_node(k) + L_node(k+1);
-                %                         L_node(k+1) = [];
-                %
-                %                         V_node(k) = V_node(k) + V_node(k+1);
-                %                         V_node(k+1) = [];
-                %
-                %                         N_nodes = length(L_node);
-                %
-                %                         constants.L_node = L_node;
-                %                         constants.V_node = V_node;
-                %                         constants.N_nodes = N_nodes;
-                %                         % now need to update y...
-                %                         % and constants...
-                %                         % and N_nodes (outside of constants)
-                %
-                %                         % find index of the kth node's w and g
-                %
-                %                         % have to put this in the right place
-                %                         % for i = 1, it should be 1, 2, ... N_ab
-                %                         % for i = 2, N_ab+1, N+2, ... N_ab+N_ab
-                %                         % for i = i, it's (i-1)*N_ab, ... i*N_ab;%
-                %                         ind_w_star = (k-1)*N_ab + [1:N_ab];
-                %
-                %                         % now have to add the temps and m, and U and
-                %                         % such, but remember N_nodes has been changed!
-                %                         ind_w_star = ind_w_star + 4+2*N_rw;
-                %                         ind_g_star = (N_nodes+1)*N_ab + (k-1)*N_ab + [1:N_ab] + 4+2*N_rw;
-                %
-                %                         % index for the old point that's been shifted
-                %                         % have to use (N_nodes-1) because N_nodes has
-                %                         % already been incremenented
-                %                         ind_w_kp1 = (k)*N_ab + [1:N_ab] + 4+2*N_rw;
-                %                         ind_g_kp1 = (N_nodes+1)*N_ab + (k)*N_ab + [1:N_ab] + 4+2*N_rw;
-                %
-                %                         % put these into y_current as opposed to y_new
-                %                         % because I'll have to redo the current step
-                %
-                %                         % modify the kth point
-                %                         y_current(ind_w_star) = w_bar(:);
-                %                         y_current(ind_g_star) = g_bar(:);
-                %
-                %                         % remove k+1 point
-                %                         y_current(ind_w_kp1) = [];
-                %                         y_current(ind_g_kp1) = [];
-                %
-                %                     end
-                %                     fprintf('removed %0.d points: ', length(points_to_coarsen));
-                %                 fprintf('%0.d, ', points_to_coarsen);
-                %                 fprintf('N_nodes = %0.d\n', N_nodes);
-                %
-                %                 end
-                
-            end
-            
             end
         else
             % not using adaptive scheme, don't need to check error
@@ -1857,7 +1858,7 @@ end
 if max(V_bubi) > 1
     disp('V_bubi > 1!!')
     V_bubi(V_bubi>1) = 0.99;
-%     keyboard
+    %     keyboard
 end
 
 % get system pressure
@@ -2271,6 +2272,38 @@ for i = 1:N_full + 1
         end
     end
     
+    % diffusion terms
+    
+    if i > 1 && i < N_full + 1
+        
+        D_ip2 = 1;
+        D_im2 = 1;
+        D_i = 1;
+        
+        dDdw_dx2(i,:) = ( D_ip2 * ( w_q(i+1,:) - w_q(i,:) ) - ...
+            D_im2 * ( w_q(i,:) - w_q(i-1,:) ) )/L_node(i)^2;
+        
+        dDdg_dx2(i,:) = ( D_ip2 * ( g_q(i+1,:) - g_q(i,:) ) - ...
+            D_im2 * ( g_q(i,:) - g_q(i-1,:) ) )/L_node(i)^2;
+        
+        dr_dx = ( r_q(i+1,:) - r_q(i-1,:) )/(2 * L_node(i));
+        
+        C(i,:) = w_q(i,:) .* D_i .* dr_dx.^2;
+        
+    else
+        if i == 1
+            dDdw_dx2(i,:) = zeros(1,N_ab);
+            dDdg_dx2(i,:) = zeros(1,N_ab);
+            C(i,:) = zeros(1,N_ab);
+        else
+            dDdw_dx2(i,:) = zeros(1,N_ab);
+            dDdg_dx2(i,:) = zeros(1,N_ab);
+            C(i,:) = zeros(1,N_ab);
+        end
+    end
+    
+    
+    
     %     % MUSCL
     %{
 %     if i > 2 && i < N_full
@@ -2438,7 +2471,7 @@ for i = 1:N_full + 1
         % jakob number
         Ja_T = Cp_l * rho_l * C_dTs * deltaT_sup_node/(rho_tg_v * h_lv);
         
-                
+        
         % bubble radius rate of change
         
         % growth rate for a bubble at rest in an infinite fluid
@@ -2476,9 +2509,9 @@ for i = 1:N_full + 1
         % surface area of node[m^2]
         A_l = pi * D_tank * L_l;% + pi * 0.25 * D_tank^2;
         
-%         if i == 1
-%             A_l = A_l + 0.25*pi*D_tank^2;
-%         end
+        %         if i == 1
+        %             A_l = A_l + 0.25*pi*D_tank^2;
+        %         end
         
         switch constants.nuc_model
             
@@ -2495,7 +2528,7 @@ for i = 1:N_full + 1
                         
                     case 'with superheat'
                         
-%                         Ja_wall = (T_lw(1) - (T_s + dT_sat_depth)) * rho_l * Cp_l/(rho_tg_v*h_lv);
+                        %                         Ja_wall = (T_lw(1) - (T_s + dT_sat_depth)) * rho_l * Cp_l/(rho_tg_v*h_lv);
                         Ja_wall = Ja_T;
                         K_1 = (Ja_wall/Pr_l)^2*( g*rho_l*(rho_l-rho_tg_v)/mu_l^2 * (sigma/(g*(rho_l-rho_tg_v)))^(3/2) )^(-1);
                         
@@ -2518,19 +2551,19 @@ for i = 1:N_full + 1
                 % reduces to the common expression
                 r_nuc = (2*sigma*(1 + rho_tg_sat/rho_l)/P)...
                     /( exp( h_lv * (deltaT_sup_node)/(Ru/MW * T_l*T_s)) - 1);
-        
+                
                 
                 % hysteresis!
                 % see Qi & Klausner, 2005
                 % basically, if we're depressurizing, the meniscus is
                 % concave and you need 2x the superheat to activate it
                 if constants.include_hysteresis
-                    if constants.deltaT_sup_node < constants.deltaT_sup_max
+                    if deltaT_sup_node < constants.deltaT_sup_max
                         % we're past max superheat
-%                         r_nuc = 2*r_nuc;
+                        %                         r_nuc = 2*r_nuc;
                         r_nuc_max = (4*sigma*(1 + rho_tg_sat/rho_l)/P)...
-                                    /( exp( h_lv * (constants.deltaT_sup_max)...
-                                    /(Ru/MW * T_l*T_s)) - 1);
+                            /( exp( h_lv * (constants.deltaT_sup_max)...
+                            /(Ru/MW * T_l*T_s)) - 1);
                         r_nuc = max([ r_nuc, r_nuc_max ]);
                     else
                         % we haven't reached max superheat yet
@@ -2596,12 +2629,12 @@ for i = 1:N_full + 1
                 
                 switch constants.nuc_frequency_expression
                     case 'shin and jones'
-                
-                % nucleation frequency (shin and jones also)
-                
-                % nucleation frequency [Hz]
-                nuc_freq = 1e4 * C_dTs * deltaT_sup_node^n_nuc_freq;
-                
+                        
+                        % nucleation frequency (shin and jones also)
+                        
+                        % nucleation frequency [Hz]
+                        nuc_freq = 1e4 * C_dTs * deltaT_sup_node^n_nuc_freq;
+                        
                     case 'saddy and jameson'
                         nuc_freq = r_dep^2;
                     otherwise
@@ -2708,12 +2741,12 @@ for i = 1:N_full + 1
             % if nucleation happens only at r_nuc
             birth_int_s_delta = (r_nuc/r_m).^((k-1)/p) * spec_nuc_rate;
             
-%                             % exponential distribution
-%                             r_a = 10*r_nuc;
-%             
-%                             birth_int_s_exp = (r_a/r_m)^((k-1)/p) * spec_nuc_rate * exp( r_nuc/r_a ) ...
-%                                 * gamma(1+((k-1)/p)) * gammainc(r_nuc/r_a, 1+((k-1)/p), 'upper');
-%                     %
+            %                             % exponential distribution
+            %                             r_a = 10*r_nuc;
+            %
+            %                             birth_int_s_exp = (r_a/r_m)^((k-1)/p) * spec_nuc_rate * exp( r_nuc/r_a ) ...
+            %                                 * gamma(1+((k-1)/p)) * gammainc(r_nuc/r_a, 1+((k-1)/p), 'upper');
+            %                     %
             %         uniform distribution
             %                 dr = 100*r_nuc;
             %                 birth_int_s_uni = (1/r_m)^((k-1)/p) * spec_nuc_rate/dr * 1/( (k-1)/p + 1)*...
@@ -2776,10 +2809,10 @@ for i = 1:N_full + 1
                 qLS = C_coalescence(2) * 4/3*(rbi + rbj).^3*mean_shear;
                 
                 % rise velocity for bubble i and j
-%                 u_ri = sqrt( (2.14*sigma/(rho_l*dbi)) + 0.505*g*dbi);
-%                 u_rj = sqrt( (2.14*sigma./(rho_l*dbj)) + 0.505*g*dbj);
-u_ri = u_rise(i,l);
-u_rj = u_rise(i,:);
+                %                 u_ri = sqrt( (2.14*sigma/(rho_l*dbi)) + 0.505*g*dbi);
+                %                 u_rj = sqrt( (2.14*sigma./(rho_l*dbj)) + 0.505*g*dbj);
+                u_ri = u_rise(i,l);
+                u_rj = u_rise(i,:);
                 
                 % ----- collision area -----
                 Sij = pi/4*(rbi + rbj).^2;
@@ -2801,8 +2834,8 @@ u_rj = u_rise(i,:);
                 t_cont = 0.1*rb_eq.^(2/3) ./ turb_diss.^(1/3);
                 
                 % kamp & chesters, 2001
-%                 rho_c = rho_l;
-%                 C_vm = 0.8;
+                %                 rho_c = rho_l;
+                %                 C_vm = 0.8;
                 %                 t_cont = sqrt( rho_c*C_vm/(3*sigma) * ( 2*dbi.*dbj./(dbi + dbj)).^3 );
                 
                 % film initial and final thicknesses
@@ -2836,29 +2869,41 @@ u_rj = u_rise(i,:);
     linear_eqn_counter = 0;
     r_sp = r_s;
     
+    C_star = C(i,:)'/r_m^2;
+    
     while not_converging
         
         % pre allocate
         A1 = zeros(2*N_ab, N_ab);
         A2 = A1;
+        A3 = A1;
         for j = 0:(2*N_ab - 1)
             
             if j == 0
                 A1(1,:) = ones(1,N_ab);
                 A2(1,:) = zeros(1,N_ab);
+                A3(1,:) = zeros(1,N_ab);
             elseif j == 1
                 A1(2,:) = (p-1)/p * r_sp.^(1/p);
                 A2(2,:) = (1/p) * r_sp.^(1/p - 1);
+                A3(2,:) = zeros(1,N_ab);
+            elseif j == 2
+                A1(j+1,:) = (1 - j/p) * r_sp.^(j/p);
+                A2(j+1,:) = (j/p) * r_sp.^(j/p - 1);
+                A3(j+1,:) = 2*ones(1,N_ab);
             else
                 A1(j+1,:) = (1 - j/p) * r_sp.^(j/p);
                 A2(j+1,:) = (j/p) * r_sp.^(j/p - 1);
+                A3(j+1,:) = j*(j-1) * r_sp.^(j - 2);
             end
         end
         
         A = [A1 A2];
         
-        %     alpha_q = A\beta_q;
-        [alpha_q, error_flag] = linear_equation_solver(A,beta_q);
+        d = A3*C_star + beta_q;
+        %         d = beta_q;
+        
+        [alpha_q, error_flag] = linear_equation_solver(A,d);
         
         dr = diff(r_s);
         for k = 1:length(dr)
@@ -2871,8 +2916,8 @@ u_rj = u_rise(i,:);
             if linear_eqn_counter >= 25
                 fprintf('linear equation solver not converging, rcond = %0.4g, min dr/r = %0.4g\n',rcond(A), min(abs(dr./rbar)) )
                 alpha_q = A\beta_q;
-%                 keyboard
-not_converging = 0;
+                %                 keyboard
+                not_converging = 0;
             end
             
         else
@@ -2898,8 +2943,8 @@ not_converging = 0;
     %         dg_dt(ind_node) = b_q;
     
     % include flux of bubbles in physical space
-    dw_dt(ind_node) = a_q - duw_dx(i,:)';
-    dg_dt(ind_node) = b_q - dug_dx(i,:)';
+    dw_dt(ind_node) = a_q - duw_dx(i,:)' + dDdw_dx2(i,:)';
+    dg_dt(ind_node) = b_q - dug_dx(i,:)' + dDdg_dx2(i,:)';
     
     % these have units of (m^3/(m^3*s)) ie (volume/time)/(volume of mix)
     birth_term(i) = birth_int_s(V_moment_index)*r_m^(3);
