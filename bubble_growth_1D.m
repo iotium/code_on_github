@@ -48,6 +48,7 @@ constants.nuc_model = 'SJ';
 constants.r_dep_expression = 'with superheat';
 constants.nuc_density_expression = 'hibiki and ishii';
 constants.nuc_frequency_expression = 'saddy and jameson';
+constants.error_norm = 'L-infinity';
 constants.include_rdot_rhodot = 0;
 constants.include_hysteresis = 1;
 constants.include_u_bulk = 0;
@@ -582,28 +583,28 @@ while running == 1;
     % step size
     if  n > 1 && adaptive == 1
         
-        % if error is < min_error
-        if max(abs_err/abs_tol,rel_err/rel_tol) < min_error
-            % also check that we didn't just recover from an error
-            fprintf('error < min_error. ')
-            if error_flag ~= 1
-                % and make sure we didn't increase the step size too
-                % recently
-                
-                if t(n) < 1e-4 || n > n_increase + 5
-                    fprintf('step size increased.\n')
-                    % make h bigger
-                    h = min(4*h,h_max);
-                    n_increase = n; % store the n at which we last increased step size
-                else
-                    fprintf('waiting till n = 5.\n')
-                end
-            else
-                fprintf('error_flag = 1 so keeping h constant.\n')
-            end
-            
-            
-        end
+%         % if error is < min_error
+%         if max(abs_err/abs_tol,rel_err/rel_tol) < min_error
+%             % also check that we didn't just recover from an error
+%             fprintf('error < min_error. ')
+%             if error_flag ~= 1
+%                 % and make sure we didn't increase the step size too
+%                 % recently
+%                 
+%                 if t(n) < 1e-4 || n > n_increase + 5
+%                     fprintf('step size increased.\n')
+%                     % make h bigger
+%                     h = min(4*h,h_max);
+%                     n_increase = n; % store the n at which we last increased step size
+%                 else
+%                     fprintf('waiting till n = 5.\n')
+%                 end
+%             else
+%                 fprintf('error_flag = 1 so keeping h constant.\n')
+%             end
+%             
+%             
+%         end
         
         % also check if we're close to LRO
         
@@ -855,7 +856,8 @@ while running == 1;
         end
         
         if adaptive == 1
-            % using adaptive scheme, need to check error
+            % using adaptive scheme, need to check error and pick new time
+            % step
             
             
             err = k_ode*(b - bs);   % absolute error (diff. between 5th and 4th order estimates of y(n+1) - y(n))
@@ -876,8 +878,19 @@ while running == 1;
             
             %             rel_err = rel_err(1:6); % remove the bubble distribution terms
             
-            [rel_err, ind_max_rel_err(n+1)] = max(rel_err(isfinite(rel_err)));  % fix rel_err to the maximum finite value of rel_err
             
+                        [~, ind_max_rel_err(n+1)] = max(rel_err);  % fix rel_err to the maximum finite value of rel_err
+
+            switch constants.error_norm
+                case 'L-infinity'
+                    rel_err = max(rel_err);  % fix rel_err to the maximum finite value of rel_err
+                case 'L-2'
+                    rel_err = sqrt( sum( rel_err.^2 ) );
+                case 'L-1'
+                    rel_err = sum( rel_err );
+                otherwise
+                    error('incorrect constants.error_norm expression. try ''L-infinity'' or L-2 or L-1')
+            end
             
             
             abs_err = abs(err);
@@ -903,10 +916,26 @@ while running == 1;
                 disp('encountered a problem with the error terms')
             end
             
+            
+            % pick new step size
+                
+            p_tilde = 4;
+            sh_max = 3;
+            sh_min = 0.1;
+
+            sh = (rel_tol/rel_err).^(1/(p_tilde + 1));
+            
+            
             if ( rel_err < rel_tol && abs_err < abs_tol) || (h < 1.25*h_min)
                 % meeting the error requirement or step size is too
                 % small already
                 error_OK = 1;
+                
+                
+                
+                sh = min( sh_max, max( sh_min, 0.7 * sh) );
+                
+                
                 
                 if ((n > 1) && ((h_LRO < LRO_tol) && (h_LRO > 0))) && (fill_level(n) < 0.01)
                     % distance to LRO is less than LRO_tol
@@ -935,49 +964,56 @@ while running == 1;
                 if rel_err == 0 || abs_err == 0
                     % something odd happened, so reduce step size a lot
                     disp('something weird happened. reducing step size')
-                    sh = 0.1;
+                    sh = sh_min;
                     
                 else
                     
-                    if rel_err/rel_tol > abs_err/abs_tol
-                        % if relative error is a bigger problem than
-                        % absolute, update step size based on relative
-                        % error. Else, use absolute
-                        
-                        % refinement algorithm from Numerical
-                        % Analysis, by Burden, section 5.5
-                        disp('refining step size')
-                        
-                        sh = 0.84*( rel_tol*h / (2*rel_err) )^(1/4);
-                    else
-                        sh = 0.84*( abs_tol*h / (2*abs_err) )^(1/4);
-                    end
+                    
+                    disp('refining step size')
+                                        
+
+                    
+%                     if rel_err/rel_tol > abs_err/abs_tol
+%                         % if relative error is a bigger problem than
+%                         % absolute, update step size based on relative
+%                         % error. Else, use absolute
+%                         
+%                         % refinement algorithm from Numerical
+%                         % Analysis, by Burden, section 5.5
+%                         disp('refining step size')
+%                         
+%                         sh = 0.84*( rel_tol*h / (2*rel_err) )^(1/4);
+%                     else
+%                         sh = 0.84*( abs_tol*h / (2*abs_err) )^(1/4);
+%                     end
                     
                 end
                 
-                if sh < 0.1
-                    % if it looks like the step size would be reduced too
-                    % much, only reduce it by 1/10
-                    sh = 0.1;
-                elseif sh > 4.0
-                    % similarly if it's too big, only make it 4x bigger
-                    sh = 4.0;
-                end
-                
-                % update step size
-                h = h*sh;
-                
-                % minimum step size set by computer's precision
-                h_min = 16*eps(t(n));
-                
-                % self explanatory I think
-                if h > h_max
-                    h = h_max;
-                elseif h < h_min
-                    h = h_min;
-                end
+%                 if sh < 0.1
+%                     % if it looks like the step size would be reduced too
+%                     % much, only reduce it by 1/10
+%                     sh = 0.1;
+%                 elseif sh > 4.0
+%                     % similarly if it's too big, only make it 4x bigger
+%                     sh = 4.0;
+%                 end
+%                 
+%                 % update step size
+%                 h = h*sh;
+%                 
+%                 % minimum step size set by computer's precision
+%                 h_min = 16*eps(t(n));
+%                 
+%                 % self explanatory I think
+%                 if h > h_max
+%                     h = h_max;
+%                 elseif h < h_min
+%                     h = h_min;
+%                 end
                 
             end
+            
+            h = h*sh;
             
             if constants.adaptive_mesh_refinement
                 
