@@ -68,9 +68,9 @@ if nargin == 0
     
     N_nodes = 10;
     N_mom = 4;
-    rel_tol = 1e-4;     % [] max relative error allowed in adaptive scheme
+    rel_tol = 1e-3;     % [] max relative error allowed in adaptive scheme
     constants.C_qdot_lw = 1e-5;
-    constants.C_coalescence = [1e2 0 0]; % collision efficiency, laminar shear, turbulence (buoyancy is the third)
+    constants.C_coalescence = [1e2 1 1]; % collision efficiency, laminar shear, turbulence (buoyancy is the third)
     constants.C_nuc_rate = 1e5; % had this at 6e4 using the r_dep with superheat
     
 else
@@ -173,7 +173,7 @@ t_end = 1e3;         % [s] end time (if LRO doesn't happen first)
 LRO_tol = 2e-2;     % [s] tolerance for resolving the LRO point
 dT_sup_tol = 1e-14;
 
-ode_solver = 'DP'; % [] options:
+ode_solver = 'BS'; % [] options:
 % 'RKF' for runge-kutta-fehlberg
 % 'euler' for 1st order euler
 % 'RK4' for 4th order runge-kutta
@@ -861,25 +861,18 @@ while running == 1;
             
             
             err = k_ode*(b - bs);   % absolute error (diff. between 5th and 4th order estimates of y(n+1) - y(n))
-            
-            %             rel_err = abs(err./( y(:,n) + 1e-6));  % relative error
-            
-            %             rel_err = abs(err./( mean([y(:,n) y(:,n+1)],2) + 1e-6));  % relative error
-            
-            
+                  
             for j = 1:N_dim
                 if abs(y_current(j)) > 1e-6
                     
-                    rel_err(j) = abs(err(j))./( abs( mean( [y_current(j) y_new(j)] ) )  + 1e-6);  % relative error
+                    rel_err(j) = abs(err(j))./( abs( y_current(j) )  + 1e-6);  % relative error
                 else
                     rel_err(j) = abs(err(j));
                 end
             end
+                        
             
-            %             rel_err = rel_err(1:6); % remove the bubble distribution terms
-            
-            
-                        [~, ind_max_rel_err(n+1)] = max(rel_err);  % fix rel_err to the maximum finite value of rel_err
+            [~, ind_max_rel_err(n+1)] = max(rel_err);  % fix rel_err to the maximum finite value of rel_err
 
             switch constants.error_norm
                 case 'L-infinity'
@@ -894,9 +887,7 @@ while running == 1;
             
             
             abs_err = abs(err);
-            
-            %             abs_err = abs_err(1:6); % remove the bubble distribution terms
-            
+                       
             abs_err = max(abs_err(isfinite(abs_err)));  % do the same for abs_err
             
             % check for possible problems: isempty statements are in case
@@ -919,11 +910,11 @@ while running == 1;
             
             % pick new step size
                 
-            p_tilde = 4;
-            sh_max = 3;
-            sh_min = 0.1;
+            p_tilde = 2; % order of the error estimate
+            sh_max = 3; % max relative increase in step size
+            sh_min = 0.1; % min relative decrease in step size
 
-            sh = (rel_tol/rel_err).^(1/(p_tilde + 1));
+            sh = 0.7 * (rel_tol/rel_err).^(1/(p_tilde + 1));
             
             
             if ( rel_err < rel_tol && abs_err < abs_tol) || (h < 1.25*h_min)
@@ -932,11 +923,9 @@ while running == 1;
                 error_OK = 1;
                 
                 
+                sh = min( sh_max, max( sh_min, sh) );
                 
-                sh = min( sh_max, max( sh_min, 0.7 * sh) );
-                
-                
-                
+
                 if ((n > 1) && ((h_LRO < LRO_tol) && (h_LRO > 0))) && (fill_level(n) < 0.01)
                     % distance to LRO is less than LRO_tol
                     running = 0;
@@ -949,6 +938,7 @@ while running == 1;
                 end
                 
             else
+                % not meeting error tolerance
                 
                 unpack_y(y_new, constants, ind_max_rel_err(n+1), rel_err);
                 
@@ -969,7 +959,7 @@ while running == 1;
                 else
                     
                     
-                    disp('refining step size')
+                    disp('rejected step')
                                         
 
                     

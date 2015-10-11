@@ -43,6 +43,21 @@ switch ode_solver
         
         bs = nan;
         
+    case 'BS'
+        adaptive = 1;
+        % 2nd/3rd order Bogacki?Shampine
+        a = [0       0      0   0;
+            1/2     0       0   0;
+            0       3/4     0   0; 
+            2/9     1/3     4/9 0];
+        
+        c = [   0       1/2     3/4     1]';
+        
+        b =  [   2/9	1/3     4/9     0]';
+        
+        bs = [   7/24	1/4     1/3     1/8]';
+
+        
     case 'RKF'
         adaptive = 1;
         
