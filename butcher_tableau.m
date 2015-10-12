@@ -1,7 +1,16 @@
 % initialized ODE solver
 
-function [adaptive, a, b, c, bs, s] = butcher_tableau(ode_solver)
+function [adaptive, a, b, c, bs, s] = butcher_tableau(varargin)
 
+if nargin > 1
+    ode_solver = varargin{1};
+    ROCK2_stages = varargin{2};
+    a_R2 = varargin{3}; %a, b, and c for rock2
+    b_R2 = varargin{4};
+    c_R2 = varargin{5};
+else
+    ode_solver = varargin{1};
+end
 
 % for differential equation solver:
 % y(n+1) = y(n) + sum(i = 1 -> s) of b(i)*k(i)
@@ -12,7 +21,8 @@ function [adaptive, a, b, c, bs, s] = butcher_tableau(ode_solver)
 % f for k(2) = f( t(n) + c(2)*h , y(n) + a(2,1)*k(1) )
 % f for k(3) = f( t(n) + c(3)*h , y(n) + a(3,1)*k(1) + a(3,2)*k(2) )
 % ...
-% the bs denotes b_star, and is used for error estimation
+% the bs denotes b_star, and is used for error estimation (lower order
+% estimate)
 
 
 switch ode_solver
@@ -115,9 +125,42 @@ switch ode_solver
             9017/3168	-355/33     46732/5247	49/176	-5103/18656 0       0;
             35/384      0           500/1113	125/192	-2187/6784	11/84   0];
         
+    case 'ROCK2'
+        adaptive = 1;
+        
+        % ROCK2 algorithm by Abdulle, 2001       
         
         
-        
+        a = zeros(ROCK2_stages-1, ROCK2_stages-1);
+        b = zeros(ROCK2_stages-1, 1);
+        c = b; % unused
+        bs = b; % unused
+
+        % i is down, j is across
+
+        for j = 1:ROCK2_stages-1
+
+            for i = j+1:ROCK2_stages-1
+
+                if j ~= i-1
+
+                    if i == 2
+                        a(i,j) = b_R2(i-1) * a(i-1,j);
+                    else
+                        a(i,j) = b_R2(i-1) * a(i-1,j) + c_R2(i-1) * a(i-2,j);
+                    end
+
+                else
+                    a(i,i-1) = a_R2(i-1);
+                end
+
+            end
+
+            %     b_RK(j) = a_RK(s-1,j);
+            b(j) = b_R2(ROCK2_stages-2) * a(ROCK2_stages-2,j) + c_R2(ROCK2_stages-2) * a(ROCK2_stages-3,j);
+        end
+        b = b(1:ROCK2_stages-2);
+  
 end
 
 s = length(c); % number of stages in the scheme

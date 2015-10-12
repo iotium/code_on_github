@@ -55,6 +55,17 @@ constants.include_u_bulk = 0;
 constants.ADQMOM_p = 1;
 constants.adaptive_mesh_refinement = 0;
 
+
+ode_solver = 'ROCK2'; % [] options:
+% 'RKF' for runge-kutta-fehlberg
+% 'euler' for 1st order euler
+% 'RK4' for 4th order runge-kutta
+% 'CK' for cash-karp
+% 'DP' for dormand-prince
+% 'ROCK2' for the rock2
+ROCK2_stages = 10;
+
+
 p = constants.ADQMOM_p;
 
 max_spatial_rel_delta_tol = 2;
@@ -173,13 +184,6 @@ t_end = 1e3;         % [s] end time (if LRO doesn't happen first)
 LRO_tol = 2e-2;     % [s] tolerance for resolving the LRO point
 dT_sup_tol = 1e-14;
 
-ode_solver = 'BS'; % [] options:
-% 'RKF' for runge-kutta-fehlberg
-% 'euler' for 1st order euler
-% 'RK4' for 4th order runge-kutta
-% 'CK' for cash-karp
-% 'DP' for dormand-prince
-
 
 % 6 variables for liquid and vapor
 % then N_mom for each node (N_mom/2 abscissas, N_mom/2 weights)
@@ -213,7 +217,22 @@ PDT.P = Pgrid_table;
 
 %% initialize things
 
-[adaptive, a, b, c, bs, s] = butcher_tableau(ode_solver);
+if strcmp(ode_solver,'ROCK2')
+    
+    [sigma_R2, gs_term_R2, a_R2, b_R2, c_R2] ...
+        = rock2_solver_parameters(ROCK2_stages);
+    
+    [adaptive, a, b, c, bs, s] = ...
+        butcher_tableau(ode_solver, ROCK2_stages, a_R2, b_R2, c_R2);
+    % s = ROCK2_stages - 2;
+    
+    s = ROCK2_stages - 1; % change it now to get the routine right
+    
+else
+
+    [adaptive, a, b, c, bs, s] = butcher_tableau(ode_solver);
+
+end
 
 constants.error_detected = 0;
 
@@ -824,12 +843,51 @@ while running == 1;
         %
         %         k = [k1, k2, k3, k4, k5, k6];
         
-        if length(k_ode(1,:)) ~= length(b)
-            disp('dimensions are wrong')
-            keyboard
+        if strcmp(ode_solver, 'ROCK2')
+            
+        
+        % already calculated g_s-2
+        g_sm2 = y_intermediate;
+        
+        % s = s - 1
+        
+        f_g_sm2 = f;
+        g_sm1 = g_sm2 + h * sigma_R2 * f_g_sm2;
+        
+        % s = s
+        
+        
+        try
+            [f_g_sm1, debug_data] = diffeqns(g_sm1, ...
+                constants, guesses, PDT);
+            if debug_data.diff_eqns_error_flag
+                error_flag = 1;
+                disp(['error_flag tripped in diffeqns, i = ' num2str(i)])
+
+            end
+        catch ME
+            disp('threw an error calling diffeqns, first of the finishing stages')
+            disp( getReport(ME))
+            error_flag = 1;
         end
         
-        y_new = y_current + (k_ode*b);
+%         f_g_sm1 = f(t(i),g_sm1);
+        g_star = g_sm1 + h * sigma_R2 * f_g_sm1;
+        
+        y_new = g_star + h * gs_term_R2 * (f_g_sm1 - f_g_sm2);
+            
+            
+        else
+            
+        
+            if length(k_ode(1,:)) ~= length(b)
+                disp('dimensions are wrong')
+                keyboard
+            end
+
+            y_new = y_current + (k_ode*b);
+
+        end
         
         if error_flag == 0
             % need to check the new y to make sure it's OK too
@@ -859,9 +917,12 @@ while running == 1;
             % using adaptive scheme, need to check error and pick new time
             % step
             
+            if strcmp(ode_solver, 'ROCK2')
+                err = y_new - g_star;
+            else
+                err = k_ode*(b - bs);   % absolute error (diff. between 5th and 4th order estimates of y(n+1) - y(n))
+            end
             
-            err = k_ode*(b - bs);   % absolute error (diff. between 5th and 4th order estimates of y(n+1) - y(n))
-                  
             for j = 1:N_dim
                 if abs(y_current(j)) > 1e-6
                     

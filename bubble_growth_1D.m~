@@ -55,6 +55,16 @@ constants.include_u_bulk = 0;
 constants.ADQMOM_p = 1;
 constants.adaptive_mesh_refinement = 0;
 
+
+ode_solver = 'ROCK2'; % [] options:
+% 'RKF' for runge-kutta-fehlberg
+% 'euler' for 1st order euler
+% 'RK4' for 4th order runge-kutta
+% 'CK' for cash-karp
+% 'DP' for dormand-prince
+% 'ROCK2' for the rock2
+
+
 p = constants.ADQMOM_p;
 
 max_spatial_rel_delta_tol = 2;
@@ -68,9 +78,9 @@ if nargin == 0
     
     N_nodes = 10;
     N_mom = 4;
-    rel_tol = 1e-4;     % [] max relative error allowed in adaptive scheme
+    rel_tol = 1e-3;     % [] max relative error allowed in adaptive scheme
     constants.C_qdot_lw = 1e-5;
-    constants.C_coalescence = [1e2 0 0]; % collision efficiency, laminar shear, turbulence (buoyancy is the third)
+    constants.C_coalescence = [1e2 1 1]; % collision efficiency, laminar shear, turbulence (buoyancy is the third)
     constants.C_nuc_rate = 1e5; % had this at 6e4 using the r_dep with superheat
     
 else
@@ -173,13 +183,6 @@ t_end = 1e3;         % [s] end time (if LRO doesn't happen first)
 LRO_tol = 2e-2;     % [s] tolerance for resolving the LRO point
 dT_sup_tol = 1e-14;
 
-ode_solver = 'DP'; % [] options:
-% 'RKF' for runge-kutta-fehlberg
-% 'euler' for 1st order euler
-% 'RK4' for 4th order runge-kutta
-% 'CK' for cash-karp
-% 'DP' for dormand-prince
-
 
 % 6 variables for liquid and vapor
 % then N_mom for each node (N_mom/2 abscissas, N_mom/2 weights)
@@ -213,7 +216,22 @@ PDT.P = Pgrid_table;
 
 %% initialize things
 
-[adaptive, a, b, c, bs, s] = butcher_tableau(ode_solver);
+if strcmp(ode_solver,'ROCK2')
+    
+    [sigma_R2, gs_term_R2, a_R2, b_R2, c_R2] ...
+        = rock2_solver_parameters(ROCK2_stages);
+    
+    [adaptive, a, b, c, bs, s] = ...
+        butcher_tableau(ode_solver, ROCK2_stages, a_R2, b_R2, c_R2);
+    % s = ROCK2_stages - 2;
+    
+    s = ROCK2_stages - 1; % change it now to get the routine right
+    
+else
+
+    [adaptive, a, b, c, bs, s] = butcher_tableau(ode_solver);
+
+end
 
 constants.error_detected = 0;
 
@@ -824,12 +842,51 @@ while running == 1;
         %
         %         k = [k1, k2, k3, k4, k5, k6];
         
-        if length(k_ode(1,:)) ~= length(b)
-            disp('dimensions are wrong')
-            keyboard
+        if strcmp(ode_solver, 'ROCK2')
+            
+        
+        % already calculated g_s-2
+        g_sm2 = y_intermediate;
+        
+        % s = s - 1
+        
+        f_g_sm2 = f;
+        g_sm1 = g_sm2 + h * sigma_R2 * f_g_sm2;
+        
+        % s = s
+        
+        
+        try
+            [f, debug_data] = diffeqns(y_intermediate, ...
+                constants, guesses, PDT);
+            if debug_data.diff_eqns_error_flag
+                error_flag = 1;
+                disp(['error_flag tripped in diffeqns, i = ' num2str(i)])
+
+            end
+        catch ME
+            disp(['threw an error calling diffeqns, i = ' num2str(i)])
+            disp( getReport(ME))
+            error_flag = 1;
         end
         
-        y_new = y_current + (k_ode*b);
+        f_g_sm1 = f(t(i),g_sm1);
+        g_star = g_sm1 + h * sigma * f_g_sm1;
+        
+        g_s = g_star + h * gs_term * (f_g_sm1 - f_g_sm2);
+            
+            
+        else
+            
+        
+            if length(k_ode(1,:)) ~= length(b)
+                disp('dimensions are wrong')
+                keyboard
+            end
+
+            y_new = y_current + (k_ode*b);
+
+        end
         
         if error_flag == 0
             % need to check the new y to make sure it's OK too
@@ -861,25 +918,18 @@ while running == 1;
             
             
             err = k_ode*(b - bs);   % absolute error (diff. between 5th and 4th order estimates of y(n+1) - y(n))
-            
-            %             rel_err = abs(err./( y(:,n) + 1e-6));  % relative error
-            
-            %             rel_err = abs(err./( mean([y(:,n) y(:,n+1)],2) + 1e-6));  % relative error
-            
-            
+                  
             for j = 1:N_dim
                 if abs(y_current(j)) > 1e-6
                     
-                    rel_err(j) = abs(err(j))./( abs( mean( [y_current(j) y_new(j)] ) )  + 1e-6);  % relative error
+                    rel_err(j) = abs(err(j))./( abs( y_current(j) )  + 1e-6);  % relative error
                 else
                     rel_err(j) = abs(err(j));
                 end
             end
+                        
             
-            %             rel_err = rel_err(1:6); % remove the bubble distribution terms
-            
-            
-                        [~, ind_max_rel_err(n+1)] = max(rel_err);  % fix rel_err to the maximum finite value of rel_err
+            [~, ind_max_rel_err(n+1)] = max(rel_err);  % fix rel_err to the maximum finite value of rel_err
 
             switch constants.error_norm
                 case 'L-infinity'
@@ -917,11 +967,11 @@ while running == 1;
             
             % pick new step size
                 
-            p_tilde = 4; % order of the error estimate
+            p_tilde = 2; % order of the error estimate
             sh_max = 3; % max relative increase in step size
             sh_min = 0.1; % min relative decrease in step size
 
-            sh = (rel_tol/rel_err).^(1/(p_tilde + 1));
+            sh = 0.7 * (rel_tol/rel_err).^(1/(p_tilde + 1));
             
             
             if ( rel_err < rel_tol && abs_err < abs_tol) || (h < 1.25*h_min)
@@ -930,10 +980,9 @@ while running == 1;
                 error_OK = 1;
                 
                 
-                sh = min( sh_max, max( sh_min, 0.7 * sh) );
+                sh = min( sh_max, max( sh_min, sh) );
                 
-                
-                
+
                 if ((n > 1) && ((h_LRO < LRO_tol) && (h_LRO > 0))) && (fill_level(n) < 0.01)
                     % distance to LRO is less than LRO_tol
                     running = 0;
@@ -946,7 +995,7 @@ while running == 1;
                 end
                 
             else
-                
+                % not meeting error tolerance
                 
                 unpack_y(y_new, constants, ind_max_rel_err(n+1), rel_err);
                 
@@ -967,7 +1016,7 @@ while running == 1;
                 else
                     
                     
-                    disp('refining step size')
+                    disp('rejected step')
                                         
 
                     
