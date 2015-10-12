@@ -56,14 +56,15 @@ constants.ADQMOM_p = 1;
 constants.adaptive_mesh_refinement = 0;
 
 
-ode_solver = 'ROCK2'; % [] options:
+ode_solver = 'ROS3P'; % [] options:
 % 'RKF' for runge-kutta-fehlberg
 % 'euler' for 1st order euler
 % 'RK4' for 4th order runge-kutta
 % 'CK' for cash-karp
 % 'DP' for dormand-prince
-% 'ROCK2' for the rock2
-ROCK2_stages = 10;
+% 'ROCK2' for the rock2 orthogonal chebyshev runge kutta
+% 'ROS3P' for ROS3P 3rd order rosenbrock
+ROCK2_stages = 20;
 
 
 p = constants.ADQMOM_p;
@@ -217,21 +218,26 @@ PDT.P = Pgrid_table;
 
 %% initialize things
 
-if strcmp(ode_solver,'ROCK2')
-    
-    [sigma_R2, gs_term_R2, a_R2, b_R2, c_R2] ...
-        = rock2_solver_parameters(ROCK2_stages);
-    
-    [adaptive, a, b, c, bs, s] = ...
-        butcher_tableau(ode_solver, ROCK2_stages, a_R2, b_R2, c_R2);
-    % s = ROCK2_stages - 2;
-    
-    s = ROCK2_stages - 1; % change it now to get the routine right
-    
-else
+switch ode_solver
+    case 'ROCK2'
+        [sigma_R2, gs_term_R2, a_R2, b_R2, c_R2] ...
+            = rock2_solver_parameters(ROCK2_stages);
+        
+        [adaptive, a, b, c, bs, s] = ...
+            butcher_tableau(ode_solver, ROCK2_stages, a_R2, b_R2, c_R2);
+        % s = ROCK2_stages - 2;
+        
+        s = ROCK2_stages - 1; % change it now to get the routine right
+        
+    case 'ROS3P'
+        [adaptive, a, b, c, bs, s] = butcher_tableau(ode_solver);
+        gamma_ROS = 7.886751345948129e-01;
 
-    [adaptive, a, b, c, bs, s] = butcher_tableau(ode_solver);
-
+        
+    otherwise
+        
+        [adaptive, a, b, c, bs, s] = butcher_tableau(ode_solver);
+        
 end
 
 constants.error_detected = 0;
@@ -602,28 +608,28 @@ while running == 1;
     % step size
     if  n > 1 && adaptive == 1
         
-%         % if error is < min_error
-%         if max(abs_err/abs_tol,rel_err/rel_tol) < min_error
-%             % also check that we didn't just recover from an error
-%             fprintf('error < min_error. ')
-%             if error_flag ~= 1
-%                 % and make sure we didn't increase the step size too
-%                 % recently
-%                 
-%                 if t(n) < 1e-4 || n > n_increase + 5
-%                     fprintf('step size increased.\n')
-%                     % make h bigger
-%                     h = min(4*h,h_max);
-%                     n_increase = n; % store the n at which we last increased step size
-%                 else
-%                     fprintf('waiting till n = 5.\n')
-%                 end
-%             else
-%                 fprintf('error_flag = 1 so keeping h constant.\n')
-%             end
-%             
-%             
-%         end
+        %         % if error is < min_error
+        %         if max(abs_err/abs_tol,rel_err/rel_tol) < min_error
+        %             % also check that we didn't just recover from an error
+        %             fprintf('error < min_error. ')
+        %             if error_flag ~= 1
+        %                 % and make sure we didn't increase the step size too
+        %                 % recently
+        %
+        %                 if t(n) < 1e-4 || n > n_increase + 5
+        %                     fprintf('step size increased.\n')
+        %                     % make h bigger
+        %                     h = min(4*h,h_max);
+        %                     n_increase = n; % store the n at which we last increased step size
+        %                 else
+        %                     fprintf('waiting till n = 5.\n')
+        %                 end
+        %             else
+        %                 fprintf('error_flag = 1 so keeping h constant.\n')
+        %             end
+        %
+        %
+        %         end
         
         % also check if we're close to LRO
         
@@ -726,6 +732,35 @@ while running == 1;
     error_OK = 0;
     
     %     try
+    if strcmp(ode_solver,'ROS3P')
+    % if using rosenbrock, calculate jacobian
+    % I might have to move this inside error_OK while loop if I do adaptive
+    % mesh refinement...
+
+%         fy = f(t(i), y(:,i));
+constants.step = 1;        
+
+        [fy, debug_data] = diffeqns(y_current, constants, guesses, PDT);
+
+    
+        for k = 1:N_dim
+            dy = 1e-5;
+            dy = dy*abs(y(k));
+            if dy == 0
+                dy = 1e-9;
+            end
+            y_plus = y(:);
+            y_plus(k) = y(k) + dy;
+            
+            [fy_plus, debug_data] = diffeqns(y_current, constants, guesses, PDT);
+            
+            dfdy(:,k) = ( fy_plus - fy )/dy;
+        end
+        
+        
+        
+    end
+        
     
     while error_OK == 0
         % solving differential equations
@@ -741,6 +776,33 @@ while running == 1;
         if exist('k_ode','var')
             clear k_ode
         end
+        
+        if strcmp(ode_solver,'ROS3P')
+            
+           I = eye(N_dim);
+
+            
+            k_ode = zeros(N_dim,3);        
+        
+            E_mat = I/(h*gamma_ROS) - dfdy;
+        
+            k_ode(:,1) = E_mat\fy;
+            
+            for i = 2:3
+                a_k_term = sum( (ones(N_dim,1) * a(i,1:i-1)) .* k_ode(:,1:i-1) , 2 );
+                c_k_term = sum( (ones(N_dim,1) * c(i,1:i-1)) .* k_ode(:,1:i-1) , 2 );
+
+                y_intermediate = y_current + a_k_term; % intermediate value of y
+                constants.step = i;
+                [fy, debug_data] = diffeqns(y_intermediate, constants, guesses, PDT);
+
+                
+                RHS = fy + 1/h * c_k_term;
+
+                k_ode(:,i) = E_mat\RHS;
+            end
+        else
+                
         
         for i = 1:s
             % s = number of stages in the scheme
@@ -769,6 +831,7 @@ while running == 1;
                     end
                 end
             else
+                % i > 1
                 
                 
                 % f for k(2) = f( t(n) + c(2)*h , y(n) + a(2,1)*k(1) )
@@ -842,51 +905,52 @@ while running == 1;
         %         k6 = h*diffeqns(y(:,n) + a(6,1)*k1 + a(6,2)*k2 + a(6,3)*k3 + a(6,4)*k4 + a(6,5)*k5);
         %
         %         k = [k1, k2, k3, k4, k5, k6];
-        
-        if strcmp(ode_solver, 'ROCK2')
-            
-        
-        % already calculated g_s-2
-        g_sm2 = y_intermediate;
-        
-        % s = s - 1
-        
-        f_g_sm2 = f;
-        g_sm1 = g_sm2 + h * sigma_R2 * f_g_sm2;
-        
-        % s = s
-        
-        
-        try
-            [f_g_sm1, debug_data] = diffeqns(g_sm1, ...
-                constants, guesses, PDT);
-            if debug_data.diff_eqns_error_flag
-                error_flag = 1;
-                disp(['error_flag tripped in diffeqns, i = ' num2str(i)])
-
-            end
-        catch ME
-            disp('threw an error calling diffeqns, first of the finishing stages')
-            disp( getReport(ME))
-            error_flag = 1;
         end
         
-%         f_g_sm1 = f(t(i),g_sm1);
-        g_star = g_sm1 + h * sigma_R2 * f_g_sm1;
-        
-        y_new = g_star + h * gs_term_R2 * (f_g_sm1 - f_g_sm2);
+        if strcmp(ode_solver, 'ROCK2')
+            % ROCK2 solver - computing y_new is a little different
+            
+            % already calculated g_s-2
+            g_sm2 = y_intermediate;
+            
+            % s = s - 1
+            
+            f_g_sm2 = f;
+            g_sm1 = g_sm2 + h * sigma_R2 * f_g_sm2;
+            
+            % s = s
+            
+            
+            try
+                [f_g_sm1, debug_data] = diffeqns(g_sm1, ...
+                    constants, guesses, PDT);
+                if debug_data.diff_eqns_error_flag
+                    error_flag = 1;
+                    disp(['error_flag tripped in diffeqns, 1st finishing stage'])
+                    
+                end
+            catch ME
+                disp('threw an error calling diffeqns, first of the finishing stages')
+                disp( getReport(ME))
+                error_flag = 1;
+            end
+            
+            %         f_g_sm1 = f(t(i),g_sm1);
+            g_star = g_sm1 + h * sigma_R2 * f_g_sm1;
+            
+            y_new = g_star + h * gs_term_R2 * (f_g_sm1 - f_g_sm2);
             
             
         else
+            % runge-kutta type method
             
-        
             if length(k_ode(1,:)) ~= length(b)
                 disp('dimensions are wrong')
                 keyboard
             end
-
+            
             y_new = y_current + (k_ode*b);
-
+            
         end
         
         if error_flag == 0
@@ -903,7 +967,7 @@ while running == 1;
             % check to see if we're taking a step that'll cause errors
             error_conditions = [isnan(sum(y_intermediate(:))), (T_l_new < 220), (T_l_new > 305), ...
                 (T_l_new > (T_l(n) + 0.25)),  (T_l_new < (T_l(n) - 5)),...
-                (max(r_q_new(:)) > 0.2), (max(V_bubi_new) > 1)];
+                (max(r_q_new(:)) > 0.2)];%, (max(V_bubi_new) > 1)];
             % (min(y_new) < 0),
             
             if sum(error_conditions) > 0
@@ -918,8 +982,11 @@ while running == 1;
             % step
             
             if strcmp(ode_solver, 'ROCK2')
+                % error calculated a little differently than runge-kutta
+                % type solvers
                 err = y_new - g_star;
             else
+                % runge-kutta type solver
                 err = k_ode*(b - bs);   % absolute error (diff. between 5th and 4th order estimates of y(n+1) - y(n))
             end
             
@@ -931,10 +998,10 @@ while running == 1;
                     rel_err(j) = abs(err(j));
                 end
             end
-                        
+            
             
             [~, ind_max_rel_err(n+1)] = max(rel_err);  % fix rel_err to the maximum finite value of rel_err
-
+            
             switch constants.error_norm
                 case 'L-infinity'
                     rel_err = max(rel_err);  % fix rel_err to the maximum finite value of rel_err
@@ -948,7 +1015,7 @@ while running == 1;
             
             
             abs_err = abs(err);
-                       
+            
             abs_err = max(abs_err(isfinite(abs_err)));  % do the same for abs_err
             
             % check for possible problems: isempty statements are in case
@@ -970,11 +1037,11 @@ while running == 1;
             
             
             % pick new step size
-                
+            
             p_tilde = 2; % order of the error estimate
             sh_max = 3; % max relative increase in step size
             sh_min = 0.1; % min relative decrease in step size
-
+            
             sh = 0.7 * (rel_tol/rel_err).^(1/(p_tilde + 1));
             
             
@@ -986,7 +1053,7 @@ while running == 1;
                 
                 sh = min( sh_max, max( sh_min, sh) );
                 
-
+                
                 if ((n > 1) && ((h_LRO < LRO_tol) && (h_LRO > 0))) && (fill_level(n) < 0.01)
                     % distance to LRO is less than LRO_tol
                     running = 0;
@@ -1021,46 +1088,46 @@ while running == 1;
                     
                     
                     disp('rejected step')
-                                        
-
                     
-%                     if rel_err/rel_tol > abs_err/abs_tol
-%                         % if relative error is a bigger problem than
-%                         % absolute, update step size based on relative
-%                         % error. Else, use absolute
-%                         
-%                         % refinement algorithm from Numerical
-%                         % Analysis, by Burden, section 5.5
-%                         disp('refining step size')
-%                         
-%                         sh = 0.84*( rel_tol*h / (2*rel_err) )^(1/4);
-%                     else
-%                         sh = 0.84*( abs_tol*h / (2*abs_err) )^(1/4);
-%                     end
+                    
+                    
+                    %                     if rel_err/rel_tol > abs_err/abs_tol
+                    %                         % if relative error is a bigger problem than
+                    %                         % absolute, update step size based on relative
+                    %                         % error. Else, use absolute
+                    %
+                    %                         % refinement algorithm from Numerical
+                    %                         % Analysis, by Burden, section 5.5
+                    %                         disp('refining step size')
+                    %
+                    %                         sh = 0.84*( rel_tol*h / (2*rel_err) )^(1/4);
+                    %                     else
+                    %                         sh = 0.84*( abs_tol*h / (2*abs_err) )^(1/4);
+                    %                     end
                     
                 end
                 
-%                 if sh < 0.1
-%                     % if it looks like the step size would be reduced too
-%                     % much, only reduce it by 1/10
-%                     sh = 0.1;
-%                 elseif sh > 4.0
-%                     % similarly if it's too big, only make it 4x bigger
-%                     sh = 4.0;
-%                 end
-%                 
-%                 % update step size
-%                 h = h*sh;
-%                 
-%                 % minimum step size set by computer's precision
-%                 h_min = 16*eps(t(n));
-%                 
-%                 % self explanatory I think
-%                 if h > h_max
-%                     h = h_max;
-%                 elseif h < h_min
-%                     h = h_min;
-%                 end
+                %                 if sh < 0.1
+                %                     % if it looks like the step size would be reduced too
+                %                     % much, only reduce it by 1/10
+                %                     sh = 0.1;
+                %                 elseif sh > 4.0
+                %                     % similarly if it's too big, only make it 4x bigger
+                %                     sh = 4.0;
+                %                 end
+                %
+                %                 % update step size
+                %                 h = h*sh;
+                %
+                %                 % minimum step size set by computer's precision
+                %                 h_min = 16*eps(t(n));
+                %
+                %                 % self explanatory I think
+                %                 if h > h_max
+                %                     h = h_max;
+                %                 elseif h < h_min
+                %                     h = h_min;
+                %                 end
                 
             end
             

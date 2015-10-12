@@ -130,7 +130,6 @@ switch ode_solver
         
         % ROCK2 algorithm by Abdulle, 2001       
         
-        
         a = zeros(ROCK2_stages-1, ROCK2_stages-1);
         b = zeros(ROCK2_stages-1, 1);
         c = b; % unused
@@ -160,6 +159,55 @@ switch ode_solver
             b(j) = b_R2(ROCK2_stages-2) * a(ROCK2_stages-2,j) + c_R2(ROCK2_stages-2) * a(ROCK2_stages-3,j);
         end
         b = b(1:ROCK2_stages-2);
+        
+    case 'ROS3P'
+        adaptive = 1;
+        
+        % implicit rosenbrock algorithm (3rd order)
+        % see Lang & Verwer, 2000
+        
+        % I'm changing notation so that I can keep it in this function
+        % can't fit all the parameters, so gamma is defined elsewhere
+        
+        % theirs -> mine
+        % a -> a
+        % m -> b
+        % mh -> bs
+        % c -> c
+        
+        % explaining theirs
+        % g = gamma
+        % mh = m hat
+
+        a = zeros(3,3);
+
+        m = zeros(3,1);
+        mh = zeros(3,1);
+
+        g = 7.886751345948129e-01;
+        a(2,1) = 1.267949192431123e+00;
+        c(2,1) = -1.607695154586736e+00;
+        a(3,1) = 1.267949192431123e+00;
+        c(3,1) = -3.464101615137755e+00;
+        a(3,2) = 0.000000000000000e+00;
+        c(3,2) = -1.732050807568877e+00;
+        % ?1 =0.000000000000000e+00
+        % ?1 =7.886751345948129e?01
+        % ?2 =1.000000000000000e+00
+        % ?2 = ?2.113248654051871e?01
+        % ?3 =1.000000000000000e+00
+        % ?3 = ?1.077350269189626e+00
+        m(1) = 2.000000000000000e+00;
+        mh(1) = 2.113248654051871e+00;
+        m(2) = 5.773502691896258e-01;
+        mh(2) = 1.000000000000000e+00;
+        m(3) = 4.226497308103742e-01;
+        mh(3) = 4.226497308103742e-01;
+        
+        b = m;
+        bs = mh;
+        
+
   
 end
 
