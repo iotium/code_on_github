@@ -56,7 +56,7 @@ constants.ADQMOM_p = 1;
 constants.adaptive_mesh_refinement = 0;
 
 
-ode_solver = 'ROS3P'; % [] options:
+ode_solver = 'TRBDF2'; % [] options:
 % 'RKF' for runge-kutta-fehlberg
 % 'euler' for 1st order euler
 % 'RK4' for 4th order runge-kutta
@@ -64,6 +64,8 @@ ode_solver = 'ROS3P'; % [] options:
 % 'DP' for dormand-prince
 % 'ROCK2' for the rock2 orthogonal chebyshev runge kutta
 % 'ROS3P' for ROS3P 3rd order rosenbrock
+% 'TRBDF2' for trapezoid/backwards difference formula 2
+
 ROCK2_stages = 20;
 
 
@@ -99,6 +101,8 @@ end
 
 constants.N_nodes = N_nodes;
 
+newton_tol = 0.1; % (tolerance for quasi newton iteration, relative to rel_tol)
+max_iter = 5; % max number of quasi newton iterations
 
 N_ab = N_mom/2;
 constants.N_ab = N_ab; % number of abscissas
@@ -232,7 +236,11 @@ switch ode_solver
     case 'ROS3P'
         [adaptive, a, b, c, bs, s] = butcher_tableau(ode_solver);
         gamma_ROS = 7.886751345948129e-01;
-
+        
+        
+    case 'TRBDF2'
+        [adaptive, a, b, c, bs, s] = butcher_tableau(ode_solver);
+        gamma_TB = a;
         
     otherwise
         
@@ -448,6 +456,7 @@ diff_eqns_error_flag = 0;
 n_increase = 0;
 n_coarsened = 0;
 y_current = y;
+rejected_step = 0;
 %% ODE solver
 
 % begin looping
@@ -733,16 +742,16 @@ while running == 1;
     
     %     try
     if strcmp(ode_solver,'ROS3P')
-    % if using rosenbrock, calculate jacobian
-    % I might have to move this inside error_OK while loop if I do adaptive
-    % mesh refinement...
-
-%         fy = f(t(i), y(:,i));
-constants.step = 1;        
-
+        % if using rosenbrock, calculate jacobian
+        % I might have to move this inside error_OK while loop if I do adaptive
+        % mesh refinement...
+        
+        %         fy = f(t(i), y(:,i));
+        constants.step = 1;
+        
         [fy, debug_data] = diffeqns(y_current, constants, guesses, PDT);
-
-    
+        
+        
         for k = 1:N_dim
             dy = 1e-5;
             dy = dy*abs(y(k));
@@ -760,7 +769,7 @@ constants.step = 1;
         
         
     end
-        
+    
     
     while error_OK == 0
         % solving differential equations
@@ -777,179 +786,342 @@ constants.step = 1;
             clear k_ode
         end
         
-        if strcmp(ode_solver,'ROS3P')
+        if strcmp(ode_solver,'TRBDF2')
+            % implicit method!
             
-           I = eye(N_dim);
-
+            constants.step = 1;
             
-            k_ode = zeros(N_dim,3);        
-        
-            E_mat = I/(h*gamma_ROS) - dfdy;
-        
-            k_ode(:,1) = E_mat\fy;
+            [fy, debug_data] = diffeqns(y_current, constants, guesses, PDT);
             
-            for i = 2:3
-                a_k_term = sum( (ones(N_dim,1) * a(i,1:i-1)) .* k_ode(:,1:i-1) , 2 );
-                c_k_term = sum( (ones(N_dim,1) * c(i,1:i-1)) .* k_ode(:,1:i-1) , 2 );
-
-                y_intermediate = y_current + a_k_term; % intermediate value of y
-                constants.step = i;
-                [fy, debug_data] = diffeqns(y_intermediate, constants, guesses, PDT);
-
+            % if necessary, compute jacobian
+            
+            % conditions: we rejected last step, it's the first step, the
+            % step size is 10x different, or it's been 100 steps
+            
+            if (rejected_step || n == 1) || (abs(h - h_jac)/h_jac > 10 || n - n_jac > 100)
+                disp('computing new jacobian')
                 
-                RHS = fy + 1/h * c_k_term;
-
-                k_ode(:,i) = E_mat\RHS;
-            end
-        else
+                h_jac = h;
+                n_jac = n;
                 
-        
-        for i = 1:s
-            % s = number of stages in the scheme
-            
-            
-            if i == 1
-                
-                % f = f( t(n) , y(n) )
-                
-                if  (n > 1 && ~isnan(f_np1(1))) && (length(f_np1) == N_dim)
-                    % we calculated it at the end of last time step
-                    % and we haven't refined in space since then
-                    f = f_np1;
-                else
-                    % we haven't had a time step yet!
-                    constants.step = 1;
-                    try
-                        [f, debug_data] = diffeqns(y_current, constants, guesses, PDT);
-                        if debug_data.diff_eqns_error_flag
-                            error_flag = 1;
-                            disp('error_flag tripped in diffeqns')
-                        end
-                    catch
-                        disp('threw an error calling diffeqns, first step')
-                        error_flag = 1;
+                for k = 1:N_dim
+                    dy = 1e-5;
+                    dy = dy*abs(y_current(k));
+                    if dy == 0
+                        dy = 1e-9;
                     end
+                    y_plus = y_current(:);
+                    y_plus(k) = y_current(k) + dy;
+                    
+                    [fy_plus, debug_data] = diffeqns(y_plus, constants, guesses, PDT);
+                    
+                    dfdy(:,k) = ( fy_plus - fy )/dy;
+                end
+                
+                I = eye(N_dim);
+                
+                inv_J = inv(I - gamma_TB*h/2 * dfdy );
+                
+            end
+            
+            
+            % initialize x, F, d for TR
+            u_n = y_current;
+            x_k = y_current;
+            F_k = -gamma_TB * h * fy;
+            
+            d_k = -inv_J * F_k;
+            x_kp1 = x_k + d_k;
+            k = 1;
+                        
+            % trapezoid
+            not_converged = 1;
+            while not_converged
+                
+                % evaluate function at current point x_kp1
+                [f_kp1, ~] = diffeqns(x_kp1, constants, guesses, PDT);
+                
+                F_kp1 = x_kp1 - y_current - gamma_TB*h/2*( f_kp1 + fy );
+                
+                u_k = inv_J * F_kp1;
+                
+                c_k = d_k' * (d_k + u_k);
+                
+                inv_J = inv_J - 1/c_k * ( u_k * d_k' ) * inv_J;
+                
+                k = k + 1;
+                
+                x_k = x_kp1;
+                
+                F_k = F_kp1;
+                
+                d_k_old = d_k;
+                
+                d_k = -inv_J * F_k;
+                
+                x_kp1 = x_k + d_k;
+                
+                r = norm(d_k)/norm(d_k_old);
+                
+                if k > 1 && r/(1-r)*norm(d_k./u_n) < newton_tol*rel_tol
+                    not_converged = 0;
+                end
+                
+                if k > max_iter
+                    disp('not converging')
+                    error_flag = 1;
+                    break
+                end
+                
+            end
+            
+            % initialize x, F, d for BDF2
+            
+            u_npg = x_kp1;
+            [f_npg, ~] = diffeqns(x_kp1, constants, guesses, PDT);
+            
+            x_k = u_npg;
+            
+            F_k = u_npg - (1 - gamma_TB)/(2-gamma_TB) * h * f_npg ...
+                - 1/(gamma_TB*(2-gamma_TB))*u_npg +...
+                (1-gamma_TB)^2/(gamma_TB*(2-gamma_TB)) * u_n;
+            
+            d_k = -inv_J * F_k;
+            x_kp1 = x_k + d_k;
+            k = 1;
+            
+            % BDF2
+            
+            
+            not_converged = 1;
+            while not_converged
+                
+                % evaluate function at current point x_kp1
+                [f_kp1, ~] = diffeqns(x_kp1, constants, guesses, PDT);
+                
+                F_kp1 = x_kp1 - (1 - gamma_TB)/(2-gamma_TB) * h * f_kp1 ...
+                    - 1/(gamma_TB*(2-gamma_TB))*u_npg +...
+                    (1-gamma_TB)^2/(gamma_TB*(2-gamma_TB)) * u_n;
+                
+                u_k = inv_J * F_kp1;
+                
+                c_k = d_k' * (d_k + u_k);
+                
+                inv_J = inv_J - 1/c_k * ( u_k * d_k' ) * inv_J;
+                
+                k = k + 1;
+                
+                x_k = x_kp1;
+                
+                F_k = F_kp1;
+                
+                d_k_old = d_k;
+                
+                d_k = -inv_J * F_k;
+                
+                x_kp1 = x_k + d_k;
+                
+                r = norm(d_k)/norm(d_k_old);
+                
+                if k > 1 && r/(1-r)*norm(d_k./u_npg) < newton_tol*rel_tol
+                    not_converged = 0;
+                end
+                
+                if k > max_iter
+                    disp('not converging')
+                    error_flag = 1;
+                    break
+                end
+                
+            end
+            
+            u_np1 = x_kp1;
+            y_new = u_np1;
+                        
+            error_estimate = (bs(1) - b(1))*u_n + ...
+                (bs(2) - b(2))*u_npg + ...
+                (bs(3) - b(3))*u_np1;
+            
+            g_star = y_new - error_estimate;
+                        
+        else
+            % NOT TR-BDF2 (implicit)
+            
+            if strcmp(ode_solver,'ROS3P')
+                
+                I = eye(N_dim);
+                
+                
+                k_ode = zeros(N_dim,3);
+                
+                E_mat = I/(h*gamma_ROS) - dfdy;
+                
+                k_ode(:,1) = E_mat\fy;
+                
+                for i = 2:3
+                    a_k_term = sum( (ones(N_dim,1) * a(i,1:i-1)) .* k_ode(:,1:i-1) , 2 );
+                    c_k_term = sum( (ones(N_dim,1) * c(i,1:i-1)) .* k_ode(:,1:i-1) , 2 );
+                    
+                    y_intermediate = y_current + a_k_term; % intermediate value of y
+                    constants.step = i;
+                    [fy, debug_data] = diffeqns(y_intermediate, constants, guesses, PDT);
+                    
+                    
+                    RHS = fy + 1/h * c_k_term;
+                    
+                    k_ode(:,i) = E_mat\RHS;
                 end
             else
-                % i > 1
+                % not ROS3P or TRBDF2
                 
-                
-                % f for k(2) = f( t(n) + c(2)*h , y(n) + a(2,1)*k(1) )
-                % f for k(3) = f( t(n) + c(3)*h , y(n) + a(3,1)*k(1) + a(3,2)*k(2) )
-                % and so on
-                constants.step = i;
-                
-                a_k_term = sum( (ones(N_dim,1)*a(i,1:i-1)).*k_ode(:,1:i-1) ,2 );
-                
-                y_intermediate = y_current + a_k_term;
-                
-                variables = unpack_y(y_intermediate, constants);
-                
-                T_l_new = variables.T_l;
-                g_q_new = variables.g_q;
-                w_q_new = variables.w_q;
-                
-                r_q_new = g_q_new./w_q_new;
-                
-                V_bubi_new = 4/3*pi*sum( r_q_new.^((4-1)/p) .* w_q_new, 2 );
-                
-                % check to see if we're taking a step that'll cause errors
-                error_conditions = [isnan(sum(y_intermediate(:))), (T_l_new < 220), (T_l_new > 305), ...
-                    (T_l_new > (T_l(n) + 0.25)),  (T_l_new < (T_l(n) - 5)),...
-                    (max(r_q_new(:)) > 0.2), (max(V_bubi_new) > 1)];
-                % (min(y_new) < 0),
-                
-                if sum(error_conditions) > 0
-                    disp('we''re taking a bad step')
-                    f = ones(size(f));
-                    error_flag = 1;
-                    % need to fill out k_ode otherwise the dimensions will
-                    % be wrong and I'll get another error
-                    k_ode = ones(N_dim, s);
-                    break
-                else
+                for i = 1:s
+                    % s = number of stages in the scheme
                     
-                    [ind_neg, min_val] = min(y_intermediate);
-                    if min_val < 0
-                        fprintf('negative part of y. index: %0.d\n', ind_neg)
-                        %                     keyboard
-                    end
                     
-                    try
-                        [f, debug_data] = diffeqns(y_intermediate, ...
-                            constants, guesses, PDT);
-                        if debug_data.diff_eqns_error_flag
+                    if i == 1
+                        
+                        % f = f( t(n) , y(n) )
+                        
+                        if  (n > 1 && ~isnan(f_np1(1))) && (length(f_np1) == N_dim)
+                            % we calculated it at the end of last time step
+                            % and we haven't refined in space since then
+                            f = f_np1;
+                        else
+                            % we haven't had a time step yet!
+                            constants.step = 1;
+                            try
+                                [f, debug_data] = diffeqns(y_current, constants, guesses, PDT);
+                                if debug_data.diff_eqns_error_flag
+                                    error_flag = 1;
+                                    disp('error_flag tripped in diffeqns')
+                                end
+                            catch
+                                disp('threw an error calling diffeqns, first step')
+                                error_flag = 1;
+                            end
+                        end
+                    else
+                        % i > 1
+                        
+                        
+                        % f for k(2) = f( t(n) + c(2)*h , y(n) + a(2,1)*k(1) )
+                        % f for k(3) = f( t(n) + c(3)*h , y(n) + a(3,1)*k(1) + a(3,2)*k(2) )
+                        % and so on
+                        constants.step = i;
+                        
+                        a_k_term = sum( (ones(N_dim,1)*a(i,1:i-1)).*k_ode(:,1:i-1) ,2 );
+                        
+                        y_intermediate = y_current + a_k_term;
+                        
+                        variables = unpack_y(y_intermediate, constants);
+                        
+                        T_l_new = variables.T_l;
+                        g_q_new = variables.g_q;
+                        w_q_new = variables.w_q;
+                        
+                        r_q_new = g_q_new./w_q_new;
+                        
+                        V_bubi_new = 4/3*pi*sum( r_q_new.^((4-1)/p) .* w_q_new, 2 );
+                        
+                        % check to see if we're taking a step that'll cause errors
+                        error_conditions = [isnan(sum(y_intermediate(:))), (T_l_new < 220), (T_l_new > 305), ...
+                            (T_l_new > (T_l(n) + 0.25)),  (T_l_new < (T_l(n) - 5)),...
+                            (max(r_q_new(:)) > 0.2), (max(V_bubi_new) > 1)];
+                        % (min(y_new) < 0),
+                        
+                        if sum(error_conditions) > 0
+                            disp('we''re taking a bad step')
+                            f = ones(size(f));
                             error_flag = 1;
-                            disp(['error_flag tripped in diffeqns, i = ' num2str(i)])
+                            % need to fill out k_ode otherwise the dimensions will
+                            % be wrong and I'll get another error
+                            k_ode = ones(N_dim, s);
+                            break
+                        else
+                            
+                            [ind_neg, min_val] = min(y_intermediate);
+                            if min_val < 0
+                                fprintf('negative part of y. index: %0.d\n', ind_neg)
+                                %                     keyboard
+                            end
+                            
+                            try
+                                [f, debug_data] = diffeqns(y_intermediate, ...
+                                    constants, guesses, PDT);
+                                if debug_data.diff_eqns_error_flag
+                                    error_flag = 1;
+                                    disp(['error_flag tripped in diffeqns, i = ' num2str(i)])
+                                    
+                                end
+                            catch ME
+                                disp(['threw an error calling diffeqns, i = ' num2str(i)])
+                                disp( getReport(ME))
+                                error_flag = 1;
+                            end
                             
                         end
-                    catch ME
-                        disp(['threw an error calling diffeqns, i = ' num2str(i)])
-                        disp( getReport(ME))
-                        error_flag = 1;
                     end
                     
-                end
-            end
-            
-            
-            k_ode(:,i) = f*h;
-            
-        end
-        
-        %         k1 = h*diffeqns(y(:,n));
-        %         k2 = h*diffeqns(y(:,n) + a(2,1)*k1);
-        %         k3 = h*diffeqns(y(:,n) + a(3,1)*k1 + a(3,2)*k2);
-        %         k4 = h*diffeqns(y(:,n) + a(4,1)*k1 + a(4,2)*k2 + a(4,3)*k3);
-        %         k5 = h*diffeqns(y(:,n) + a(5,1)*k1 + a(5,2)*k2 + a(5,3)*k3 + a(5,4)*k4);
-        %         k6 = h*diffeqns(y(:,n) + a(6,1)*k1 + a(6,2)*k2 + a(6,3)*k3 + a(6,4)*k4 + a(6,5)*k5);
-        %
-        %         k = [k1, k2, k3, k4, k5, k6];
-        end
-        
-        if strcmp(ode_solver, 'ROCK2')
-            % ROCK2 solver - computing y_new is a little different
-            
-            % already calculated g_s-2
-            g_sm2 = y_intermediate;
-            
-            % s = s - 1
-            
-            f_g_sm2 = f;
-            g_sm1 = g_sm2 + h * sigma_R2 * f_g_sm2;
-            
-            % s = s
-            
-            
-            try
-                [f_g_sm1, debug_data] = diffeqns(g_sm1, ...
-                    constants, guesses, PDT);
-                if debug_data.diff_eqns_error_flag
-                    error_flag = 1;
-                    disp(['error_flag tripped in diffeqns, 1st finishing stage'])
+                    
+                    k_ode(:,i) = f*h;
                     
                 end
-            catch ME
-                disp('threw an error calling diffeqns, first of the finishing stages')
-                disp( getReport(ME))
-                error_flag = 1;
+                
+                %         k1 = h*diffeqns(y(:,n));
+                %         k2 = h*diffeqns(y(:,n) + a(2,1)*k1);
+                %         k3 = h*diffeqns(y(:,n) + a(3,1)*k1 + a(3,2)*k2);
+                %         k4 = h*diffeqns(y(:,n) + a(4,1)*k1 + a(4,2)*k2 + a(4,3)*k3);
+                %         k5 = h*diffeqns(y(:,n) + a(5,1)*k1 + a(5,2)*k2 + a(5,3)*k3 + a(5,4)*k4);
+                %         k6 = h*diffeqns(y(:,n) + a(6,1)*k1 + a(6,2)*k2 + a(6,3)*k3 + a(6,4)*k4 + a(6,5)*k5);
+                %
+                %         k = [k1, k2, k3, k4, k5, k6];
             end
             
-            %         f_g_sm1 = f(t(i),g_sm1);
-            g_star = g_sm1 + h * sigma_R2 * f_g_sm1;
-            
-            y_new = g_star + h * gs_term_R2 * (f_g_sm1 - f_g_sm2);
-            
-            
-        else
-            % runge-kutta type method
-            
-            if length(k_ode(1,:)) ~= length(b)
-                disp('dimensions are wrong')
-                keyboard
+            if strcmp(ode_solver, 'ROCK2')
+                % ROCK2 solver - computing y_new is a little different
+                
+                % already calculated g_s-2
+                g_sm2 = y_intermediate;
+                
+                % s = s - 1
+                
+                f_g_sm2 = f;
+                g_sm1 = g_sm2 + h * sigma_R2 * f_g_sm2;
+                
+                % s = s
+                
+                
+                try
+                    [f_g_sm1, debug_data] = diffeqns(g_sm1, ...
+                        constants, guesses, PDT);
+                    if debug_data.diff_eqns_error_flag
+                        error_flag = 1;
+                        disp(['error_flag tripped in diffeqns, 1st finishing stage'])
+                        
+                    end
+                catch ME
+                    disp('threw an error calling diffeqns, first of the finishing stages')
+                    disp( getReport(ME))
+                    error_flag = 1;
+                end
+                
+                %         f_g_sm1 = f(t(i),g_sm1);
+                g_star = g_sm1 + h * sigma_R2 * f_g_sm1;
+                
+                y_new = g_star + h * gs_term_R2 * (f_g_sm1 - f_g_sm2);
+                
+                
+            else
+                % runge-kutta type method
+                
+                if length(k_ode(1,:)) ~= length(b)
+                    disp('dimensions are wrong')
+                    keyboard
+                end
+                
+                y_new = y_current + (k_ode*b);
+                
             end
-            
-            y_new = y_current + (k_ode*b);
             
         end
         
@@ -965,7 +1137,7 @@ constants.step = 1;
             r_q_new = g_q_new./w_q_new;
             
             % check to see if we're taking a step that'll cause errors
-            error_conditions = [isnan(sum(y_intermediate(:))), (T_l_new < 220), (T_l_new > 305), ...
+            error_conditions = [isnan(sum(y_new(:))), (T_l_new < 220), (T_l_new > 305), ...
                 (T_l_new > (T_l(n) + 0.25)),  (T_l_new < (T_l(n) - 5)),...
                 (max(r_q_new(:)) > 0.2)];%, (max(V_bubi_new) > 1)];
             % (min(y_new) < 0),
@@ -981,7 +1153,7 @@ constants.step = 1;
             % using adaptive scheme, need to check error and pick new time
             % step
             
-            if strcmp(ode_solver, 'ROCK2')
+            if strcmp(ode_solver, 'ROCK2') || strcmp(ode_solver, 'TRBDF2')
                 % error calculated a little differently than runge-kutta
                 % type solvers
                 err = y_new - g_star;
@@ -1050,6 +1222,7 @@ constants.step = 1;
                 % small already
                 error_OK = 1;
                 
+                rejected_step = 0;
                 
                 sh = min( sh_max, max( sh_min, sh) );
                 
@@ -1066,6 +1239,7 @@ constants.step = 1;
                 end
                 
             else
+                rejected_step = 1;
                 % not meeting error tolerance
                 
                 unpack_y(y_new, constants, ind_max_rel_err(n+1), rel_err);

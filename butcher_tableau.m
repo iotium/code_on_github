@@ -207,8 +207,21 @@ switch ode_solver
         b = m;
         bs = mh;
         
+    case 'TRBDF2'
+        adaptive = 1;
+        % trapezoidal/BDF 2nd order method
+        % gamma is stored in a
+        gamma = 2 - sqrt(2);
+        a = gamma;
+        % b and b_hat (stored in bs) are only used for error estimation
+        
+        b = [(3*gamma - gamma^2 - 1)/(2*gamma); (1-gamma)/(2*gamma); gamma/2];
+        bs = [(3*gamma -1)/(6*gamma); 1/(6*gamma*(1-gamma)); (2-3*gamma)/(6*(1-gamma)) ];
 
-  
+        c = 0;
+
+    otherwise
+        error('bad ode_solver string')
 end
 
 s = length(c); % number of stages in the scheme
