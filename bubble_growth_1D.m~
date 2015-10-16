@@ -99,6 +99,10 @@ else
     
 end
 
+p_tilde = 2; % order of the error estimate
+sh_max = 1.25; % max relative increase in step size
+sh_min = 0.1; % min relative decrease in step size
+
 constants.N_nodes = N_nodes;
 
 newton_tol = 0.1; % (tolerance for quasi newton iteration, relative to rel_tol)
@@ -751,7 +755,8 @@ while running == 1;
         
         [fy, debug_data] = diffeqns(y_current, constants, guesses, PDT);
         
-        
+        dfdy = zeros(N_dim,N_dim);
+
         for k = 1:N_dim
             dy = 1e-5;
             dy = dy*abs(y_current(k));
@@ -803,12 +808,13 @@ while running == 1;
                 abs(h - h_jac)/h_jac > 10;
                 n - n_jac > 100];
             
-            
-            if sum(
+            if sum(new_jacobian_conditions) > 0
                 disp('computing new jacobian')
                 
                 h_jac = h;
                 n_jac = n;
+                
+                dfdy = zeros(N_dim,N_dim);
                 
                 for k = 1:N_dim
                     dy = 1e-5;
@@ -1215,10 +1221,7 @@ while running == 1;
             
             
             % pick new step size
-            
-            p_tilde = 2; % order of the error estimate
-            sh_max = 3; % max relative increase in step size
-            sh_min = 0.1; % min relative decrease in step size
+           
             
             sh = 0.7 * (rel_tol/rel_err).^(1/(p_tilde + 1));
             
@@ -1265,7 +1268,11 @@ while running == 1;
                     sh = sh_min;
                     
                 else
-                    
+                    if rel_err == 1
+                        % error flag was probably tripped, or one of the
+                        % other error conditions
+                        sh = sh_min;
+                    end
                     
                     disp('rejected step')
                     

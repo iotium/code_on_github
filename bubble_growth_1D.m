@@ -755,7 +755,8 @@ while running == 1;
         
         [fy, debug_data] = diffeqns(y_current, constants, guesses, PDT);
         
-        
+        dfdy = zeros(N_dim,N_dim);
+
         for k = 1:N_dim
             dy = 1e-5;
             dy = dy*abs(y_current(k));
@@ -803,7 +804,7 @@ while running == 1;
             % step size is 10x different, or it's been 100 steps
             
             new_jacobian_conditions = [ n == 1;
-                rejected_step && ( n ~= n_jac );
+                rejected_step && ( n ~= n_jac && reject_counter > 2);
                 abs(h - h_jac)/h_jac > 10;
                 n - n_jac > 100];
             
@@ -812,6 +813,8 @@ while running == 1;
                 
                 h_jac = h;
                 n_jac = n;
+                
+                dfdy = zeros(N_dim,N_dim);
                 
                 for k = 1:N_dim
                     dy = 1e-5;
@@ -1213,7 +1216,7 @@ while running == 1;
             if error_conditions2 > 0
                 rel_err = 1;
                 disp('encountered a problem with the error terms')
-                keyboard
+%                 keyboard
             end
             
             
@@ -1229,6 +1232,7 @@ while running == 1;
                 error_OK = 1;
                 
                 rejected_step = 0;
+                reject_counter = 0;
                 
                 sh = min( sh_max, max( sh_min, sh) );
                 
@@ -1246,6 +1250,7 @@ while running == 1;
                 
             else
                 rejected_step = 1;
+                reject_counter = reject_counter + 1;
                 % not meeting error tolerance
                 
                 unpack_y(y_new, constants, ind_max_rel_err(n+1), rel_err);
