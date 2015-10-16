@@ -798,7 +798,13 @@ while running == 1;
             % conditions: we rejected last step, it's the first step, the
             % step size is 10x different, or it's been 100 steps
             
-            if (rejected_step || n == 1) || (abs(h - h_jac)/h_jac > 10 || n - n_jac > 100)
+            new_jacobian_conditions = [ n == 1;
+                rejected_step && ( n ~= n_jac );
+                abs(h - h_jac)/h_jac > 10;
+                n - n_jac > 100];
+            
+            
+            if sum(
                 disp('computing new jacobian')
                 
                 h_jac = h;
@@ -1116,7 +1122,6 @@ while running == 1;
                 
                 if length(k_ode(1,:)) ~= length(b)
                     disp('dimensions are wrong')
-                    keyboard
                 end
                 
                 y_new = y_current + (k_ode*b);
@@ -1205,6 +1210,7 @@ while running == 1;
             if error_conditions2 > 0
                 rel_err = 1;
                 disp('encountered a problem with the error terms')
+                keyboard
             end
             
             

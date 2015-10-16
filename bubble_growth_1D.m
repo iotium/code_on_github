@@ -99,6 +99,10 @@ else
     
 end
 
+p_tilde = 2; % order of the error estimate
+sh_max = 1.25; % max relative increase in step size
+sh_min = 0.1; % min relative decrease in step size
+
 constants.N_nodes = N_nodes;
 
 newton_tol = 0.1; % (tolerance for quasi newton iteration, relative to rel_tol)
@@ -754,14 +758,14 @@ while running == 1;
         
         for k = 1:N_dim
             dy = 1e-5;
-            dy = dy*abs(y(k));
+            dy = dy*abs(y_current(k));
             if dy == 0
                 dy = 1e-9;
             end
-            y_plus = y(:);
-            y_plus(k) = y(k) + dy;
+            y_plus = y_current(:);
+            y_plus(k) = y_current(k) + dy;
             
-            [fy_plus, debug_data] = diffeqns(y_current, constants, guesses, PDT);
+            [fy_plus, debug_data] = diffeqns(y_plus, constants, guesses, PDT);
             
             dfdy(:,k) = ( fy_plus - fy )/dy;
         end
@@ -798,7 +802,12 @@ while running == 1;
             % conditions: we rejected last step, it's the first step, the
             % step size is 10x different, or it's been 100 steps
             
-            if (rejected_step || n == 1) || (abs(h - h_jac)/h_jac > 10 || n - n_jac > 100)
+            new_jacobian_conditions = [ n == 1;
+                rejected_step && ( n ~= n_jac );
+                abs(h - h_jac)/h_jac > 10;
+                n - n_jac > 100];
+            
+            if sum(new_jacobian_conditions) > 0
                 disp('computing new jacobian')
                 
                 h_jac = h;
@@ -1116,7 +1125,6 @@ while running == 1;
                 
                 if length(k_ode(1,:)) ~= length(b)
                     disp('dimensions are wrong')
-                    keyboard
                 end
                 
                 y_new = y_current + (k_ode*b);
@@ -1205,14 +1213,12 @@ while running == 1;
             if error_conditions2 > 0
                 rel_err = 1;
                 disp('encountered a problem with the error terms')
+                keyboard
             end
             
             
             % pick new step size
-            
-            p_tilde = 2; % order of the error estimate
-            sh_max = 3; % max relative increase in step size
-            sh_min = 0.1; % min relative decrease in step size
+           
             
             sh = 0.7 * (rel_tol/rel_err).^(1/(p_tilde + 1));
             
@@ -1259,7 +1265,11 @@ while running == 1;
                     sh = sh_min;
                     
                 else
-                    
+                    if rel_err == 1
+                        % error flag was probably tripped, or one of the
+                        % other error conditions
+                        sh = sh_min;
+                    end
                     
                     disp('rejected step')
                     
