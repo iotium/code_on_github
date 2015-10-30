@@ -1,9 +1,9 @@
 
 function out = bdiff(in,j,n,t,adaptive)
 
-% n = current step
-% j = first step
 % in = vector of whatever to diff
+% j = first step
+% n = current step
 % h = time step
 
 max_order = 6;

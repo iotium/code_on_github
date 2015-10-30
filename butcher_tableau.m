@@ -1,6 +1,6 @@
 % initialized ODE solver
 
-function [adaptive, a, b, c, bs, s] = butcher_tableau(varargin)
+function [adaptive, a, b, c, bs, s, p_tilde] = butcher_tableau(varargin)
 
 if nargin > 1
     ode_solver = varargin{1};
@@ -29,6 +29,7 @@ switch ode_solver
     case 'RK4'
         % 4th order runge-kutta
         adaptive = 0;
+        p_tilde = 0;
         
         a = [0  0   0   0;
             .5  0   0   0;
@@ -44,6 +45,7 @@ switch ode_solver
     case 'euler'
         % 1st order euler
         adaptive = 0;
+        p_tilde = 0;
         
         a = [0];
         
@@ -55,7 +57,8 @@ switch ode_solver
         
     case 'BS'
         adaptive = 1;
-        % 2nd/3rd order Bogacki?Shampine
+        p_tilde = 2;
+        % 2nd/3rd order Bogacki-Shampine
         a = [0       0      0   0;
             1/2     0       0   0;
             0       3/4     0   0; 
@@ -70,6 +73,7 @@ switch ode_solver
         
     case 'RKF'
         adaptive = 1;
+        p_tilde = 4;
         
         % 4th/5th order runge kutta fehlberg
         % a, b, bs (ie b star), and c comprise the butcher tableau
@@ -90,6 +94,7 @@ switch ode_solver
         
     case 'CK'
         adaptive = 1;
+        p_tilde = 4;
         
         % cash-karp
         c = [0; 1/5; 3/10; 3/5; 1; 7/8];
@@ -107,6 +112,7 @@ switch ode_solver
         
     case 'DP'
         adaptive = 1;
+        p_tilde = 4;
         
         % dormand-prince
         
@@ -127,6 +133,7 @@ switch ode_solver
         
     case 'ROCK2'
         adaptive = 1;
+        p_tilde = 1;
         
         % ROCK2 algorithm by Abdulle, 2001       
         
@@ -162,7 +169,7 @@ switch ode_solver
         
     case 'ROS3P'
         adaptive = 1;
-        
+        p_tilde = 2;
         % implicit rosenbrock algorithm (3rd order)
         % see Lang & Verwer, 2000
         
@@ -209,6 +216,7 @@ switch ode_solver
         
     case 'TRBDF2'
         adaptive = 1;
+        p_tilde = 2;
         % trapezoidal/BDF 2nd order method
         % gamma is stored in a
         gamma = 2 - sqrt(2);

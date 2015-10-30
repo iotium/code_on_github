@@ -72,6 +72,9 @@ ND = SMD;
 x_nodes = linspace(0,1,N_nodes)';
 r_nodes = linspace(0,1,N_rw);
 
+mom = cell2mat(mom);
+V_bubi = cell2mat(V_bubi);
+
 
 for i = 1:length(t_plot)
     [~,i_plot] = min(abs(t - t_plot(i)));

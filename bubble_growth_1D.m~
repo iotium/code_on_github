@@ -1,154 +1,7 @@
 function varargout = bubble_growth_1D(varargin)
-% test for github
-tic
-% close all
-warning('off','MATLAB:nearlySingularMatrix')
-warning('off','MATLAB:Axes:NegativeDataInLogAxis')
-warning('off','MATLAB:interp2:NaNstrip')
-%% define input parameters
-
-switch computer
-    case {'GLNXA64'}
-        % on server
-        addpath('~/refprop/refprop');
-        t_save = 60*60; % save interval in seconds
-        plot_stuff = 1;
-        save_stuff = 1;
-        save_periodically = 0;
-        save_parameters_only = 0;
-        plot_periodically = 0;
-        time_out = 1;
-        max_comp_time = 7*60*60;
-        results_save_dir = pwd;
-        
-        
-    case {'MACI64','PCWIN64'}
-        % on laptop
-        t_save = 3*60; % save interval in seconds
-        plot_stuff = 1;
-        save_stuff = 1;
-        save_periodically = 0;
-        save_parameters_only = 0;
-        plot_periodically = 0;
-        t_plot = 5;
-        time_out = 1;
-        max_comp_time = 6*60*60;
-        if strcmp(computer,'PCWIN64')
-            results_save_dir = 'C:\Users\jonah\compiled research\model_results';
-        else
-            results_save_dir = '/Users/jez/School/stanford/compiled research/tank modeling/model_results_data_files';
-        end
-        
-end
-current_dir = pwd;
-% constants.property_source = 'PDT';
-constants.fsolve_options = optimset('TolX',1e-12,'Display','off');
-constants.property_source = 'refprop';
-
-constants.nuc_model = 'SJ';
-% constants.nuc_model = 'AL';
-
-constants.r_dep_expression = 'with superheat';
-% constants.r_dep_expression = 'without superheat';
-
-constants.nuc_density_expression = 'hibiki and ishii';
-% constants.nuc_density_expression = 'shin and jones';
-
-% constants.nuc_frequency_expression = 'saddy and jameson';
-constants.nuc_frequency_expression = 'shin and jones';
-
-constants.error_norm = 'L-infinity';
-% constants.error_norm = 'L-2';
-% constants.error_norm = 'L-1';
-
-
-constants.include_rdot_rhodot = 0;
-constants.include_hysteresis = 0;
-constants.include_u_bulk = 0;
-constants.ADQMOM_p = 1;
-constants.adaptive_mesh_refinement = 0;
-
-
-ode_solver = 'TRBDF2'; % [] options:
-% 'RKF' for runge-kutta-fehlberg
-% 'euler' for 1st order euler
-% 'RK4' for 4th order runge-kutta
-% 'CK' for cash-karp
-% 'DP' for dormand-prince
-% 'ROCK2' for the rock2 orthogonal chebyshev runge kutta
-% 'ROS3P' for ROS3P 3rd order rosenbrock
-% 'TRBDF2' for trapezoid/backwards difference formula 2
-
-ROCK2_stages = 20;
-
-
-p = constants.ADQMOM_p;
-
-max_spatial_rel_delta_tol = 2;
-min_spatial_rel_delta_tol = 0.025;
-max_L = 0.1;
-Pmin_tol = 1e-9;
-
-ADQMOM = 'off';
-
-if nargin == 0
-    
-    N_nodes = 10;
-    N_mom = 4;
-    rel_tol = 1e-2;     % [] max relative error allowed in adaptive scheme
-    constants.C_qdot_lw = 1e-5;
-    constants.C_coalescence = [1e2 1 1]; % collision efficiency, laminar shear, turbulence (buoyancy is the third)
-    constants.C_nuc_rate = 1e5; % had this at 6e4 using the r_dep with superheat
-    
-else
-    inputs = varargin{1};
-    N_nodes = inputs.N_nodes;
-    N_mom = inputs.N_mom;
-    rel_tol = inputs.rel_tol;
-    
-    constants.C_qdot_lw = inputs.C_qdot_lw;
-    constants.C_coalescence = inputs.C_coalescence;
-    constants.C_nuc_rate = inputs.C_nuc_rate;
-    
-end
-
-p_tilde = 2; % order of the error estimate
-constants.sh_max = 1.25; % max relative increase in step size
-sh_min = 0.1; % min relative decrease in step size
-
-constants.N_nodes = N_nodes;
-
-newton_tol = 0.1; % (tolerance for quasi newton iteration, relative to rel_tol)
-max_iter = 5; % max number of quasi newton iterations
-
-N_ab = N_mom/2;
-constants.N_ab = N_ab; % number of abscissas
-% (2*N = number of moments, going from 0 to 2N-1)
-
-constants.phi = 0.1;
-
-constants.CD_churn_turb_boundary = 0.3;
-
-clock_save = clock;
-clock_start = clock;
-clock_plot = clock;
-
-% close all
-N_rw = 25;
-constants.N_rw = N_rw;
-
-constants.C_rdot = 1;%(3/(2*pi));%2.5*pi;
-constants.C_u_rise = 1e1;
-constants.n_nuc_freq = 3;
-constants.C_r_nuc = 1;
-constants.C_dTs = 1;
-constants.C_x_inj = 1;
-if constants.C_coalescence(1) == 0
-    constants.coalescence_switch = 'off';
-else
-    constants.coalescence_switch = 'on';
-end
-save_filename = 'bubble_sim_data';
+%--------------------------------------------------------------------------
+% set physical parameters of the problem
+%--------------------------------------------------------------------------
 
 specified_case = 12;
 
@@ -180,54 +33,221 @@ else
         A_inj, Cd, Po, T_air, rho_w, cv_w, t_w, D_tank, k_w, fluid] = initial_conditions(specified_case);
     
 end
-constants.V_tank = V_tank;
-max_L = max_L*L_tank;
-constants.fluid = fluid;
 
-% divide the whole tank into nodes
-% L_node = L_tank*(1 + 20*alpha_ic)*fill_level/(N_nodes - 0.5);
-L_node = L_tank/(N_nodes); % use N -1 if there are points on the boundaries
-V_node = pi*0.25*D_tank^2*L_node;
+%--------------------------------------------------------------------------
+% set model parameters
+%--------------------------------------------------------------------------
 
-L_node = L_node*ones(N_nodes,1);
-V_node = V_node*ones(N_nodes,1);
+% options for fsolve, used to solve a variety of nonlinear equations
+constants.fsolve_options = optimset('TolX',1e-12,'Display','off');
 
-constants.L_node = L_node;
-constants.V_node = V_node;
+% use either REFPROP, or interpolate from a table (PDT)
+constants.property_source = 'PDT';
+% constants.property_source = 'refprop';
 
-% initialize program parameters
-h = 1e-9;           % [s] initial time step
-running = 1;        % [] switch, 1 = program running, 0 = program stopped
+% nucleation model: Shin & Jones, or Alamgir & Lienhard
+constants.nuc_model = 'SJ';
+% constants.nuc_model = 'AL';
+
+% Jensen & Memmel departure diameter correlation. They came up with one
+% that includes the wall superheat, and one that does not
+constants.r_dep_expression = 'with superheat';
+% constants.r_dep_expression = 'without superheat';
+
+% nucleation density expressions. Hibiki and Ishii is more modern, Shin and
+% Jones may be more consistent with other aspects of the nucleation model
+% I'm using
+constants.nuc_density_expression = 'hibiki and ishii';
+% constants.nuc_density_expression = 'shin and jones';
+
+% nucleation frequency expressions. Shin and Jones, or a very loose
+% correlation based on the experiments of Saddy and Jameson
+% constants.nuc_frequency_expression = 'saddy and jameson';
+constants.nuc_frequency_expression = 'shin and jones';
+
+% which norm to use when controlling error.
+constants.error_norm = 'L-infinity';
+% constants.error_norm = 'L-2';
+% constants.error_norm = 'L-1';
+
+constants.include_rdot_rhodot = 0;  % include bubble size changes that occur due to gas density changing
+constants.include_hysteresis = 1;   % include hysteresis in the bubble nucleation process
+constants.include_u_bulk = 0;       % include a bulk velocity based on the liquid flowing out the orifice
+constants.ADQMOM_p = 1;             % set the scale factor for ADQMOM
+constants.adaptive_mesh_refinement = 0; % include adaptive mesh refinement
+
+% parameters needed for adaptive mesh refinement
+max_spatial_rel_delta_tol = 2;      % max difference between two nodes before refinement occurs
+min_spatial_rel_delta_tol = 0.025;  % min difference between two nodes before coarsening occurs
+max_L = 0.1;                        % max distance between nodes (relative to tank length)
+
+ADQMOM = 'off';
+
+save_filename = 'bubble_sim_data';
+
+ode_solver = 'TRBDF2'; % [] options:
+% adaptive:
+% 'RKF' for runge-kutta-fehlberg
+% 'CK' for cash-karp
+% 'DP' for dormand-prince
+% 'BS' for 2/3rd order bogacki-shampine
+% 'ROCK2' for the rock2 orthogonal chebyshev runge kutta
+% 'ROS3P' for ROS3P 3rd order rosenbrock
+% 'TRBDF2' for trapezoid/backwards difference formula 2
+
+% not adaptive:
+% 'euler' for 1st order euler
+% 'RK4' for 4th order runge-kutta
+
+ROCK2_stages = 20;
+
+constants.sh_max = 1.25; % max relative increase in step size
+sh_min = 0.1; % min relative decrease in step size
+
+N_nodes = 10;
+N_mom = 4;
+rel_tol = 1e-3;     % [] max relative error allowed in adaptive scheme
+constants.C_qdot_lw = 1e-5; % multiplies the heat transfer from wall to liquid
+constants.C_coalescence = [0 1 1]; % collision efficiency,
+% laminar shear, turbulence (buoyancy is the third)
+constants.C_nuc_rate = 1e-5; % multiplies the nucleation rate
+
+newton_tol = 0.1; % (tolerance for quasi newton iteration, relative to rel_tol)
+max_iter = 5; % max number of quasi newton iterations
+
+constants.phi = 0.1;    % parameter of the alamgir & lienhard nucleation rate expression
+constants.CD_churn_turb_boundary = 0.3; % void fraction at which the drag correlation switches to churn-turbulent
+
+N_rw = 25;  % number of nodes in the radial discretization of the wall for conduction
+
+force_constant_h = 0;
+
+h = 1e-5;           % [s] initial time step
 abs_tol = 1e9;     % [] max absolute error allowed in adaptive scheme
-min_error = 1e-3;   % [] min error (relative to error_tol) before step size is increased
-h_max = 1;       % [s] max allowable time step
 h_min = 1e-16;      % [s] min allowable time step
 t_end = 1e3;         % [s] end time (if LRO doesn't happen first)
 LRO_tol = 2e-2;     % [s] tolerance for resolving the LRO point
-dT_sup_tol = 1e-14;
+Pmin_tol = 1e-9;  % [s] tolerance for resolving the P min point
+dT_sup_tol = 1e-14;% [s] tolerance for resolving the point when superheat = 0
 
+% parameters that may depend on platform (PC/Mac/Linux or laptop/server)
+switch computer
+    case {'GLNXA64'}
+        % on server
+        
+        addpath('~/refprop/refprop');   % need to add the refprop folders to the path
+        t_save = 60*60; % save interval in seconds
+        plot_stuff = 1; % whether to plot results when finished
+        save_stuff = 1; % whether to save results when finished
+        save_periodically = 0;  % whether to save results periodically
+        save_parameters_only = 0;   % whether to save everything, or just some key parameters
+        plot_periodically = 0;  % whether to plot results periodically
+        time_out = 1;   % whether to stop program if it's taking too long
+        max_comp_time = 7*60*60;    % [s] how long to wait before timing out
+        results_save_dir = pwd; % where to save results to
+        
+        
+    case {'MACI64','PCWIN64'}
+        % on laptop
+        
+        t_save = 5*60; % save interval in seconds
+        plot_stuff = 1;
+        save_stuff = 1;
+        save_periodically = 1;
+        save_parameters_only = 0;
+        plot_periodically = 0;
+        t_plot = 10; % [s] interval to plot results
+        time_out = 1;
+        max_comp_time = 6*60*60;
+        if strcmp(computer,'PCWIN64')
+            results_save_dir = 'C:\Users\jonah\compiled research\model_results';
+        else
+            results_save_dir = '/Users/jez/School/stanford/compiled research/tank modeling/model_results_data_files';
+        end
+        
+end
+
+%--------------------------------------------------------------------------
+% begin initializing things
+%--------------------------------------------------------------------------
+tic
+
+% turn off some warnings that are not terribly helpful
+warning('off','MATLAB:nearlySingularMatrix')
+warning('off','MATLAB:Axes:NegativeDataInLogAxis')
+warning('off','MATLAB:interp2:NaNstrip')
+
+% create a pause button
+button_handle = createButton;
+pause(1e-3);
+
+if nargin > 0
+    % this script is being called by something else
+    % and these parameters are passed
+    inputs = varargin{1};
+    N_nodes = inputs.N_nodes;
+    N_mom = inputs.N_mom;
+    rel_tol = inputs.rel_tol;
+    constants.C_qdot_lw = inputs.C_qdot_lw;
+    constants.C_coalescence = inputs.C_coalescence;
+    constants.C_nuc_rate = inputs.C_nuc_rate;
+end
+
+
+N_ab = N_mom/2; % number of abscissas or weights = # of moments/2
+
+clock_save = clock;
+clock_start = clock;
+clock_plot = clock;
+
+% divide the whole tank into nodes or cells
+% L_node = L_tank*(1 + 20*alpha_ic)*fill_level/(N_nodes - 0.5);
+L_node = L_tank/(N_nodes); % [m] cell/node length
+% use N -1 if there are points on the boundaries
+V_node = pi*0.25*D_tank^2*L_node;   % [m^3] node/cell volume
+
+% set all nodes to be the same
+L_node = L_node*ones(N_nodes,1);
+V_node = V_node*ones(N_nodes,1);
+
+% store some things into constants
+p = constants.ADQMOM_p;
+constants.N_nodes = N_nodes;
+constants.N_rw = N_rw;
+constants.C_rdot = 1;
+constants.C_u_rise = 1;
+constants.n_nuc_freq = 3;
+constants.C_r_nuc = 1;
+constants.C_dTs = 1;
+constants.C_x_inj = 1;
+constants.V_tank = V_tank;
+constants.fluid = fluid;
+constants.L_node = L_node;
+constants.V_node = V_node;
+constants.N_ab = N_ab;
+
+max_L = max_L*L_tank; % rescale from normalized length to actual length [m]
 
 % 6 variables for liquid and vapor
 % then N_mom for each node (N_mom/2 abscissas, N_mom/2 weights)
 N_dim = 4 + 2*N_rw + N_mom*N_nodes;
 
-% fsolve_options = optimset('display','off');
+% load some fits
 
+% load fit for hesson's data for the orifice mass flux
 hesson_fit = load('hesson_fit');
 constants.hesson_fit = hesson_fit;
 
+% load PDT table for appropriate fluid
 if strcmp(fluid,'N2O')
     PDT = load('N2O_PDT_table','PDT');
     PDT = PDT.PDT;
-    bubble_rise_velocity_fit = load('N2O_bubble_rise_velocity_fit');
 elseif strcmp(fluid,'CO2')
     PDT = load('CO2_PDT_table','PDT');
     PDT = PDT.PDT;
-    bubble_rise_velocity_fit = load('CO2_bubble_rise_velocity_fit');
 else
     error('fluid string incorrect. try N2O or CO2')
 end
-constants.bubble_rise_velocity_fit = bubble_rise_velocity_fit.fittedmodel;
 
 % need this code for using qinterp2:
 Tvec_table = PDT.T;
@@ -237,39 +257,43 @@ Pvec_table = PDT.P;
 PDT.T = Tgrid_table;
 PDT.P = Pgrid_table;
 
-%% initialize things
-
+% get ODE solver parameters/constants
 switch ode_solver
     case 'ROCK2'
+        % orthogonal runge-kutta-chebyshev
         [sigma_R2, gs_term_R2, a_R2, b_R2, c_R2] ...
             = rock2_solver_parameters(ROCK2_stages);
         
-        [adaptive, a, b, c, bs, s] = ...
+        [adaptive, a, b, c, bs, s, p_tilde] = ...
             butcher_tableau(ode_solver, ROCK2_stages, a_R2, b_R2, c_R2);
         % s = ROCK2_stages - 2;
         
         s = ROCK2_stages - 1; % change it now to get the routine right
         
     case 'ROS3P'
-        [adaptive, a, b, c, bs, s] = butcher_tableau(ode_solver);
+        % rosenbrock
+        [adaptive, a, b, c, bs, s, p_tilde] = butcher_tableau(ode_solver);
         gamma_ROS = 7.886751345948129e-01;
         
         
     case 'TRBDF2'
-        [adaptive, a, b, c, bs, s] = butcher_tableau(ode_solver);
+        % trapezoidal rule/2nd order backwards difference
+        [adaptive, a, b, c, bs, s, p_tilde] = butcher_tableau(ode_solver);
         gamma_TB = a;
         
     otherwise
+        % basically a simple runge-kutta type algorithm
+        [adaptive, a, b, c, bs, s, p_tilde] = butcher_tableau(ode_solver);
         
-        [adaptive, a, b, c, bs, s] = butcher_tableau(ode_solver);
-        
+end
+
+if force_constant_h
+    adaptive = 0;
 end
 
 constants.error_detected = 0;
 
 k_ode = zeros(N_dim,s);
-ti = 0;
-n = 1;              % [] counter
 
 t = 0;
 
@@ -287,6 +311,10 @@ end
 V_moment_index = constants.V_moment_index;
 
 % generate initial condition for weights and abscissas
+% 2 options here:
+% 1 - use gamma distribution to generate moments, then use PD method
+% or PD method alternative to turn them into weights and abscissas
+% 2 - directly specify the weights and abscissas
 
 % IC_moments = gamma_dist_moments( 5e-10, 1e-3, N_mom, p);
 %
@@ -327,33 +355,22 @@ end
 
 % net volume of bubbles, per unit volume of liquid
 
-
 V_bubi{1} = 4/3*pi*mom{1}(:,V_moment_index);
 
 T_s = Ti;
 
 V_l = fill_level*V_tank;
 
-node_level = get_node_levels(V_l, V_bubi{1}, constants.V_node);%, V_l/constants.V_node);
+node_level = get_node_levels(V_l, V_bubi{1}, constants.V_node);
 guesses.node_level = node_level;
 
 N_full = sum(node_level == 1);
 
 V_bub = sum_over_nodes(V_bubi{1}, node_level, constants.V_node);
 
-
-% V_bub = V_node/2*V_bubi(1)*node_level(1) + sum(node_level(2:end-1).*V_bubi(2:end-1)*V_node) + V_node/2*V_bubi(end)*node_level(end);
-
 V_l_star = V_bub + V_l;
 
-% V_l_star = fill_level.*V_tank;
-% V_bub = V_l_star .* V_bubi;
-
-% V_tg = (1 - fill_level).*(V_tank - V_bub);
-
 V_tg = V_tank - V_l_star;
-
-% V_l = V_l_star.*(1 - V_bubi);
 
 guesses.rho_l = refpropm('D','T',Ti,'Q',0,fluid);
 
@@ -390,27 +407,15 @@ U_tg = m_tg * u_tg;
 T_l = Ti;
 
 x_tg = 1;
-% T_tg = Ti;
 
 T_lw = Ti*ones(N_rw,1);
 T_gw = T_lw;
 
 y_i_basic = [m_tg; U_tg; T_gw;  m_l; Ti; T_lw];
-% y((N_dim - N_mom + 1):(N_dim), 1) = DQMOM_IC(:);
+
 y_i_DQMOM = DQMOM_IC(:);
 
 y = [y_i_basic; y_i_DQMOM];
-% y(7:(6+length(DQMOM_IC)), 1) = DQMOM_IC(:);
-
-
-% 1 = m_tg
-% 2 = U_tg
-% 3 = T_gw
-% 4 = m_l
-% 5 = T_l
-% 6 = T_lw
-% 7:(N + 6) = weights
-% N+7 : 2N+6 = weighted abscissas
 
 [K_b, N_A, h_planck] = universal_constants('boltzmann', 'avagadro', 'planck');
 
@@ -432,40 +437,30 @@ constants.P_cr = P_cr;
 constants.T_cr = T_cr;
 constants.N_A = N_A;
 constants.h_planck = h_planck;
-
 constants.g = 9.81;
-
 constants.C_hamaker = 1e-20;
-
 guesses.P = Pi;
 guesses.rho_tg = rho_tg;
 guesses.rho_l = rho_l;
 guesses.Vdot_l = 0;
 constants.r_nuc = 0;
+guesses.rhodot_tg_sat = 0;
+
 V_bub = 0;
 gas_holdup = 0;
-
 deltaT_sup = 0;
 Pdot = 0;
 rhodot_l = 0;
 rhodot_tg = 0;
-
 net_nuc = zeros(N_nodes,1);
-
-% I don't seem to be using this term anymore so just leave it
-derivatives = zeros(5,1);
-guesses.rhodot_tg_sat = 0;
-% initialize f
 f = zeros(N_dim,1);
 
 constants.min_flag = 0;
-constants.peak_flag = 0;
 constants.deltaT_sup_max = 0;
 
 f_cutoff_norm = 1e-1; % supposed to be filter cutoff f / (1/2 sample f)
 % so it's basically = 2*dt*f_cutoff
 filter_order = 3;
-% [b_filter,a_filter] = butter(filter_order, f_cutoff_norm, 'low');
 filter_handle = fdesign.lowpass('N,F3dB',filter_order, f_cutoff_norm);
 filter_design = design(filter_handle,'butter');
 
@@ -474,14 +469,15 @@ n_increase = 0;
 n_coarsened = 0;
 y_current = y;
 rejected_step = 0;
-%% ODE solver
+running = 1;        % [] switch, 1 = program running, 0 = program stopped
+n = 1;              % [] counter
+
+%--------------------------------------------------------------------------
+% the main loop -> step through time and solve ODEs
+%--------------------------------------------------------------------------
 
 % begin looping
 while running == 1;
-    %     figure(1)
-    %     hold on
-    %     plot(t,P,'bo')
-    %     if ~stop.requested
     
     starti = max([n-3, 1]);
     
@@ -490,6 +486,10 @@ while running == 1;
     %     rhodot_tg = 0.1*rhodot_tg + 0.9*bdiff(rho_tg,starti,n,t,adaptive);
     Vdot_l(n+1) = V_tank*bdiff(V_l/V_tank,starti,n,t,adaptive);
     %     Vdot_tg(n+1) = V_tank*bdiff(V_tg/V_tank,starti,n,t,adaptive);
+    
+    % filter quantities that are needed from previous time steps to help
+    % suppress instability: liquid level and saturated vapor density
+    % these will both be differentiated numerically in time
     
     if n > 10 && t(n) > 1e-3
         
@@ -553,7 +553,6 @@ while running == 1;
     
     % check for min
     if (t(n) > 0.1) && (Pdot > 10)
-        %         Pdot
         if constants.min_flag == 0;
             constants.min_flag = 1;
             disp('P min')
@@ -566,29 +565,10 @@ while running == 1;
         constants.deltaT_sup_max = deltaT_sup(n);
     end
     
-    % check for peak
-    if (constants.min_flag == 1) && (constants.peak_flag == 0)
-        if ((Pdot) < 0) && (t(n) > 1.25*t_min)
-            constants.peak_flag = 1;
-            %             running = 0;
-            disp('P peak')
-            n_peak = n;
-            t_peak = t(n);
-        end
-    end
     dt = t(n) - t(max([1, n-1]));
     constants.t = t(n);
     constants.dt = dt;
     
-    %     if peak_flag == 1
-    %         if t(n) > t_peak*1.5
-    %             %             running = 0;
-    %         end
-    %     end
-    %
-    %         if t(n) > 0.05
-    %             running = 0;
-    %         end
     
     
     if P(end) < 2e6
@@ -596,12 +576,6 @@ while running == 1;
         stop_reason = 'P got below 2 MPa';
     end
     
-    
-    %     mdot_l = f(4);
-    %     rhodot_l = mdot_l/V_l(n) - m_l(n)/V_l(n)^2*Vdot_l(n);
-    
-    %     mdot_tg = f(1);
-    %     rhodot_tg = mdot_tg/V_tg(n) - m_tg(n)/V_tg(n)^2*Vdot_tg(n);
     
     
     % if I'm just playing around, print status at each step
@@ -613,51 +587,12 @@ while running == 1;
             t(n), t(n) - t(max([1, n-1])), P(n)/1e6, gas_holdup(n), deltaT_sup(n), ...
             V_bub(n), T_l(n), m_l(n)/m_l(1), m_tg(n)/m_tg(1)-1, 100*fill_level(n), Vdot_l(n+1));
         
-        %                 fprintf('y:\t \t \t \t');
-        %                 fprintf('%3.3e\t', y(1:6,end))
-        %                 fprintf('|')
-        %                 fprintf('%3.3e\t', y(7:end,end))
-        %
-        %
-        %         if n > 1
-        %         fprintf('\nrelative change in last step:\t')
-        %         fprintf('%3.3e\t', (y(1:6,end) - y(1:6,end-1))./(y(1:6,end-1)))
-        %         fprintf('|')
-        %         fprintf('%3.3e\t', (y(7:end,end) - y(7:end,end-1))./(y(7:end,end-1)))
-        %                 fprintf('\n')
-        %
-        %         end
         
     end
     
-    % if we're not on the first step and error is plenty small, increase
-    % step size
     if  n > 1 && adaptive == 1
         
-        %         % if error is < min_error
-        %         if max(abs_err/abs_tol,rel_err/rel_tol) < min_error
-        %             % also check that we didn't just recover from an error
-        %             fprintf('error < min_error. ')
-        %             if error_flag ~= 1
-        %                 % and make sure we didn't increase the step size too
-        %                 % recently
-        %
-        %                 if t(n) < 1e-4 || n > n_increase + 5
-        %                     fprintf('step size increased.\n')
-        %                     % make h bigger
-        %                     h = min(4*h,h_max);
-        %                     n_increase = n; % store the n at which we last increased step size
-        %                 else
-        %                     fprintf('waiting till n = 5.\n')
-        %                 end
-        %             else
-        %                 fprintf('error_flag = 1 so keeping h constant.\n')
-        %             end
-        %
-        %
-        %         end
-        
-        % also check if we're close to LRO
+        % check if we're close to LRO
         
         % slope of fill level curve
         LRO_slope = bdiff(fill_level,starti,n,t,adaptive);
@@ -722,32 +657,20 @@ while running == 1;
             % slope of Pdot curve
             k = 1;
             clear Pdot2
-            for j = n-20:n
+            for j = n-25:n
                 Pdot2(k) = bdiff(P,j-3,j,t,adaptive);
                 k = k + 1;
             end
             
-            %             % fit parabola
-            %             parabola_pars = polyfit(t(n-10:n),Pdot2,2);
-            %             t_Pd = -parabola_pars(2)/(2*parabola_pars(1));
-            
             % fit line
             fit_line_data = [ones(k-1,1) t(n-(k-2):n)']\Pdot2';
             t_Pd = -fit_line_data(1)/fit_line_data(2);
-            
-            
-            %             Pdot_slope = bdiff(Pdot,starti,n,t,adaptive);
-            
-            % projected t_sup (t when Pdot = 0)
-            %             t_Pd = -Pdot(n)/Pdot_slope + t(n);
-            
             
             h_Pd = t_Pd - t(n); % distance to t_sup
             
             if (h > 0.01 * h_Pd && h > Pmin_tol) && h_Pd > 0
                 h = h_Pd/5;
                 disp('refining because close to Pmin')
-                %                 keyboard
             end
             
         end
@@ -755,9 +678,8 @@ while running == 1;
         
     end
     
-    error_OK = 0;
     
-    %     try
+    
     if strcmp(ode_solver,'ROS3P')
         % if using rosenbrock, calculate jacobian
         % I might have to move this inside error_OK while loop if I do adaptive
@@ -769,7 +691,7 @@ while running == 1;
         [fy, debug_data] = diffeqns(y_current, constants, guesses, PDT);
         
         dfdy = zeros(N_dim,N_dim);
-
+        
         for k = 1:N_dim
             dy = 1e-5;
             dy = dy*abs(y_current(k));
@@ -788,10 +710,9 @@ while running == 1;
         
     end
     
-    
+    error_OK = 0;
     while error_OK == 0
         % solving differential equations
-        % i = counter for
         
         N_dim = 4 + 2*N_rw + N_mom*N_nodes;
         
@@ -809,10 +730,22 @@ while running == 1;
             
             constants.step = 1;
             
-            [fy, debug_data] = diffeqns(y_current, constants, guesses, PDT);
+            
+            try
+                [fy, debug_data] = diffeqns(y_current, constants, guesses, PDT);
+                if debug_data.diff_eqns_error_flag
+                    error_flag = 1;
+                    disp('error_flag tripped in diffeqns')
+                    break
+                end
+            catch
+                disp('threw an error calling diffeqns, beginning of TRBDF2')
+                error_flag = 1;
+                break
+            end
             
             % if necessary, compute jacobian
-           
+            
             new_jacobian_conditions = [ n == 1;
                 (n > 1 && rejected_step) && ( n ~= n_jac && reject_counter > 2);
                 n > 1 && abs(h - h_jac)/h_jac > 10;
@@ -834,7 +767,7 @@ while running == 1;
                     end
                     y_plus = y_current(:);
                     y_plus(k) = y_current(k) + dy;
-                    
+                    constants.step = 0;
                     [fy_plus, debug_data] = diffeqns(y_plus, constants, guesses, PDT);
                     
                     dfdy(:,k) = ( fy_plus - fy )/dy;
@@ -855,13 +788,25 @@ while running == 1;
             d_k = -inv_J * F_k;
             x_kp1 = x_k + d_k;
             k = 1;
-                        
+            
             % trapezoid
             not_converged = 1;
             while not_converged
                 
                 % evaluate function at current point x_kp1
-                [f_kp1, ~] = diffeqns(x_kp1, constants, guesses, PDT);
+                try
+                    constants.step = 2;
+                    [f_kp1, debug_data] = diffeqns(x_kp1, constants, guesses, PDT);
+                    if debug_data.diff_eqns_error_flag
+                        error_flag = 1;
+                        disp('error_flag tripped in diffeqns')
+                        break
+                    end
+                catch
+                    disp('threw an error calling diffeqns, TR')
+                    error_flag = 1;
+                    break
+                end
                 
                 F_kp1 = x_kp1 - y_current - gamma_TB*h/2*( f_kp1 + fy );
                 
@@ -890,89 +835,121 @@ while running == 1;
                 end
                 
                 if k > max_iter
-                    disp('not converging')
+                    disp('not converging in TR')
                     error_flag = 1;
                     break
                 end
                 
             end
             
-            % initialize x, F, d for BDF2
-            
-            u_npg = x_kp1;
-            [f_npg, ~] = diffeqns(x_kp1, constants, guesses, PDT);
-            
-            x_k = u_npg;
-            
-            F_k = u_npg - (1 - gamma_TB)/(2-gamma_TB) * h * f_npg ...
-                - 1/(gamma_TB*(2-gamma_TB))*u_npg +...
-                (1-gamma_TB)^2/(gamma_TB*(2-gamma_TB)) * u_n;
-            
-            d_k = -inv_J * F_k;
-            x_kp1 = x_k + d_k;
-            k = 1;
-            
-            % BDF2
-            
-            
-            not_converged = 1;
-            while not_converged
+            if error_flag ~= 1
+                % don't bother if we already have an error
+                % initialize x, F, d for BDF2
                 
-                % evaluate function at current point x_kp1
-                [f_kp1, ~] = diffeqns(x_kp1, constants, guesses, PDT);
+                u_npg = x_kp1;
                 
-                F_kp1 = x_kp1 - (1 - gamma_TB)/(2-gamma_TB) * h * f_kp1 ...
+                try
+                    constants.step = 3;
+                    [f_npg, debug_data] = diffeqns(x_kp1, constants, guesses, PDT);
+                    if debug_data.diff_eqns_error_flag
+                        error_flag = 1;
+                        disp('error_flag tripped in diffeqns')
+                        break
+                    end
+                catch
+                    disp('threw an error calling diffeqns, between TR and BDF2')
+                    error_flag = 1;
+                    break
+                end
+                
+                x_k = u_npg;
+                
+                F_k = u_npg - (1 - gamma_TB)/(2-gamma_TB) * h * f_npg ...
                     - 1/(gamma_TB*(2-gamma_TB))*u_npg +...
                     (1-gamma_TB)^2/(gamma_TB*(2-gamma_TB)) * u_n;
                 
-                u_k = inv_J * F_kp1;
-                
-                c_k = d_k' * (d_k + u_k);
-                
-                inv_J = inv_J - 1/c_k * ( u_k * d_k' ) * inv_J;
-                
-                k = k + 1;
-                
-                x_k = x_kp1;
-                
-                F_k = F_kp1;
-                
-                d_k_old = d_k;
-                
                 d_k = -inv_J * F_k;
-                
                 x_kp1 = x_k + d_k;
+                k = 1;
                 
-                r = norm(d_k)/norm(d_k_old);
+                % BDF2
                 
-                if k > 1 && r/(1-r)*norm(d_k./u_npg) < newton_tol*rel_tol
-                    not_converged = 0;
+                not_converged = 1;
+                while not_converged
+                    
+                    % evaluate function at current point x_kp1
+                    try
+                        constants.step = 4;
+                        [f_kp1, debug_data] = diffeqns(x_kp1, constants, guesses, PDT);
+                        if debug_data.diff_eqns_error_flag
+                            error_flag = 1;
+                            disp('error_flag tripped in diffeqns')
+                            break
+                        end
+                    catch
+                        disp('threw an error calling diffeqns, BDF2')
+                        error_flag = 1;
+                        break
+                    end
+                    
+                    F_kp1 = x_kp1 - (1 - gamma_TB)/(2-gamma_TB) * h * f_kp1 ...
+                        - 1/(gamma_TB*(2-gamma_TB))*u_npg +...
+                        (1-gamma_TB)^2/(gamma_TB*(2-gamma_TB)) * u_n;
+                    
+                    u_k = inv_J * F_kp1;
+                    
+                    c_k = d_k' * (d_k + u_k);
+                    
+                    inv_J = inv_J - 1/c_k * ( u_k * d_k' ) * inv_J;
+                    
+                    k = k + 1;
+                    
+                    x_k = x_kp1;
+                    
+                    F_k = F_kp1;
+                    
+                    d_k_old = d_k;
+                    
+                    d_k = -inv_J * F_k;
+                    
+                    x_kp1 = x_k + d_k;
+                    
+                    r = norm(d_k)/norm(d_k_old);
+                    
+                    if k > 1 && r/(1-r)*norm(d_k./u_npg) < newton_tol*rel_tol
+                        not_converged = 0;
+                    end
+                    
+                    if k > max_iter
+                        disp('not converging in BDF2')
+                        error_flag = 1;
+                        break
+                    end
+                    
                 end
                 
-                if k > max_iter
-                    disp('not converging')
-                    error_flag = 1;
-                    break
-                end
+                u_np1 = x_kp1;
+                y_new = u_np1;
                 
+                error_estimate = (bs(1) - b(1))*u_n + ...
+                    (bs(2) - b(2))*u_npg + ...
+                    (bs(3) - b(3))*u_np1;
+                
+                g_star = y_new - error_estimate;
+                
+            else
+                % we threw an error
+                error_estimate = 1;
+                g_star = y_new;
             end
             
-            u_np1 = x_kp1;
-            y_new = u_np1;
-                        
-            error_estimate = (bs(1) - b(1))*u_n + ...
-                (bs(2) - b(2))*u_npg + ...
-                (bs(3) - b(3))*u_np1;
-            
-            g_star = y_new - error_estimate;
-                        
         else
             % NOT TR-BDF2 (implicit)
             
             if strcmp(ode_solver,'ROS3P')
                 
                 I = eye(N_dim);
-                   
+                
                 k_ode = zeros(N_dim,3);
                 
                 E_mat = I/(h*gamma_ROS) - dfdy;
@@ -993,14 +970,23 @@ while running == 1;
                     k_ode(:,i) = E_mat\RHS;
                 end
             else
-                % not ROS3P or TRBDF2
+                % not ROS3P or TRBDF2 -> explicit
+                
+                % what we're basically doing:
+                %         k1 = h*diffeqns(y(:,n));
+                %         k2 = h*diffeqns(y(:,n) + a(2,1)*k1);
+                %         k3 = h*diffeqns(y(:,n) + a(3,1)*k1 + a(3,2)*k2);
+                %         k4 = h*diffeqns(y(:,n) + a(4,1)*k1 + a(4,2)*k2 + a(4,3)*k3);
+                %         k5 = h*diffeqns(y(:,n) + a(5,1)*k1 + a(5,2)*k2 + a(5,3)*k3 + a(5,4)*k4);
+                %         k6 = h*diffeqns(y(:,n) + a(6,1)*k1 + a(6,2)*k2 + a(6,3)*k3 + a(6,4)*k4 + a(6,5)*k5);
+                %
+                %         k = [k1, k2, k3, k4, k5, k6];
                 
                 for i = 1:s
                     % s = number of stages in the scheme
                     
-                    
                     if i == 1
-                        
+                        % first stage of the scheme
                         % f = f( t(n) , y(n) )
                         
                         if  (n > 1 && ~isnan(f_np1(1))) && (length(f_np1) == N_dim)
@@ -1022,9 +1008,7 @@ while running == 1;
                             end
                         end
                     else
-                        % i > 1
-                        
-                        
+                        % not the first stage of the scheme
                         % f for k(2) = f( t(n) + c(2)*h , y(n) + a(2,1)*k(1) )
                         % f for k(3) = f( t(n) + c(3)*h , y(n) + a(3,1)*k(1) + a(3,2)*k(2) )
                         % and so on
@@ -1048,7 +1032,6 @@ while running == 1;
                         error_conditions = [isnan(sum(y_intermediate(:))), (T_l_new < 220), (T_l_new > 305), ...
                             (T_l_new > (T_l(n) + 0.25)),  (T_l_new < (T_l(n) - 5)),...
                             (max(r_q_new(:)) > 0.2), (max(V_bubi_new) > 1)];
-                        % (min(y_new) < 0),
                         
                         if sum(error_conditions) > 0
                             disp('we''re taking a bad step')
@@ -1063,7 +1046,6 @@ while running == 1;
                             [ind_neg, min_val] = min(y_intermediate);
                             if min_val < 0
                                 fprintf('negative part of y. index: %0.d\n', ind_neg)
-                                %                     keyboard
                             end
                             
                             try
@@ -1088,14 +1070,6 @@ while running == 1;
                     
                 end
                 
-                %         k1 = h*diffeqns(y(:,n));
-                %         k2 = h*diffeqns(y(:,n) + a(2,1)*k1);
-                %         k3 = h*diffeqns(y(:,n) + a(3,1)*k1 + a(3,2)*k2);
-                %         k4 = h*diffeqns(y(:,n) + a(4,1)*k1 + a(4,2)*k2 + a(4,3)*k3);
-                %         k5 = h*diffeqns(y(:,n) + a(5,1)*k1 + a(5,2)*k2 + a(5,3)*k3 + a(5,4)*k4);
-                %         k6 = h*diffeqns(y(:,n) + a(6,1)*k1 + a(6,2)*k2 + a(6,3)*k3 + a(6,4)*k4 + a(6,5)*k5);
-                %
-                %         k = [k1, k2, k3, k4, k5, k6];
             end
             
             if strcmp(ode_solver, 'ROCK2')
@@ -1221,6 +1195,7 @@ while running == 1;
                 isempty(abs_err) +  ...
                 isnan(sum(err)) + ...
                 ~isreal(sum(y_new)) + ...
+                (deltaT_sup(n) < 0) + ...
                 error_flag;
             
             % if any of those fail, set rel_err large so that the step gets
@@ -1228,12 +1203,11 @@ while running == 1;
             if error_conditions2 > 0
                 rel_err = 1;
                 disp('encountered a problem with the error terms')
-%                 keyboard
             end
             
             
             % pick new step size
-           
+            
             error_estimate = rel_err;
             
             if n == 1
@@ -1242,19 +1216,19 @@ while running == 1;
                 sh_max = constants.sh_max;
             end
             
-%             sh = 0.7 * (rel_tol/rel_err).^(1/(p_tilde + 1));
-
+            %             sh = 0.7 * (rel_tol/rel_err).^(1/(p_tilde + 1));
+            
             sh = (rel_tol/error_estimate)^( 1/p_tilde );
             
-            if step_rejected ~= 1
-            
+            if n > 1 && rejected_step ~= 1
+                
                 sh_past = (error_estimate_past/rel_tol)^(1/p_tilde) * sh^p_tilde * (h / h_past);
-
+                
                 sh = min(sh, sh_past);
+                
+            end
             
-            end     
-            
-%             sh = min( sh_max, max( 0.1, 0.8 * sh) );
+            sh = min( sh_max, max( 0.1, 0.8 * sh) );
             
             if ( rel_err < rel_tol && abs_err < abs_tol) || (h < 1.25*h_min)
                 % meeting the error requirement or step size is too
@@ -1264,12 +1238,14 @@ while running == 1;
                 rejected_step = 0;
                 reject_counter = 0;
                 
-%                 sh = min( sh_max, max( sh_min, sh) );
+                %                 sh = min( sh_max, max( sh_min, sh) );
+                
                 sh_max = constants.sh_max;
                 if rejected_step == 1
                     % we rejected the last step
                     sh = min(sh, 1);
                 end
+                
                 h_past = h;
                 error_estimate_past = error_estimate;
                 
@@ -1568,7 +1544,6 @@ while running == 1;
                         plot(log10(w_q_new))
                         subplot(3,1,3)
                         plot(log10(g_q_new))
-                        %                     keyboard
                     end
                     
                     
@@ -1803,17 +1778,11 @@ while running == 1;
             figure(87)
             clf
             
-            
             % number density, gas holdup, sauter mean diameter
-            x_node = [1:length(V_bubi)];
-            plot(x_node, N_bubi, 'k-s', x_node, V_bubi, 'k-o', x_node, (6*V_bubi./N_bubi/pi).^(1/3),'k-*')
+            x_node = [1:length(V_bubi{end})];
+            plot(x_node, N_bubi{end}, 'k-s', x_node, V_bubi{end}, 'k-o', x_node, (6*V_bubi{end}./N_bubi{end}/pi).^(1/3),'k-*')
             set(gca,'yscale','log')
             legend('number density','volume density','SMD')
-            
-            %             % wall temperature profiles
-            %             plot([1:length(T_lw)], T_lw,'k-',[1:length(T_gw)],T_gw,'b')
-            
-            
             
             
             clock_plot = clock;
@@ -1874,7 +1843,7 @@ while running == 1;
         if time_since_save >= t_save;
             if save_stuff == 1
                 disp('saving')
-                save(save_filename,'-v7.3')
+                save([save_filename '_intermediate_data'],'-v7.3')
             end
             clock_save = clock;
         end
@@ -1894,15 +1863,22 @@ while running == 1;
         stop_reason = 'error detected';
     end
     
+    pause(1e-6)
+    
 end
 if exist('stop_reason', 'var')
     disp(stop_reason)
 else
     disp('no stop reason assigned')
 end
+
+close(button_handle)
 %% plotting and output
 
 if save_stuff == 1
+    % store the current directory so we can get back to it later
+    current_dir = pwd;
+    
     cd(results_save_dir)
     
     if save_parameters_only == 1
@@ -1937,12 +1913,13 @@ if save_stuff == 1
             if ~exist(save_filename_numbered,'file')
                 save(save_filename_numbered,'-v7.3')
                 file_exists = 0;
-                cd(current_dir);
             end
             file_num = file_num+1;
         end
         
     end
+    
+    cd(current_dir);
     
 end
 
@@ -2190,9 +2167,6 @@ end
 
 variables = unpack_y(y, constants);
 
-% if constants.t >3.738
-%     keyboard
-% end
 
 m_tg = variables.m_tg;
 U_tg = variables.U_tg;
@@ -2213,7 +2187,6 @@ r_q = g_q./w_q;
 
 if min(r_q) < 0
     disp('negative abscissa')
-    %     keyboard
 end
 
 % get the moments from gauss quadrature
@@ -2242,7 +2215,6 @@ end
 if max(V_bubi) > 1
     disp('V_bubi > 1!!')
     V_bubi(V_bubi>1) = 0.99;
-    %     keyboard
 end
 
 % get system pressure
@@ -2253,7 +2225,13 @@ if (P == pi) || isnan(P)
     disp('P error')
     constants.error_detected = 1;
     P = guesses.P;
-    %     keyboard
+end
+
+
+if P > constants.P_cr
+    disp('P greater than critical')
+    constants.error_detected = 1;
+    P = guesses.P;
 end
 
 % get density of liquid and ullage based on temperature and pressure
@@ -2302,7 +2280,6 @@ rho_tg = alpha*rho_tg_v + (1 - alpha)*rho_tg_l;
 % end
 
 % if x_tg > 1
-% %     keyboard
 %     disp('x_tg > 1')
 %     x_tg = 1;
 % end
@@ -2354,6 +2331,7 @@ Pr_l = nu_l/alpha_l;
 % a lot of these properties aren't needed until later, but by calculating
 % them here I can reduce the number of refprop calls. Note that the next
 % two refprop calls are for ullage properties (liquid and vapor parts)
+
 
 % properties needed for Vdot calculation (liquid)
 [u_tg_l_sat, rho_tg_l, dP_dT_tg_sat, drho_dP_T, drho_dT_P, dh_dT_P, dh_dP_T...
@@ -2407,32 +2385,19 @@ h_lv = h_tg_sat - h_l_sat;
 % superheat = T - T_sat
 deltaT_sup = T_l - T_s;
 
-% if abs(constants.outerloop_superheat - deltaT_sup)/deltaT_sup > 5e-2
-%     fprintf('superheat of outer loop and diff eqns differs. \n outer: %4.4g, inner: %4.4g\n', constants.outerloop_superheat, deltaT_sup)
-% end
-
 % mass flow rate out via injector
 
 % passing 2-phase properties
 % x = rho_tg_sat/rho_l / (1/V_bubi(1) + rho_tg_sat/rho_l - 1);
 x_out = constants.C_x_inj * V_bubi(1)/(V_bubi(1) + rho_l/rho_tg_sat*(1 - V_bubi(1)));
 
-% if x_inj < 0.05
-%     x_inj = x_inj + 0.05;
-% end
-
 rho_liq_mix = rho_l*(1-V_bubi(1)) + rho_tg_sat*V_bubi(1);
 s_liq_mix = s_l * (1-x_out) + s_tg_sat * x_out;
 h_liq_mix = h_l * (1-x_out) + h_tg_sat * x_out;
 
-% mdot_out_mix = A_inj*Cd*injector_flow(x_inj, P, hesson_fit);
-
 mdot_out_mix = A_inj*Cd*injector_flow(x_out, P, hesson_fit, rho_liq_mix, h_liq_mix, fluid, constants);
 mdot_out_liq = (1 - x_out)*mdot_out_mix;
 mdot_out_vap = x_out*mdot_out_mix;
-% passing straight liquid properties
-% from bottom node
-% mdot_out = A_inj*Cd*injector_flow(Po, P, T_l, rho_l, P_sat, s_l, h_l);
 
 % bulk flow velocity out the bottom
 if constants.include_u_bulk
@@ -2572,8 +2537,15 @@ Eo_min = min(min(Eo(1:N_full+1,:)));
 
 if sum(sum(isnan(u_rise(1:N_full+1,:)))) > 0
     disp('nans in u_rise')
-    %     keyboard
 end
+
+for i = 1:N_full + 1
+    u_superficial(i) = 4/3 * pi * sum(r_q(i,:).^(3) .* w_q(i,:) .* (u_rise(i,:)) );
+end
+% axial diffusivity (Hikita and Kikukawa, 1974)
+D_zz = (0.15 + 0.69*abs(u_superficial).^0.77)*D_tank^1.25 * mu_l^-0.12;
+% other expressions - page 185, #6
+
 
 duw_dx = zeros(size(w_q));
 dug_dx = duw_dx;
@@ -2590,79 +2562,79 @@ ug_vec = (u_rise).*g_q;
 for i = 1:N_full + 1
     % fluxes in and out of node
     
-%     %     1st order upwind
-%     if i > 1 && i < N_full + 1
-%         %         interior grid points
-%         
-%         for j = 1:N_ab
-%             %                     if u_rise(i,j) - u_bulk > 0
-%             %                     rising: flux in is from -x
-%             u_top = u_vec(i,j) + (u_vec(i+1,j) - u_vec(i,j))/(L_node(i+1) + L_node(i)) * L_node(i);
-%             u_bot = u_vec(i-1,j) + (u_vec(i,j) - u_vec(i-1,j))/(L_node(i) + L_node(i-1)) * L_node(i-1);
-%             flux_top = u_top*w_q(i,j);
-%             flux_bot = u_bot*w_q(i-1,j);
-%             %
-%             %                         flux_bot = w_q(i-1,j)*0.5*(u_vec(i,j) + u_vec(i-1,j));
-%             %                         flux_top = w_q(i,j)*0.5*(u_vec(i+1,j) + u_vec(i,j));
-%             duw_dx(i,j) = (flux_top - flux_bot)/L_node(i);
-%             
-%             flux_top = u_top*g_q(i,j);
-%             flux_bot = u_bot*g_q(i-1,j);
-%             
-%             %                         flux_bot = g_q(i-1,j)*0.5*(u_vec(i,j) + u_vec(i-1,j));
-%             %                         flux_top = g_q(i,j)*0.5*(u_vec(i+1,j) + u_vec(i,j));
-%             dug_dx(i,j) = (flux_top - flux_bot)/L_node(i);
-%             %                     else
-%             %     %                     falling: flux in is from +x
-%             %                         flux_top = w_q(i+1,j)*0.5*(u_vec(i+1,j) + u_vec(i,j));
-%             %                         flux_bot = w_q(i,j)*0.5*(u_vec(i,j) + u_vec(i-1,j));
-%             %                         duw_dx(i,j) = (flux_top - flux_bot)/L_node;
-%             %
-%             %                         flux_top = g_q(i+1,j)*0.5*(u_vec(i+1,j) + u_vec(i,j));
-%             %                         flux_bot = g_q(i,j)*0.5*(u_vec(i,j) + u_vec(i-1,j));
-%             %                         dug_dx(i,j) = (flux_top - flux_bot)/L_node;
-%             %                     end
-%             
-%         end
-%         
-%     else
-%         
-%         if i == 1
-%             %                 bottom point
-%             % try to use outflow as bottom BC
-%             u_top = u_vec(i,:) + (u_vec(i+1,:) - u_vec(i,:))/(L_node(i+1) + L_node(i)) * L_node(i);
-%             u_out = -u_bulk;
-%             flux_top = u_top.*w_q(i,:);
-%             flux_bot = u_out.*w_q(i,:);
-%             
-%             duw_dx(i,:) = (flux_top - flux_bot)/L_node(i);
-%             
-%             flux_top = u_top.*g_q(i,:);
-%             flux_bot = u_out.*g_q(i,:);
-%             
-%             dug_dx(i,:) = (flux_top - flux_bot)/L_node(i);
-%             
-%             
-%             %                     duw_dx(i,:) = uw_vec(i,:)/L_node(i);
-%             %                     dug_dx(i,:) = ug_vec(i,:)/L_node(i);
-%             %                             duw_dx(i,:) = (uw_vec(i+1,:) - uw_vec(i,:))/L_node;
-%             %                             dug_dx(i,:) = (ug_vec(i+1,:) - ug_vec(i,:))/L_node;
-%         else
-%             %                 top point
-%             duw_dx(i,:) = ( uw_vec(i,:) - uw_vec(i-1,:) )/(L_node(i));
-%             dug_dx(i,:) = ( ug_vec(i,:) - ug_vec(i-1,:) )/(L_node(i));
-%             %                     duw_dx(i,:) = zeros(size(uw_vec(i,:)));
-%             %                     dug_dx(i,:) = zeros(size(ug_vec(i,:)));
-%         end
-%     end
+    %     %     1st order upwind
+    %     if i > 1 && i < N_full + 1
+    %         %         interior grid points
+    %
+    %         for j = 1:N_ab
+    %             %                     if u_rise(i,j) - u_bulk > 0
+    %             %                     rising: flux in is from -x
+    %             u_top = u_vec(i,j) + (u_vec(i+1,j) - u_vec(i,j))/(L_node(i+1) + L_node(i)) * L_node(i);
+    %             u_bot = u_vec(i-1,j) + (u_vec(i,j) - u_vec(i-1,j))/(L_node(i) + L_node(i-1)) * L_node(i-1);
+    %             flux_top = u_top*w_q(i,j);
+    %             flux_bot = u_bot*w_q(i-1,j);
+    %             %
+    %             %                         flux_bot = w_q(i-1,j)*0.5*(u_vec(i,j) + u_vec(i-1,j));
+    %             %                         flux_top = w_q(i,j)*0.5*(u_vec(i+1,j) + u_vec(i,j));
+    %             duw_dx(i,j) = (flux_top - flux_bot)/L_node(i);
+    %
+    %             flux_top = u_top*g_q(i,j);
+    %             flux_bot = u_bot*g_q(i-1,j);
+    %
+    %             %                         flux_bot = g_q(i-1,j)*0.5*(u_vec(i,j) + u_vec(i-1,j));
+    %             %                         flux_top = g_q(i,j)*0.5*(u_vec(i+1,j) + u_vec(i,j));
+    %             dug_dx(i,j) = (flux_top - flux_bot)/L_node(i);
+    %             %                     else
+    %             %     %                     falling: flux in is from +x
+    %             %                         flux_top = w_q(i+1,j)*0.5*(u_vec(i+1,j) + u_vec(i,j));
+    %             %                         flux_bot = w_q(i,j)*0.5*(u_vec(i,j) + u_vec(i-1,j));
+    %             %                         duw_dx(i,j) = (flux_top - flux_bot)/L_node;
+    %             %
+    %             %                         flux_top = g_q(i+1,j)*0.5*(u_vec(i+1,j) + u_vec(i,j));
+    %             %                         flux_bot = g_q(i,j)*0.5*(u_vec(i,j) + u_vec(i-1,j));
+    %             %                         dug_dx(i,j) = (flux_top - flux_bot)/L_node;
+    %             %                     end
+    %
+    %         end
+    %
+    %     else
+    %
+    %         if i == 1
+    %             %                 bottom point
+    %             % try to use outflow as bottom BC
+    %             u_top = u_vec(i,:) + (u_vec(i+1,:) - u_vec(i,:))/(L_node(i+1) + L_node(i)) * L_node(i);
+    %             u_out = -u_bulk;
+    %             flux_top = u_top.*w_q(i,:);
+    %             flux_bot = u_out.*w_q(i,:);
+    %
+    %             duw_dx(i,:) = (flux_top - flux_bot)/L_node(i);
+    %
+    %             flux_top = u_top.*g_q(i,:);
+    %             flux_bot = u_out.*g_q(i,:);
+    %
+    %             dug_dx(i,:) = (flux_top - flux_bot)/L_node(i);
+    %
+    %
+    %             %                     duw_dx(i,:) = uw_vec(i,:)/L_node(i);
+    %             %                     dug_dx(i,:) = ug_vec(i,:)/L_node(i);
+    %             %                             duw_dx(i,:) = (uw_vec(i+1,:) - uw_vec(i,:))/L_node;
+    %             %                             dug_dx(i,:) = (ug_vec(i+1,:) - ug_vec(i,:))/L_node;
+    %         else
+    %             %                 top point
+    %             duw_dx(i,:) = ( uw_vec(i,:) - uw_vec(i-1,:) )/(L_node(i));
+    %             dug_dx(i,:) = ( ug_vec(i,:) - ug_vec(i-1,:) )/(L_node(i));
+    %             %                     duw_dx(i,:) = zeros(size(uw_vec(i,:)));
+    %             %                     dug_dx(i,:) = zeros(size(ug_vec(i,:)));
+    %         end
+    %     end
     
     % diffusion terms
     
     if i > 1 && i < N_full + 1
         
-        D_ip2 = 1;
-        D_im2 = 1;
-        D_i = 1;
+        D_ip2 = 0.5*( D_zz(i+1) + D_zz(i) );
+        D_im2 = 0.5*( D_zz(i) + D_zz(i-1) );
+        D_i = D_zz(i);
         
         dDdw_dx2(i,:) = ( D_ip2 * ( w_q(i+1,:) - w_q(i,:) ) - ...
             D_im2 * ( w_q(i,:) - w_q(i-1,:) ) )/L_node(i)^2;
@@ -2676,106 +2648,138 @@ for i = 1:N_full + 1
         
     else
         if i == 1
+            % bottom
+            % use one-sided differences
             dDdw_dx2(i,:) = zeros(1,N_ab);
             dDdg_dx2(i,:) = zeros(1,N_ab);
             C(i,:) = zeros(1,N_ab);
+            
+%             w_q_bottom = zeros(size(w_q(i,:)));
+%             g_q_bottom = zeros(size(w_q(i,:)));
+%             
+%             D_ip2 = 0.5*( D_zz(i+1) + D_zz(i) );
+%             D_im2 = D_zz(i);
+%             D_i = D_zz(i);
+% 
+%             dDdw_dx2(i,:) = ( D_ip2 * ( w_q(i+1,:) - w_q(i,:) ) - ...
+%                 D_im2 * ( w_q(i,:) - w_q_bottom ) ) /L_node(i)^2;
+% 
+%             dDdg_dx2(i,:) = ( D_ip2 * ( g_q(i+1,:) - g_q(i,:) ) - ...
+%                 D_im2 * ( g_q(i,:) - g_q_bottom ) )/L_node(i)^2;
+% 
+%             dr_dx = ( r_q(i+1,:) - r_q(i,:) )/( L_node(i));
+% 
+%             C(i,:) = w_q(i,:) .* D_i .* dr_dx.^2;
+            
+            
+%             D_i = D_zz(i);
+%             dDdw_dx2(i,:) = D_i * (w_q(i,:) - 2*w_q(i+1,:) + w_q(i+2,:) )/(L_node(i)^2);
+%             dDdg_dx2(i,:) = D_i * (g_q(i,:) - 2*g_q(i+1,:) + g_q(i+2,:) )/(L_node(i)^2);
+%             dr_dx = (r_q(i+1,:) - r_q(i,:) )/L_node(i);
+%             C(i,:) = w_q(i,:) .* D_i .* dr_dx.^2;
         else
-            dDdw_dx2(i,:) = zeros(1,N_ab);
-            dDdg_dx2(i,:) = zeros(1,N_ab);
-            C(i,:) = zeros(1,N_ab);
+            % top point
+%             use one-sided differences
+%             dDdw_dx2(i,:) = zeros(1,N_ab);
+%             dDdg_dx2(i,:) = zeros(1,N_ab);
+%             C(i,:) = zeros(1,N_ab);
+%             
+if 
+            D_i = D_zz(i);
+            dDdw_dx2(i,:) = D_i * (w_q(i,:) - 2*w_q(i-1,:) + w_q(i-2,:) )/(L_node(i)^2);
+            dDdg_dx2(i,:) = D_i * (g_q(i,:) - 2*g_q(i-1,:) + g_q(i-2,:) )/(L_node(i)^2);
+            dr_dx = (r_q(i,:) - r_q(i-1,:) )/L_node(i);
+            C(i,:) = w_q(i,:) .* D_i .* dr_dx.^2;
         end
     end
     
     
     
-        % MUSCL
+    % MUSCL
     if i > 2 && i < N_full
         % interior grid points
-
+        
         for j = 1:N_ab
-
+            
             % vector of the abscissas and weights
             U = [w_q(:,j)'; g_q(:,j)'];
-
+            
             % flow velocity
             u = u_vec(:,j)';
-
+            
             % flux limiters
             r_U = (U(:,i) - U(:,i-1))./(U(:,i+1) - U(:,i));
             r_u = (u(i) - u(i-1))/(u(i+1) - u(i));
-
+            
             flux_limiter_ui = max([0, min(1, r_u)]);
             flux_limiter_Ui(1) = max([0, min(1, r_U(1))]);
             flux_limiter_Ui(2) = max([0, min(1, r_U(2))]);
-
+            
             r_U = (U(:,i+1) - U(:,i))./(U(:,i+2) - U(:,i+1));
             r_u = (u(i+1) - u(i))/(u(i+2) - u(i+1));
-
+            
             flux_limiter_uip1 = max([0, min(1, r_u)]);
             flux_limiter_Uip1(1) = max([0, min(1, r_U(1))]);
             flux_limiter_Uip1(2) = max([0, min(1, r_U(2))]);
-
+            
             r_U = (U(:,i-1) - U(:,i-2))./(U(:,i) - U(:,i-1));
             r_u = (u(i-1) - u(i-2))/(u(i) - u(i-1));
-
+            
             flux_limiter_uim1 = max([0, min(1, r_u)]);
             flux_limiter_Uim1(1) = max([0, min(1, r_U(1))]);
             flux_limiter_Uim1(2) = max([0, min(1, r_U(2))]);
-
+            
             % flux through top(i + 1/2)
             uL = u(i) + 0.5*flux_limiter_ui*(u(i+1) - u(i));
             uR = u(i+1) - 0.5*flux_limiter_uip1*(u(i+2) - u(i+1));
-
+            
             UL = U(:,i) + 0.5*flux_limiter_Ui'.*(U(:,i+1) - U(:,i));
             UR = U(:,i+1) - 0.5*flux_limiter_Uip1'.*(U(:,i+2) - U(:,i+1));
-
+            
             a = max([abs(uL), abs(uR)]);
-
+            
             FR = uR*UR;
             FL = uL*UL;
-
+            
             F_star_top = 0.5*( (FR + FL) - a*(UR - UL) );
-
+            
             % flux through bottom(i - 1/2)
             uL = u(i-1) + 0.5*flux_limiter_uim1*(u(i) - u(i-1));
             uR = u(i) - 0.5*flux_limiter_ui*(u(i+1) - u(i));
-
+            
             UL = U(:,i-1) + 0.5*flux_limiter_Uim1'.*(U(:,i) - U(:,i-1));
             UR = U(:,i) - 0.5*flux_limiter_Ui'.*(U(:,i+1) - U(:,i));
-
+            
             a = max([abs(uL), abs(uR)]);
-
+            
             FR = uR*UR;
             FL = uL*UL;
-
+            
             F_star_bot = 0.5*( (FR + FL) - a*(UR - UL) );
-
+            
             dF_dx = (F_star_top - F_star_bot)/L_node(i);
-
+            
             duw_dx(i,j) = dF_dx(1);
             dug_dx(i,j) = dF_dx(2);
-
+            
         end
-
+        
     else
-
+        
         if i == 1
             % bottom point
             % there's flux out the top and nothing out the bottom
-            % also L_node = 1/2 L_node
-            %             duw_dx(i,:) = uw_vec(i,:)/L_node;
-            %             dug_dx(i,:) = ug_vec(i,:)/L_node;
-
-
-            flux_bot = 0;%w_q(i-1,:).*0.5.*(u_vec(i,:) + u_vec(i-1,:));
+            % (assuming no u bulk)
+            
+            flux_bot = 0;
             flux_top = w_q(i,:).*0.5.*(u_vec(i+1,:) + u_vec(i,:));
             duw_dx(i,:) = 2*(flux_top - flux_bot)/L_node(i);
-
-            flux_bot = 0;%g_q(i-1,:).*0.5.*(u_vec(i,:) + u_vec(i-1,:));
+            
+            flux_bot = 0;
             flux_top = g_q(i,:).*0.5.*(u_vec(i+1,:) + u_vec(i,:));
             dug_dx(i,:) = 2*(flux_top - flux_bot)/L_node(i);
-
-
+            
+            
             %             duw_dx(i,:) = (uw_vec(i+1,:) - uw_vec(i,:))/L_node;
             %             dug_dx(i,:) = (ug_vec(i+1,:) - ug_vec(i,:))/L_node;
         else
@@ -2783,26 +2787,26 @@ for i = 1:N_full + 1
                 % top point -> backwards difference
                 %                 duw_dx(i,:) = ( uw_vec(i,:) - uw_vec(i-1,:) )/(L_node);
                 %                 dug_dx(i,:) = ( ug_vec(i,:) - ug_vec(i-1,:) )/(L_node);
-
+                
                 flux_bot = w_q(i-1,:).*0.5.*(u_vec(i,:) + u_vec(i-1,:));
                 flux_top = w_q(i,:).*u_vec(i,:);
                 duw_dx(i,:) = (flux_top - flux_bot)/L_node(i);
-
+                
                 flux_bot = g_q(i-1,:).*0.5.*(u_vec(i,:) + u_vec(i-1,:));
                 flux_top = g_q(i,:).*u_vec(i,:);
                 dug_dx(i,:) = (flux_top - flux_bot)/L_node(i);
             else
                 % upwind it
-
+                
                 % %      rising: flux in is from -x
                 flux_bot = w_q(i-1,:).*0.5.*(u_vec(i,:) + u_vec(i-1,:));
                 flux_top = w_q(i,:).*0.5.*(u_vec(i+1,:) + u_vec(i,:));
                 duw_dx(i,:) = (flux_top - flux_bot)/L_node(i);
-
+                
                 flux_bot = g_q(i-1,:).*0.5.*(u_vec(i,:) + u_vec(i-1,:));
                 flux_top = g_q(i,:).*0.5.*(u_vec(i+1,:) + u_vec(i,:));
                 dug_dx(i,:) = (flux_top - flux_bot)/L_node(i);
-
+                
                 %             if i == 2
                 %                 duw_dx(i,:) = (uw_vec(i,:) - uw_vec(i-1,:))/L_node;
                 %                 dug_dx(i,:) = (ug_vec(i,:) - ug_vec(i-1,:))/L_node;
@@ -2819,9 +2823,8 @@ for i = 1:N_full + 1
     
 end
 
-if deltaT_sup > 15
-    disp('real superheat!')
-    %     keyboard
+if constants.step == 1 && (deltaT_sup < 0 && constants.t > 0.1)
+    disp('subcooled')
 end
 
 
@@ -3061,15 +3064,11 @@ for i = 1:N_full + 1
         
         
     else
-%         if deltaT_sup < -0.5
-%             disp('real subcooled')
-%             %             keyboard
-%         end
+        
         % no superheat -> no bubble growth or nucleation
         r_nuc = 0;
         rdot = 0;
         nuc_rate = 0;
-        C_death_rate = 0;
         
     end
     
@@ -3155,7 +3154,7 @@ for i = 1:N_full + 1
     coal_death_s = zeros(2*N_ab,1);
     
     % only bother if I've turned it on
-    if strcmp(constants.coalescence_switch,'on')
+    if C_coalescence(1) > 0
         
         % most of this is from prince and blanch (1990)
         % buoyancy and turbulence driven
@@ -3297,8 +3296,7 @@ for i = 1:N_full + 1
             linear_eqn_counter = linear_eqn_counter + 1;
             if linear_eqn_counter >= 25
                 fprintf('linear equation solver not converging, rcond = %0.4g, min dr/r = %0.4g\n',rcond(A), min(abs(dr./rbar)) )
-                alpha_q = A\beta_q;
-                %                 keyboard
+                alpha_q = A\d;
                 not_converging = 0;
             end
             
@@ -3531,7 +3529,6 @@ y_predictions = y + dy * constants.h;
 
 if min(y_predictions) < 0
     disp('predicting y < 0')
-    %     keyboard
 end
 
 if ~sum(isreal(dy(:))) || sum(isnan(dy(:)))
@@ -3540,6 +3537,8 @@ if ~sum(isreal(dy(:))) || sum(isnan(dy(:)))
 end
 
 % correct for negative stuff
+% only if we found negative entries and dy for those is < 0
+% (otherwise if dy > 0, it was correcting itself)
 if ~isempty(ind_negative) && sum( dy(ind_negative) < 0 ) > 0
     % we have negative dydt where y < 0!
     for i = 1:length(ind_negative)
