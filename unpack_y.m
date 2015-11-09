@@ -98,7 +98,7 @@ else
             fprintf('node %0.d, weighted abscissa no. %0.d', ind_node, ind_abs)
         end
     end
-    fprintf(' rel error is %0.3g\n', rel_err)
+    fprintf(' rel error is %0.3g, abs(y) = %0.3g\n', rel_err, abs(y(ind_max_rel_err)) )
 end
 
 

@@ -238,7 +238,7 @@ switch specified_case
         Cd = 0.6545;
 
     case 12
-        % CO2 test #257 with glass gauge
+        % CO2 test #257 with glass gauge (t_LRO = 5.96)
         fluid = 'CO2';
         Ti = 17.6+273.15;           % [K] initial temperature
         fill_level = 0.825;        % [] initial fill_level ratio (by volume)
@@ -258,6 +258,7 @@ switch specified_case
         
         d_inj = 0.089 * 0.0254;
         A_inj = pi/4 * (d_inj^2);
-        Cd = 0.6545;
+%         Cd = 0.6545;
+Cd = 0.80;
                 
 end

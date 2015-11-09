@@ -7,14 +7,14 @@ close all
 m_out = cumtrapz(t, mdot_out_liq + mdot_out_vap);
 mh_out = cumtrapz(t, (mdot_out_liq.*h_l + mdot_out_vap.*h_tg_sat));
 
-T_l = y(4+N_rw,:);
-m_l = y(3+N_rw,:);
+% T_l = y(4+N_rw,:);
+% m_l = y(3+N_rw,:);
 
-m_tg = y(1,:);
+% m_tg = y(1,:);
 
-T_lw_in = y(5+N_rw,:);
-T_gw_in = y(3,:);
-T_lw_out = y(4+2*N_rw,:);
+% T_lw_in = y(5+N_rw,:);
+% T_gw_in = y(3,:);
+% T_lw_out = y(4+2*N_rw,:);
 
 % P vs t
 figure(1)
@@ -72,16 +72,26 @@ ND = SMD;
 x_nodes = linspace(0,1,N_nodes)';
 r_nodes = linspace(0,1,N_rw);
 
-mom = cell2mat(mom);
-V_bubi = cell2mat(V_bubi);
+
+r_q_mat = zeros(length(t), N_ab, N_nodes);
+g_q_mat = r_q_mat;
+w_q_mat = r_q_mat;
+
+for l = 2:length(t)
+    for j = 1:N_nodes
+        r_q_mat(l,:,j) = r_q{l}(j,:);
+        g_q_mat(l,:,j) = g_q{l}(j,:);
+        w_q_mat(l,:,j) = w_q{l}(j,:);
+    end
+end
 
 
 for i = 1:length(t_plot)
     [~,i_plot] = min(abs(t - t_plot(i)));
     ind_full = 1:(N_full(i_plot));
-    SMD(ind_full,i) = mom(ind_full,4,i_plot)./mom(ind_full,3,i_plot);
-    alpha(ind_full,i) = V_bubi(ind_full,i_plot);
-    ND(ind_full,i) = mom(ind_full,1,i_plot);
+    SMD(ind_full,i) = mom{i_plot}(ind_full,4)./mom{i_plot}(ind_full,3);
+    alpha(ind_full,i) = V_bubi{i_plot}(ind_full);
+    ND(ind_full,i) = mom{i_plot}(ind_full,1);
     
     figure(6)
     hold on
