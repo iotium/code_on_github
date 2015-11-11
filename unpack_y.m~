@@ -85,7 +85,7 @@ else
             ind_w_err = ind_max_rel_err - (4+2*N_rw);
             
     ind_node = floor( ind_w_err/N_ab);
-            ind_weight = rem(ind_w_err,N_ab);
+            ind_abs = rem(ind_w_err,N_ab);
             
 %             [ind_node, ind_weight] = ind2sub([ N_nodes, N_ab], ind_w_err);
             

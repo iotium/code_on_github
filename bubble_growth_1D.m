@@ -73,7 +73,7 @@ constants.error_norm = 'L-infinity';
 % constants.error_norm = 'L-1';
 
 constants.include_rdot_rhodot = 0;  % include bubble size changes that occur due to gas density changing
-constants.include_hysteresis = 0;   % include hysteresis in the bubble nucleation process
+constants.include_hysteresis = 1;   % include hysteresis in the bubble nucleation process
 constants.include_u_bulk = 0;       % include a bulk velocity based on the liquid flowing out the orifice
 constants.ADQMOM_p = 1;             % set the scale factor for ADQMOM
 constants.adaptive_mesh_refinement = 0; % include adaptive mesh refinement
@@ -112,7 +112,7 @@ rel_tol = 1e-3;     % [] max relative error allowed in adaptive scheme
 constants.C_qdot_lw = 1e-4; % multiplies the heat transfer from wall to liquid
 constants.C_coalescence = [0 1 1]; % collision efficiency,
 % laminar shear, turbulence (buoyancy is the third)
-constants.C_nuc_rate = 1e-1; % multiplies the nucleation rate
+constants.C_nuc_rate = 1e-6; % multiplies the nucleation rate
 
 newton_tol = 0.1; % (tolerance for quasi newton iteration, relative to rel_tol)
 max_iter = 5; % max number of quasi newton iterations
@@ -503,7 +503,7 @@ while running == 1;
     Pdot = 0.5*Pdot + 0.5*bdiff(P,starti,n,t,adaptive);
     %     rhodot_l = 0.1*rhodot_l + 0.9*bdiff(rho_l,starti,n,t,adaptive);
     %     rhodot_tg = 0.1*rhodot_tg + 0.9*bdiff(rho_tg,starti,n,t,adaptive);
-    Vdot_l(n+1) = V_tank*bdiff(V_l/V_tank,starti,n,t,adaptive);
+%     Vdot_l(n+1) = V_tank*bdiff(V_l/V_tank,starti,n,t,adaptive);
     %     Vdot_tg(n+1) = V_tank*bdiff(V_tg/V_tank,starti,n,t,adaptive);
     
     % filter quantities that are needed from previous time steps to help
@@ -521,14 +521,16 @@ while running == 1;
         
         t_filt = linspace(t(n-N_filter_pts),t(n),N_filter_pts+1);
         
-        LL_for_filter = interp1(t(n-N_filter_pts:n),L_tank*V_l_star(n-N_filter_pts:n)/V_tank, t_filt,'linear');
+        LL_for_filter = interp1(t(n-N_filter_pts:n),V_l_star(n-N_filter_pts:n)*(L_tank/V_tank), t_filt,'linear');
         rho_tg_sat_for_filter = interp1(t(n-N_filter_pts:n),rho_tg_sat(n-N_filter_pts:n), t_filt,'linear');
         
         f_sample = 1/mean(diff(t_filt));
         f_cutoff = f_cutoff_norm*f_sample/2;
         
-        if f_cutoff > 20
-            f_cutoff_norm = 20/(0.5*f_sample);
+        % only change the filter if the corner frequency got too high or
+        % too low (b/c of time step getting small/large)
+        if f_cutoff > 100
+            f_cutoff_norm = 100/(0.5*f_sample);
             if f_cutoff_norm < 1
                 
                 %                 [b_filter,a_filter] = butter(filter_order, f_cutoff_norm, 'low');
@@ -536,8 +538,8 @@ while running == 1;
                 filter_design = design(filter_handle,'butter');
                 
             end
-        elseif f_cutoff < 4
-            f_cutoff_norm = 4/(0.5*f_sample);
+        elseif f_cutoff < 20
+            f_cutoff_norm = 20/(0.5*f_sample);
             if f_cutoff_norm < 1
                 %                 [b_filter,a_filter] = butter(filter_order, f_cutoff_norm, 'low');
                 filter_handle = fdesign.lowpass('N,F3dB',filter_order, f_cutoff_norm);
@@ -552,8 +554,8 @@ while running == 1;
         
 %         guesses.rhodot_tg_sat = bdiff(rho_tg_sat_filtered, 8, 11, t_filt, 0);
         
-        guesses.rhodot_tg_sat = finite_diff(rho_tg_sat_filtered, 1, ...
-            N_filter_pts+1, N_filter_pts+1, 1/mean(diff(t_filt)), 'backwards', 3);
+        guesses.rhodot_tg_sat = 0;%finite_diff(rho_tg_sat_filtered, 1, ...
+            %N_filter_pts+1, N_filter_pts+1, mean(diff(t_filt)), 'backwards', 2);
         
         %         LL_filtered = filtfilt(b_filter, a_filter, LL_for_filter);
         LL_filtered = filtfilt(filter_design.sosMatrix, ...
@@ -561,8 +563,8 @@ while running == 1;
         
 %         guesses.dLL_dt = bdiff(LL_filtered, 8, 11, t_filt, 0);
         
-        guesses.dLL_dt = finite_diff(LL_filtered, 1, ...
-            N_filter_pts+1, N_filter_pts+1, 1/mean(diff(t_filt)), 'backwards', 3);
+        guesses.dLL_dt = 0;%finite_diff(LL_filtered, 1, ...
+            %N_filter_pts+1, N_filter_pts+1, mean(diff(t_filt)), 'backwards', 2);
         
         
     else
@@ -571,16 +573,19 @@ while running == 1;
         guesses.dLL_dt = 0;
     end
     
-    Vdot_bub(n+1) = bdiff(V_bub, starti, n, t, adaptive);
+    dLL_dt(n+1) = guesses.dLL_dt;
+    rhodot_tg_sat(n+1) = guesses.rhodot_tg_sat;
     
-    if h > 5*h_min
-        
-        guesses.Vdot_l = 0.5*Vdot_l(n+1) + 0.5*guesses.Vdot_l;
-        
-    else
-        
-        guesses.Vdot_l = 0;
-    end
+%     Vdot_bub(n+1) = bdiff(V_bub, starti, n, t, adaptive);
+    
+%     if h > 5*h_min
+%         
+%         guesses.Vdot_l = 0.5*Vdot_l(n+1) + 0.5*guesses.Vdot_l;
+%         
+%     else
+%         
+%         guesses.Vdot_l = 0;
+%     end
     
     constants.outerloop_superheat = deltaT_sup(n);
     
@@ -616,9 +621,9 @@ while running == 1;
         
         fprintf(['t = %#4.4g, dt = %#4.4g, P = %#4.4g, alpha = %#4.4g, dT_sup = %#6.6g,' ...
             ' V_bub = %#4.4g, T_l = %#4.4g, m_l/m_li = %#4.4g,'...
-            ' m_tg/m_tgi -1 = %#4.4g, fill_level%% = %#4.4g, Vdot_l = %#4.4g\n'],...
+            ' m_tg/m_tgi -1 = %#4.4g, fill_level%% = %#4.4g\n'],...
             t(n), t(n) - t(max([1, n-1])), P(n)/1e6, gas_holdup(n), deltaT_sup(n), ...
-            V_bub(n), T_l(n), m_l(n)/m_l(1), m_tg(n)/m_tg(1)-1, 100*fill_level(n), Vdot_l(n+1));
+            V_bub(n), T_l(n), m_l(n)/m_l(1), m_tg(n)/m_tg(1)-1, 100*fill_level(n));
         
         
     end
@@ -1246,12 +1251,20 @@ while running == 1;
                 err = k_ode*(b - bs);   % absolute error (diff. between 5th and 4th order estimates of y(n+1) - y(n))
             end
             
+            
+            
             for j = 1:N_dim
 %                 if exist('i_empty','var') && ~any(j == i_empty)
-                    rel_err(j) = abs(err(j))./( abs( y_current(j) )  + 1e-8);  % relative error
+                    rel_err(j) = abs( err(j) /( mean([y_current(j) y_new(j)])  + 1e-8) );  % relative error
 %                 else
 %                     rel_err(j) = 1e-16;
 %                 end
+
+% if j > 4+2*N_rw
+%     if y_new(j) > 1e6
+%         rel_err(j) = abs( (log(y_new(j)) - log(g_star(j)))/( log(y_current(j)) + 1e-8) );
+%     end
+% end
             end
             
             
@@ -1296,10 +1309,11 @@ while running == 1;
             
             error_estimate = rel_err;
             
-            if n == 1
+            if n == 1 || (n > n_reset + 50)
                 h_past = h;
                 error_estimate_past = error_estimate;
                 sh_max = constants.sh_max;
+                n_reset = n;
             end
             
             %             sh = 0.7 * (rel_tol/rel_err).^(1/(p_tilde + 1));
@@ -2669,7 +2683,7 @@ for i = 1:N_full + 1
     u_superficial(i) = 4/3 * pi * sum(r_q(i,:).^(3) .* w_q(i,:) .* (u_rise(i,:)) );
 end
 % axial diffusivity (Hikita and Kikukawa, 1974)
-D_zz = (0.15 + 0.69*abs(u_superficial).^0.77)*D_tank^1.25 * mu_l^-0.12;
+D_zz = 0.1 * (0.15 + 0.69*abs(u_superficial).^0.77)*D_tank^1.25 * mu_l^-0.12;
 % other expressions - page 185, #6
 
 
@@ -2684,6 +2698,7 @@ ug_vec = (u_rise).*g_q;
 % uw_vec = (u_rise - u_bulk).*w_q;
 % ug_vec = (u_rise - u_bulk).*g_q;
 
+% fourier_number = mean(D_zz) * constants.h / mean(L_node)^2;
 
 for i = 1:N_full + 1
     
@@ -2738,7 +2753,7 @@ for i = 1:N_full + 1
                 %             dr_dx = (r_q(i+1,:) - r_q(i,:) )/L_node(i);
                 %             C(i,:) = w_q(i,:) .* D_i .* dr_dx.^2;
             else
-                % top point
+                % top points (N_full, N_full + 1)
                 %             use one-sided differences
                 %             dDdw_dx2(i,:) = zeros(1,N_ab);
                 %             dDdg_dx2(i,:) = zeros(1,N_ab);
@@ -2772,8 +2787,9 @@ for i = 1:N_full + 1
     
     
     % MUSCL
-    if i > 2 && i <= N_full
+    if i > 2 && i < N_full
         % interior grid points
+        % have to be able to do i+2 and i-2
         % i >= 3 and N_full >= 4
         
         for j = 1:N_ab
@@ -3584,8 +3600,8 @@ mdot_gw = 4*Vdot_tg*t_w*rho_w/D_tank;
 % rate of change of temperature of liquid wall
 % Tdot_lw = (Qdot_alw - Qdot_lw - Qdot_wc)/(m_lw*cv_w);
 
-Tdot_lw = wall_conduction(T_lw, Qdot_lw, Qdot_alw, constants);
-Tdot_gw = wall_conduction(T_gw, Qdot_gw, Qdot_agw, constants);
+Tdot_lw = zeros(size(T_lw));%wall_conduction(T_lw, Qdot_lw, Qdot_alw, constants);
+Tdot_gw = zeros(size(T_gw));%wall_conduction(T_gw, Qdot_gw, Qdot_agw, constants);
 
 alpha_w = k_w/(rho_w * cv_w);
 
