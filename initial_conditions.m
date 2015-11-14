@@ -259,6 +259,6 @@ switch specified_case
         d_inj = 0.089 * 0.0254;
         A_inj = pi/4 * (d_inj^2);
 %         Cd = 0.6545;
-Cd = 0.80;
+Cd = 0.77;
                 
 end

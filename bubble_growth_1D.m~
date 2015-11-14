@@ -109,10 +109,10 @@ sh_min = 0.1; % min relative decrease in step size
 N_nodes = 32;
 N_mom = 4;
 rel_tol = 1e-3;     % [] max relative error allowed in adaptive scheme
-constants.C_qdot_lw = 1e-4; % multiplies the heat transfer from wall to liquid
+constants.C_qdot_lw = 1e-5; % multiplies the heat transfer from wall to liquid
 constants.C_coalescence = [0 1 1]; % collision efficiency,
 % laminar shear, turbulence (buoyancy is the third)
-constants.C_nuc_rate = 1e-6; % multiplies the nucleation rate
+constants.C_nuc_rate = 1e-8; % multiplies the nucleation rate
 
 newton_tol = 0.1; % (tolerance for quasi newton iteration, relative to rel_tol)
 max_iter = 5; % max number of quasi newton iterations
@@ -479,6 +479,10 @@ filter_order = 3;
 filter_handle = fdesign.lowpass('N,F3dB',filter_order, f_cutoff_norm);
 filter_design = design(filter_handle,'butter');
 
+node_level_cell = cell(1);
+node_level_cell{1} = node_level;
+node_level = node_level_cell;
+
 h_min_error_count = 0;
 diff_eqns_error_flag = 0;
 n_increase = 0;
@@ -554,8 +558,8 @@ while running == 1;
         
 %         guesses.rhodot_tg_sat = bdiff(rho_tg_sat_filtered, 8, 11, t_filt, 0);
         
-        guesses.rhodot_tg_sat = 0;%finite_diff(rho_tg_sat_filtered, 1, ...
-            %N_filter_pts+1, N_filter_pts+1, mean(diff(t_filt)), 'backwards', 2);
+        guesses.rhodot_tg_sat = finite_diff(rho_tg_sat_filtered, 1, ...
+            N_filter_pts+1, N_filter_pts+1, mean(diff(t_filt)), 'backwards', 2);
         
         %         LL_filtered = filtfilt(b_filter, a_filter, LL_for_filter);
         LL_filtered = filtfilt(filter_design.sosMatrix, ...
@@ -563,8 +567,8 @@ while running == 1;
         
 %         guesses.dLL_dt = bdiff(LL_filtered, 8, 11, t_filt, 0);
         
-        guesses.dLL_dt = 0;%finite_diff(LL_filtered, 1, ...
-            %N_filter_pts+1, N_filter_pts+1, mean(diff(t_filt)), 'backwards', 2);
+        guesses.dLL_dt = finite_diff(LL_filtered, 1, ...
+            N_filter_pts+1, N_filter_pts+1, mean(diff(t_filt)), 'backwards', 2);
         
         
     else
@@ -1255,7 +1259,7 @@ while running == 1;
             
             for j = 1:N_dim
 %                 if exist('i_empty','var') && ~any(j == i_empty)
-                    rel_err(j) = abs( err(j) / mean([y_current(j) y_new(j)]) )  + 1e-8);  % relative error
+                    rel_err(j) = abs( err(j) /( mean([y_current(j) y_new(j)])  + 1e-8) );  % relative error
 %                 else
 %                     rel_err(j) = 1e-16;
 %                 end
@@ -1286,6 +1290,8 @@ while running == 1;
             
             abs_err = max(abs_err(isfinite(abs_err)));  % do the same for abs_err
             
+            
+            
             % check for possible problems: isempty statements are in case
             % abs and rel err are both full of non-finite values
             % isnan checks for nan's
@@ -1304,6 +1310,9 @@ while running == 1;
                 disp('encountered a problem with the error terms')
             end
             
+            if isempty(abs_err)
+                abs_err = 1;
+            end
             
             % pick new step size
             
@@ -1329,7 +1338,7 @@ while running == 1;
             end
             
             sh = min( sh_max, max( 0.1, 0.8 * sh) );
-            
+%             fprintf('rel err = %0.3g\n',rel_err)
             if ( rel_err < rel_tol && abs_err < abs_tol) || (h < h_min)
                 % meeting the error requirement or step size is too
                 % small already
@@ -1382,6 +1391,7 @@ while running == 1;
                 
                 % not meeting error requirements
                 % sh is used to update h, h = sh*h
+                
                 
                 if rel_err == 0 || abs_err == 0
                     % something odd happened, so reduce step size a lot
@@ -1810,12 +1820,12 @@ while running == 1;
     T_gw(:,n+1) = debug_data.T_gw;
     u_rise{n+1} = debug_data.u_rise;
     N_bubi{n+1} = debug_data.N_bubi;
-    N_full(n+1) = debug_data.N_full;
     mdot_tg(n+1) = debug_data.mdot_tg;
     mdot_bub_l{n+1} = debug_data.mdot_bub_l;
     mdot_bub_tg{n+1} = debug_data.mdot_bub_tg;
     mdot_l(n+1) = debug_data.mdot_l;
     Cp_l(n+1) = debug_data.Cp_l;
+    node_level{n+1} = debug_data.node_level;
     diff_eqns_error_flag = debug_data.diff_eqns_error_flag;
     
     
@@ -1899,7 +1909,7 @@ while running == 1;
     guesses.P = P(n+1);
     guesses.rho_tg = rho_tg(n+1);
     guesses.rho_l = rho_l(n+1);
-    guesses.node_level = node_level;
+    guesses.node_level = node_level{n+1};
     
     t(n+1) = t(n) + h;
     
@@ -2353,8 +2363,11 @@ if sum(imag(V_bubi)) > 0
 end
 
 if max(V_bubi) > 1
-    disp('V_bubi > 1!!')
+    ind_V_bubi_gt1 = find(V_bubi > 1);
     V_bubi(V_bubi>1) = 0.99;
+    V_bubi_error_flag = 1;
+else
+    V_bubi_error_flag = 0;
 end
 
 % get system pressure
@@ -2446,6 +2459,14 @@ V_l_star = V_l + V_bub;
 
 % number of nodes still in the liquid (completely)
 N_full = sum(node_level == 1);
+
+if V_bubi_error_flag
+    if min(ind_V_bubi_gt1) < N_full + 1
+        %V_bubi is > 1 at a node we care about
+    else
+        V_bubi_error_flag = 0;
+    end
+end
 
 V_tg = m_tg/rho_tg;
 
@@ -2683,7 +2704,7 @@ for i = 1:N_full + 1
     u_superficial(i) = 4/3 * pi * sum(r_q(i,:).^(3) .* w_q(i,:) .* (u_rise(i,:)) );
 end
 % axial diffusivity (Hikita and Kikukawa, 1974)
-D_zz = 0.1 * (0.15 + 0.69*abs(u_superficial).^0.77)*D_tank^1.25 * mu_l^-0.12;
+D_zz = (0.15 + 0.69*abs(u_superficial).^0.77)*D_tank^1.25 * mu_l^-0.12;
 % other expressions - page 185, #6
 
 
@@ -3496,12 +3517,15 @@ mdot_bub_l(N_full+2:N_nodes) = 0;
 mdot_bub_injector = pi/4*D_tank^2 * rho_tg_sat * death_term_injector;
 
 % need to deal with dw_dt and dg_dt for the nodes that have left the liquid
+% set them equal to the top node in case the fill level rises
 for i = N_full+2:N_nodes
     
     ind_node = (i-1)*N_ab + [1:N_ab];
     
-    dw_dt(ind_node) = zeros(1,N_ab);
-    dg_dt(ind_node) = zeros(1,N_ab);
+    ind_Nfp1 = ((N_full + 1) -1)*N_ab + [1:N_ab];
+    
+    dw_dt(ind_node) = dw_dt(ind_Nfp1);
+    dg_dt(ind_node) = dg_dt(ind_Nfp1);
     
 end
 
@@ -3600,8 +3624,8 @@ mdot_gw = 4*Vdot_tg*t_w*rho_w/D_tank;
 % rate of change of temperature of liquid wall
 % Tdot_lw = (Qdot_alw - Qdot_lw - Qdot_wc)/(m_lw*cv_w);
 
-Tdot_lw = zeros(size(T_lw));%wall_conduction(T_lw, Qdot_lw, Qdot_alw, constants);
-Tdot_gw = zeros(size(T_gw));%wall_conduction(T_gw, Qdot_gw, Qdot_agw, constants);
+Tdot_lw = wall_conduction(T_lw, Qdot_lw, Qdot_alw, constants);
+Tdot_gw = wall_conduction(T_gw, Qdot_gw, Qdot_agw, constants);
 
 alpha_w = k_w/(rho_w * cv_w);
 
@@ -3669,7 +3693,9 @@ end
 %
 % % net rate of change of liquid mass
 % mdot_l = - sum(mdot_bub_l) - mdot_out_liq;
-
+if V_bubi_error_flag ==1 && error_flag == 0
+    error_flag = 1;
+end
 
 if nargout == 1
     
@@ -3729,6 +3755,7 @@ else
     debug_data.mdot_bub_tg = mdot_bub_tg;
     debug_data.mdot_l = mdot_l;
     debug_data.Cp_l = Cp_l;
+    debug_data.node_level = node_level;
     
     debug_data.diff_eqns_error_flag = error_flag;
     
