@@ -23,6 +23,7 @@ legend('Model','Experiment')
 ylabel('Pressure [MPa]')
 xlabel('Time [s]')
 make_text_big('shift_start')
+make_text_big
 
 
 % fill level vs t
@@ -76,12 +77,16 @@ r_nodes = linspace(0,1,N_rw);
 r_q_mat = zeros(length(t), N_ab, N_nodes);
 g_q_mat = r_q_mat;
 w_q_mat = r_q_mat;
+node_level_mat = zeros(length(t),N_nodes);
+V_bubi_mat = node_level_mat;
 
 for l = 2:length(t)
     for j = 1:N_nodes
         r_q_mat(l,:,j) = r_q{l}(j,:);
         g_q_mat(l,:,j) = g_q{l}(j,:);
         w_q_mat(l,:,j) = w_q{l}(j,:);
+        node_level_mat(l,:) = node_level{l};
+        V_bubi_mat(l,:) = V_bubi{l};
     end
 end
 
@@ -112,7 +117,21 @@ for i = 1:length(t_plot)
     figure(10)
     hold on
     plot(r_nodes, T_gw(:,i_plot)-273.15, 'k')
-
+    
+    figure(14)
+    hold on
+    plot(x_nodes(ind_full), reshape(w_q_mat(i_plot,1,ind_full),N_full(i_plot),1), 'k', x_nodes(ind_full), reshape(w_q_mat(i_plot,2,ind_full),N_full(i_plot),1), 'b')
+    if i == 1
+        legend('w_1','w_2')
+    end
+    
+    
+    figure(15)
+    hold on
+    plot(x_nodes(ind_full), reshape(r_q_mat(i_plot,1,ind_full),N_full(i_plot),1), 'k', x_nodes(ind_full), reshape(r_q_mat(i_plot,2,ind_full),N_full(i_plot),1), 'b')
+        if i == 1
+        legend('r_1','r_2')
+    end
 end
 
 figure(6)
@@ -128,6 +147,16 @@ make_text_big
 figure(8)
 xlabel('Normalized Height')
 ylabel('Bubble Number Density [#/m^3]')
+make_text_big
+
+figure(14)
+xlabel('Normalized Height')
+ylabel('Weights')
+make_text_big
+
+figure(15)
+xlabel('Normalized Height')
+ylabel('Abscissas [m]')
 make_text_big
 
 figure(9)
@@ -146,8 +175,19 @@ xlabel('Time [s]')
 ylabel('Outlet Vapor Mass Fraction')
 
 
+figure(12)
+plot(t(1:end-1),diff(t),'k')
+xlabel('Time [s]')
+ylabel('Time Step [s]')
+set(gca,'yscale','log')
+make_text_big('shift_start')
+make_text_big
 
-
+figure(13)
+plot(t, T_l - T_s, 'k')
+xlabel('Time [s]')
+ylabel('Superheat Temperature [C]')
+make_text_big
 
 
 % 

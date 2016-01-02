@@ -1,13 +1,34 @@
+% this is the main file for my tank modeling code
+% it can be run by itself (with no arguments)
+% or it can be called by another script and arguments are passed to it
+
+% basic outline: 2 functions
+% bubble_growth_1D: set up the problem, integrate differential equations,
+% plot results
+% diffeqns: calculate the d/dt terms, these are passed to bubble_growth_1D
+% and integrated
+
+% numerous other functions are called, 
+% but only these two are in this m file
+
 function varargout = bubble_growth_1D(varargin)
 %--------------------------------------------------------------------------
 % set physical parameters of the problem
 %--------------------------------------------------------------------------
 
-specified_case = 12;
+% feedline parameters
+constants.f_feedline = 0.0; % friction factor for the feedline (from the tank to the orifice)
+constants.L_feedline = 5 * 0.0254;  % [m] length of the feedline
+constants.D_feedline = (.375 - 2*0.049) * 0.0254;   % [m] ID of the feedline
 
-constants.f_feedline = 0.0;
-constants.L_feedline = 5 * 0.0254;
-constants.D_feedline = (.375 - 2*0.049) * 0.0254;
+
+specified_case = 12; % the initial_conditions.m file contains many different 
+% sets of initial conditions that correspond to experimental data sets 
+% that I compare to. This number specifies which one of these are to be
+% used. Open up that m file to see more. If 0 is entered, the data below
+% are used.
+
+% initial conditions
 
 % parameters I can play around with
 if specified_case == 0
@@ -28,7 +49,7 @@ if specified_case == 0
     % [m] tank diameter
     k_w = 0.195;          % [W/m.K] thermal conductivity of wall
 else
-    
+    % use one of the specified cases in initial_conditions.m
     [Ti, fill_level, V_tank, L_tank, ...
         A_inj, Cd, Po, T_air, rho_w, cv_w, t_w, D_tank, k_w, fluid] = initial_conditions(specified_case);
     
@@ -38,7 +59,8 @@ end
 % set model parameters
 %--------------------------------------------------------------------------
 
-constants.use_numjac = 0;
+constants.use_numjac = 0;   % whether or not to use the numjac function to 
+% numerically calculate the jacobian (0 = use my own code)
 
 % options for fsolve, used to solve a variety of nonlinear equations
 constants.fsolve_options = optimset('TolX',1e-12,'Display','off');
@@ -83,10 +105,12 @@ max_spatial_rel_delta_tol = 2;      % max difference between two nodes before re
 min_spatial_rel_delta_tol = 0.025;  % min difference between two nodes before coarsening occurs
 max_L = 0.1;                        % max distance between nodes (relative to tank length)
 
-ADQMOM = 'off';
+ADQMOM = 'off'; % whether or not to use the ADQMOM technique 
+% (not fully supported anymore, so leave 'off')
 
-save_filename = 'bubble_sim_data';
+save_filename = 'bubble_sim_data';  % file name to save data to
 
+% ODE integration scheme
 ode_solver = 'TRBDF2'; % [] options:
 % adaptive:
 % 'RKF' for runge-kutta-fehlberg
@@ -101,17 +125,18 @@ ode_solver = 'TRBDF2'; % [] options:
 % 'euler' for 1st order euler
 % 'RK4' for 4th order runge-kutta
 
-ROCK2_stages = 20;
+ROCK2_stages = 20;  % number of stages in the rock2 orthogonal chebyshev 
+% runge kutta scheme (if that was selected above)
 
 constants.sh_max = 1.25; % max relative increase in step size
 sh_min = 0.1; % min relative decrease in step size
 
-N_nodes = 32;
-N_mom = 6;
+N_nodes = 32;   % number of nodes in the vertical direction
+N_mom = 4;  % number of moments tracked in DQMOM
 rel_tol = 1e-3;     % [] max relative error allowed in adaptive scheme
-constants.C_qdot_lw = 1e-5; % multiplies the heat transfer from wall to liquid
-constants.C_coalescence = [0 1 1]; % collision efficiency,
-% laminar shear, turbulence (buoyancy is the third)
+constants.C_qdot_lw = 2e-5; % multiplies the heat transfer from wall to liquid
+constants.C_coalescence = [0.1 1 1]; % collision efficiency,
+% laminar shear, turbulence (buoyancy is set at 1)
 constants.C_nuc_rate = 1e-8; % multiplies the nucleation rate
 
 newton_tol = 0.1; % (tolerance for quasi newton iteration, relative to rel_tol)
@@ -122,7 +147,7 @@ constants.CD_churn_turb_boundary = 0.3; % void fraction at which the drag correl
 
 N_rw = 25;  % number of nodes in the radial discretization of the wall for conduction
 
-force_constant_h = 0;
+force_constant_h = 0;   % use a constant time step rather than adaptive
 
 h = 1e-5;           % [s] initial time step
 abs_tol = 1e9;     % [] max absolute error allowed in adaptive scheme
@@ -132,7 +157,8 @@ LRO_tol = 2e-2;     % [s] tolerance for resolving the LRO point
 Pmin_tol = 1e-9;  % [s] tolerance for resolving the P min point
 dT_sup_tol = 1e-12;% [s] tolerance for resolving the point when superheat = 0
 
-N_filter_pts = 10;
+N_filter_pts = 10;  % number of points used to low pass 
+% filter and get derivatives via backwards differencing
 
 % parameters that may depend on platform (PC/Mac/Linux or laptop/server)
 switch computer
@@ -174,7 +200,7 @@ end
 %--------------------------------------------------------------------------
 % begin initializing things
 %--------------------------------------------------------------------------
-tic
+tic % time the whole code (there's a toc at the end)
 
 % turn off some warnings that are not terribly helpful
 % warning('off','MATLAB:nearlySingularMatrix')
@@ -182,10 +208,10 @@ warning('off','MATLAB:Axes:NegativeDataInLogAxis')
 warning('off','MATLAB:interp2:NaNstrip')
 
 % create a pause button
-
+% but only if we're not on a linux box
 if ~strcmp(computer,'GLNXA64')
-button_handle = createButton;
-pause(1e-3);
+    button_handle = createButton;
+    pause(1e-3);
 end
 
 if nargin > 0
@@ -198,6 +224,7 @@ if nargin > 0
     constants.C_qdot_lw = inputs.C_qdot_lw;
     constants.C_coalescence = inputs.C_coalescence;
     constants.C_nuc_rate = inputs.C_nuc_rate;
+    N_rw = inputs.N_rw;
     
     % turn off some things
     plot_stuff = 0;
@@ -211,7 +238,8 @@ end
 
 N_ab = N_mom/2; % number of abscissas or weights = # of moments/2
 
-clock_save = clock;
+% initialize clocks for saving and plotting
+clock_save = clock; 
 clock_start = clock;
 clock_plot = clock;
 
@@ -225,16 +253,16 @@ V_node = pi*0.25*D_tank^2*L_node;   % [m^3] node/cell volume
 L_node = L_node*ones(N_nodes,1);
 V_node = V_node*ones(N_nodes,1);
 
-% store some things into constants
+% store some things into the constants structure
 p = constants.ADQMOM_p;
 constants.N_nodes = N_nodes;
 constants.N_rw = N_rw;
-constants.C_rdot = 1;
-constants.C_u_rise = 1;
-constants.n_nuc_freq = 3;
-constants.C_r_nuc = 1;
-constants.C_dTs = 1;
-constants.C_x_inj = 1;
+constants.C_rdot = 1;   % multiplies the rdot expression
+constants.C_u_rise = 1; % multiplies the bubble rise rate expression
+constants.n_nuc_freq = 3;% exponent on superheat for nucleation rate
+constants.C_r_nuc = 1;  % multiplies the size of nucleating bubbles
+constants.C_dTs = 1;    % multiplies the superheat
+constants.C_x_inj = 1;  % sets the fluid quality at the orifice
 constants.V_tank = V_tank;
 constants.fluid = fluid;
 constants.L_node = L_node;
@@ -264,7 +292,7 @@ else
     error('fluid string incorrect. try N2O or CO2')
 end
 
-% need this code for using qinterp2:
+% need this code for using qinterp2 (a fast 2D interpolation script):
 Tvec_table = PDT.T;
 Pvec_table = PDT.P;
 
@@ -302,27 +330,35 @@ switch ode_solver
         
 end
 
+% set the "adaptive" switch to 0 if we're using constant time step
 if force_constant_h
     adaptive = 0;
 end
 
+% initialize the error detection flag
 constants.error_detected = 0;
 
+% k is a vector used in the ODE integration scheme, initialize it to 0
 k_ode = zeros(N_dim,s);
 
+% initialize time
 t = 0;
 
+% if not using ADQMOM, set p to 1
 if strcmp(ADQMOM, 'off')
     p = 1;
     constants.ADQMOM_p = p;
 end
 
+% set the index of the moments that is r^3 (related to volume)
+% should = 4 (0,1,2,3) unless using ADQMOM
 if p == 1
     constants.V_moment_index = 4;
 elseif rem(p*3,1) == 0
     constants.V_moment_index = 1 + 3*p;
 end
 
+% store it in the constants structure
 V_moment_index = constants.V_moment_index;
 
 % generate initial condition for weights and abscissas
@@ -352,6 +388,7 @@ if ~isreal(r_ic)
     error('imaginary IC')
 end
 
+% copy for all nodes
 r_ic = repmat(r_ic(:), N_nodes, 1);
 w_ic = repmat(w_ic(:), N_nodes, 1);
 
@@ -372,25 +409,39 @@ end
 
 V_bubi{1} = 4/3*pi*mom{1}(:,V_moment_index);
 
-T_s = Ti;
+T_s = Ti; % initialize saturation temp
 
-V_l = fill_level*V_tank;
+V_l = fill_level*V_tank; % initialize liquid volume
 
+% get the individual node fill levels
 node_level = get_node_levels(V_l, V_bubi{1}, constants.V_node);
 guesses.node_level = node_level;
 
+% number of nodes that are full
 N_full = sum(node_level == 1);
 
+% total volume of bubbles 
 V_bub = sum_over_nodes(V_bubi{1}, node_level, constants.V_node);
 
+% combined volume of bubbles and liquid
 V_l_star = V_bub + V_l;
 
+% volume of the ullage (tg = tank gas)
 V_tg = V_tank - V_l_star;
 
+% a guess for liquid density is initialized
+% it will be needed later when solving nonlinear equation for it
 guesses.rho_l = refpropm('D','T',Ti,'Q',0,fluid);
 
+% find the initial pressure
+% non-linear equation, have to converge to the actual IC of the system
 Pi = converge_on_IC(Ti, V_tg, V_l, V_bubi{1}, PDT, guesses, constants);
 
+
+% calculate liquid and ullage densities, internal energy of ullage too
+% if interpolating a table for properties ('PDT'), use that for the liquid
+% density and then use a fit for the saturated vapor properties
+% else use refprop and solve nonlinear equations
 if strcmp(constants.property_source,'PDT')
     
     rho_l = qinterp2(PDT.T, PDT.P, PDT.D_liq, Ti, Pi/1e3);
@@ -412,31 +463,47 @@ elseif strcmp(constants.property_source,'refprop')
     
 end
 
+% initialize pressure
 P = Pi;
+
+% initialize saturated vapor density (not the mixture)
 rho_tg_sat = rho_tg;
 
+% initialize ullage mass
 m_tg = rho_tg * V_tg;
+
+% initialize liquid mass
 m_l = rho_l * V_l;
 
+% initialized ullage total internal energy (not specific)
 U_tg = m_tg * u_tg;
+
+% initialize liquid temperature
 T_l = Ti;
 
+% initialize ullage quality
 x_tg = 1;
 
+% initialize wall temperatures
 T_lw = Ti*ones(N_rw,1);
 T_gw = T_lw;
 
+% initial vector of variabels without the DQMOM variables
 y_i_basic = [m_tg; U_tg; T_gw;  m_l; Ti; T_lw];
 
 y_i_DQMOM = DQMOM_IC(:);
 
+% add the DQMOM variables
 y = [y_i_basic; y_i_DQMOM];
 
+% load universal constants
 [K_b, N_A, h_planck] = universal_constants('boltzmann', 'avagadro', 'planck');
 
+% calculate critical temperature and pressure
 [P_cr, T_cr] = refpropm('PT', 'C', 0, '', 0, fluid);
 P_cr = P_cr*1e3;
 
+% store things in the constants or guesses structures
 constants.D_tank = D_tank;
 constants.t_w = t_w;
 constants.rho_w = rho_w;
@@ -470,28 +537,46 @@ rhodot_tg = 0;
 net_nuc = zeros(N_nodes,1);
 f = zeros(N_dim,1);
 
+% flag used to determine if we've already hit the pressure minimum
 constants.min_flag = 0;
+
+% the maximum superheat reached so far
 constants.deltaT_sup_max = 0;
+
+
+% parameters for the low pass filter used to calculate some derivatives 
+% based on previous time steps using backwards differences
 
 f_cutoff_norm = 1e-1; % supposed to be filter cutoff f / (1/2 sample f)
 % so it's basically = 2*dt*f_cutoff
-filter_order = 3;
+filter_order = 3; % order of the filter
+
+% make a filter with the right order, and set the 3dB down point
 filter_handle = fdesign.lowpass('N,F3dB',filter_order, f_cutoff_norm);
+
+% make it a butterworth filter
 filter_design = design(filter_handle,'butter');
 
+
+% turn the node level info into a cell
+% this is so that the number of nodes can change
+% (only useful when doing adaptive mesh refinement in space)
 node_level_cell = cell(1);
 node_level_cell{1} = node_level;
 node_level = node_level_cell;
 
-h_min_error_count = 0;
-diff_eqns_error_flag = 0;
-n_increase = 0;
-reject_counter = 0;
-n_jac = 0;
-first_save = 1;
-n_coarsened = 0;
-y_current = y;
-rejected_step = 0;
+h_min_error_count = 0; % counter for the number of times we've had errors 
+%from hitting the minimum allowable step size
+
+diff_eqns_error_flag = 0; % error flag for an error in the differential equations
+n_increase = 0; % the time step when we last increased the step size
+reject_counter = 0; % number of times the current step has been rejected
+n_jac = 0; % the time step when we last computed the jacobian
+first_save = 1; % flag for whether we're still on the first save 
+% (data can be saved periodically, this flag is necessary so the filenames don't get screwed up)
+n_coarsened = 0; % the time step we last coarsened the spatial mesh
+y_current = y; % current value of the vector of variables
+rejected_step = 0; % flag that specifies whether the current step is rejected
 running = 1;        % [] switch, 1 = program running, 0 = program stopped
 n = 1;              % [] counter
 
@@ -502,6 +587,10 @@ n = 1;              % [] counter
 % begin looping
 while running == 1;
     
+    
+    % get dPdt from backwards differences (only used to check if we've
+    % reached the P min). bdiff is sort of a legacy piece of code, but it
+    % works so leave it be.
     starti = max([n-3, 1]);
     
     Pdot = 0.5*Pdot + 0.5*bdiff(P,starti,n,t,adaptive);
@@ -510,31 +599,57 @@ while running == 1;
 %     Vdot_l(n+1) = V_tank*bdiff(V_l/V_tank,starti,n,t,adaptive);
     %     Vdot_tg(n+1) = V_tank*bdiff(V_tg/V_tank,starti,n,t,adaptive);
     
+    
+    
     % filter quantities that are needed from previous time steps to help
     % suppress instability: liquid level and saturated vapor density
     % these will both be differentiated numerically in time
+    % (ideally these would be calculated based on current values rather
+    % than using previous time steps, but that would turn my whole diffeqns
+    % function into a nonlinear equation that would have to be solved)
     
+    % only do it if we have enough time steps to get a good calculation
     if n > N_filter_pts && t(n) > 1e-3
         
+        % time span of points to filter
         dt_filt = 0.10;
+        
+        % find the start index
         [~,n_filt_start] = min(abs(t - (t(n) - dt_filt)));
+        
+        % if there aren't enough points, add more
         if n_filt_start >= n- (filter_order*3 );
             n_filt_start = n - (filter_order*3 + 1);
         end
+        
+        % compute new number of points to be filtered
         N_filter_pts = n - n_filt_start;
         
+        % create a vector of linearly spaced time points that will be used
+        % for the filter
         t_filt = linspace(t(n-N_filter_pts),t(n),N_filter_pts+1);
         
+        % map the liquid level and saturated vapor density onto the linear
+        % time vector
         LL_for_filter = interp1(t(n-N_filter_pts:n),V_l_star(n-N_filter_pts:n)*(L_tank/V_tank), t_filt,'linear');
         rho_tg_sat_for_filter = interp1(t(n-N_filter_pts:n),rho_tg_sat(n-N_filter_pts:n), t_filt,'linear');
         
+        % sample frequency
         f_sample = 1/mean(diff(t_filt));
+        
+        % get the filter cutoff frequency from the sample freq. and the
+        % normalized cutoff freq.
         f_cutoff = f_cutoff_norm*f_sample/2;
         
         % only change the filter if the corner frequency got too high or
         % too low (b/c of time step getting small/large)
         if f_cutoff > 100
+            % corner freq. too high
+            
+            % new cutoff frequency
             f_cutoff_norm = 100/(0.5*f_sample);
+            
+            % if the new cutoff freq. is acceptable, remake the filter
             if f_cutoff_norm < 1
                 
                 %                 [b_filter,a_filter] = butter(filter_order, f_cutoff_norm, 'low');
@@ -543,7 +658,12 @@ while running == 1;
                 
             end
         elseif f_cutoff < 20
+            % corner freq. too low
+            
+            % new cutoff frequency
             f_cutoff_norm = 20/(0.5*f_sample);
+            
+            % if the new cutoff freq. is acceptable, remake the filter
             if f_cutoff_norm < 1
                 %                 [b_filter,a_filter] = butter(filter_order, f_cutoff_norm, 'low');
                 filter_handle = fdesign.lowpass('N,F3dB',filter_order, f_cutoff_norm);
@@ -551,6 +671,8 @@ while running == 1;
                 
             end
         end
+        
+        % filter the data and calculate the derivatives
         
         %         rho_tg_sat_filtered = filtfilt(b_filter, a_filter, rho_tg_sat);
         rho_tg_sat_filtered = filtfilt(filter_design.sosMatrix, ...
@@ -572,11 +694,12 @@ while running == 1;
         
         
     else
-        
+        % if we couldn't calculate the derivatives, just set to 0
         guesses.rhodot_tg_sat = 0;
         guesses.dLL_dt = 0;
     end
     
+    % store the new derivative values
     dLL_dt(n+1) = guesses.dLL_dt;
     rhodot_tg_sat(n+1) = guesses.rhodot_tg_sat;
     
@@ -591,9 +714,11 @@ while running == 1;
 %         guesses.Vdot_l = 0;
 %     end
     
+    % store the superheat level in the outer loop (not within the
+    % differential equations file) for error checking
     constants.outerloop_superheat = deltaT_sup(n);
     
-    % check for min
+    % check for P min
     if (t(n) > 0.1) && (Pdot > 10)
         if constants.min_flag == 0;
             constants.min_flag = 1;
@@ -603,16 +728,18 @@ while running == 1;
         end
     end
     
+    % if the current superheat is higher than the recorded max, update
     if deltaT_sup(n) > constants.deltaT_sup_max
         constants.deltaT_sup_max = deltaT_sup(n);
     end
     
+    % current value of time and time step (from last succesful step)
     dt = t(n) - t(max([1, n-1]));
     constants.t = t(n);
     constants.dt = dt;
     
     
-    
+    % check if the pressure got to low, stop if it did
     if P(end) < 2e6
         running = 0;
         stop_reason = 'P got below 2 MPa';
@@ -632,6 +759,8 @@ while running == 1;
         
     end
     
+    % if we're using an adaptive scheme, check for some things and refine
+    % the time step accordingly
     if  n > 1 && adaptive == 1
         
         % check if we're close to LRO
@@ -656,7 +785,6 @@ while running == 1;
         % refine as we get close (LRO_slope < 0)
         if (LRO_slope*h < -0.003/100) && (fill_level(n) < 0.1/100)
             h = h/4;
-            
         elseif (LRO_slope*h < -0.03/100) && (fill_level(n) < 1/100);
             h = h/2;
         elseif (LRO_slope*h < -0.3/100) && (fill_level(n) < 5/100);
@@ -666,9 +794,9 @@ while running == 1;
         
         
         % also check if we're close to going subcooled -> superheated
-        % maybe should modify this for going the other way too?
-        
-        %         if dT_superheat(n) < 0
+        % really only was useful when I wasn't handling the initial
+        % conditions well and it started subcooled. Now it's not really
+        % useful
         
         % slope of dT_superheat curve
         dTs_slope = bdiff(deltaT_sup,starti,n,t,adaptive);
@@ -685,7 +813,7 @@ while running == 1;
             
             if (h > 0.5*h_sup && h_sup > dT_sup_tol) && (h_sup > 0);
                 
-                % set h to 1/2 the distance to LRO (ie refine)
+                % set h to 1/2 the distance to crossover point (ie refine)
                 h = 0.5*h_sup;
                 disp('refining based on superheat being near 0')
                 
@@ -693,29 +821,35 @@ while running == 1;
             
         end
         
+        % hysteresis in the bubble nucleation process
+        % if we're using it, we check how close we are to Pmin and refine
+        % note: doesn't seem to work that well
+        
         if constants.include_hysteresis
         % also check if we're close to Pmin (it's been crashing there...)
-        if constants.min_flag == 0 && t(n) > 0.15
-            % slope of Pdot curve
-            k = 1;
-            clear Pdot2
-            for j = n-25:n
-                Pdot2(k) = bdiff(P,j-3,j,t,adaptive);
-                k = k + 1;
+            if constants.min_flag == 0 && t(n) > 0.15
+                % slope of Pdot curve
+                k = 1;
+                clear Pdot2
+                for j = n-25:n
+                    Pdot2(k) = bdiff(P,j-3,j,t,adaptive);
+                    k = k + 1;
+                end
+
+                % fit line
+                fit_line_data = [ones(k-1,1) t(n-(k-2):n)']\Pdot2';
+                
+                % find point when Pdot = 0
+                t_Pd = -fit_line_data(1)/fit_line_data(2);
+
+                h_Pd = t_Pd - t(n); % distance to Pdot = 0 point
+
+                if (h > 0.01 * h_Pd && h > Pmin_tol) && h_Pd > 0
+                    h = h_Pd/5;
+                    disp('refining because close to Pmin')
+                end
+
             end
-            
-            % fit line
-            fit_line_data = [ones(k-1,1) t(n-(k-2):n)']\Pdot2';
-            t_Pd = -fit_line_data(1)/fit_line_data(2);
-            
-            h_Pd = t_Pd - t(n); % distance to t_sup
-            
-            if (h > 0.01 * h_Pd && h > Pmin_tol) && h_Pd > 0
-                h = h_Pd/5;
-                disp('refining because close to Pmin')
-            end
-            
-        end
         end
         
         
@@ -724,11 +858,13 @@ while running == 1;
     
     
     if strcmp(ode_solver,'ROS3P')
-        % if using rosenbrock, calculate jacobian
+        % if using rosenbrock scheme, calculate jacobian
         % I might have to move this inside error_OK while loop if I do adaptive
         % mesh refinement...
         
         %         fy = f(t(i), y(:,i));
+        
+        % set the constant
         constants.step = 1;
         
         [fy, debug_data] = diffeqns(y_current, constants, guesses, PDT);
@@ -3635,16 +3771,6 @@ fourier_number = alpha_w*constants.h/(t_w/constants.N_rw)^2;
 %     disp('fourier number is less than 0.3')
 % end
 
-% all derivatives
-% 1 = m_tg
-% 2 = U_tg
-% 3 = T_gw
-% 4 = m_l
-% 5 = T_l
-% 6 = T_lw
-% 7:(N + 6) = weights
-% N+7 : 2N+6 = weighted abscissas
-
 dy = [mdot_tg;
     Udot_tg;
     Tdot_gw;
@@ -3665,6 +3791,8 @@ if ~sum(isreal(dy(:))) || sum(isnan(dy(:)))
     error_flag = 1;
 end
 
+% probably need to check to make sure it's not going negative in nodes
+% above N_full+1
 % correct for negative stuff
 % only if we found negative entries and dy for those is < 0
 % (otherwise if dy > 0, it was correcting itself)
@@ -3675,6 +3803,7 @@ if ~isempty(ind_negative) && sum( dy(ind_negative) < 0 ) > 0
             dy(ind_negative(i)) = 0;
         end
     end
+    
     error_flag = 1;
     
     disp('negative stuff in diffeqns')

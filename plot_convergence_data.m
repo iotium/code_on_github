@@ -3,27 +3,65 @@
 close all
 clear all 
 
-ref_file = 17;
+% waiting on N_nodes = 256, 512;
+
+% rel_tol
+% 10^-1	18
+% -2	16
+% -3	19
+% -5	30
+% -6    28
 % 
-% % moments (10 didn't work)
-% data_files = [9:11];
-% N_mom = [4 6 8];
+% N_mom
+% 4     21
+% 6     24
+% 8     25
+% 10    27
+% 
+% N_nodes
+% 8     17
+% 16	15
+% 32	21
+% 64	23
+% 128   31
+
+% N_rw
+% 8     48
+% 16    49
+% 32    50
+% 64    51  
+% 128   52
+
+
+% % wall points
+% data_files = [48 49 50 51 52];
+% N_rw = [8 16 32 64 128];
+% ref_file = 52;
+% convergence_x = N_rw;
+% x_name = 'Number of Nodes in Wall';
+
+% % moments
+% data_files = [21 24 25 27];
+% N_mom = [4 6 8 10];
+% ref_file = 27;
 % convergence_x = N_mom;
 % x_name = 'Number of Moments';
 
-% % nodes (need to rerun)
-% data_files = [3:7, 36, 37];
-% N_nodes = [10 20 50 100 200 400 800];
+% % nodes
+% data_files = [17 15 21 23 31];% 29];
+% N_nodes = [8 16 32 64 128];% 256];
+% ref_file = 31;
 % convergence_x = N_nodes;
 % x_name = ['Number of Nodes'];
-% 
-% rel tol (1e-1 didn't work)
-data_files = [14:17];
-rel_tol = 10.^[-2 -3 -4 -5];
+
+% rel tol
+data_files = [18 16 19 22 30 28];
+rel_tol = 10.^[-1 -2 -3 -4 -5 -6];
+ref_file = 28;
 convergence_x = rel_tol;
 x_name = ['Relative Tolerance'];
 
-cd('/Users/jez/Desktop/stuff from nitro black/model_results');
+cd('/Users/jez/School/stanford/compiled research/tank modeling/data from server v6/convergence study data files');
 
 data = load(['bubble_sim_data' num2str(ref_file)]);
 
@@ -34,6 +72,8 @@ P_LL_25_ref = interp1(data.fill_level, data.P, 0.25);
 
 P_LL_25 = nan*ones(size(data_files));
 
+plot_str = {'k', 'b', 'r', 'k--', 'b--', 'r--'};
+
 for i = 1:length(data_files)
     clear data
     filename = ['bubble_sim_data' num2str(data_files(i))];
@@ -43,26 +83,28 @@ for i = 1:length(data_files)
     
     figure(1)
     hold on
-    plot(data.t, data.P/1e6, 'k')
+    plot(data.t, data.P/1e6, plot_str{i})
     
     figure(2)
     hold on
-    plot(t_ref, abs((P_compare - P_ref))./P_ref, 'k')
+    plot(t_ref, abs((P_compare - P_ref))./P_ref, plot_str{i})
     set(gca,'yscale','log')
     
     ind_OK = find(~isnan(P_compare));
+    
+    legend_str{i} = sprintf('%0.5g',convergence_x(i));
     
     error_int(i) = trapz(t_ref(ind_OK), abs((P_compare(ind_OK) - P_ref(ind_OK))));
         
 % t_LL_25(i) = interp1(data.fill_level, data.t, 0.25);
 
-if min(data.fill_level) < 0.05
+    if min(data.fill_level) < 0.05
 
-[~, ind_guess] = min(abs(data.fill_level - 0.25));
+        [~, ind_guess] = min(abs(data.fill_level - 0.25));
 
-P_LL_25(i) = interp1(data.fill_level(ind_guess+[-20:20]), data.P(ind_guess+[-20:20]), 0.25);
+        P_LL_25(i) = interp1(data.fill_level(ind_guess+[-20:20]), data.P(ind_guess+[-20:20]), 0.25);
 
-end
+    end
 end
 
 int_ref = trapz(t_ref, P_ref);
@@ -70,31 +112,36 @@ int_ref = trapz(t_ref, P_ref);
 figure(1)
 xlabel('Time [s]')
 ylabel('Pressure [MPa]')
+legend(legend_str)
 make_text_big('shift_start')
 make_text_big
 
 figure(2)
 xlabel('Time [s]')
 ylabel('Relative Error in P')
+legend(legend_str{1:end-1})
+
 make_text_big('shift_start')
-
-figure(3)
-plot(convergence_x, abs(P_LL_25 - P_LL_25_ref)./P_LL_25_ref, 'ks-')
-set(gca,'yscale','log')
-xlabel(x_name)
-ylabel('Relative Error in P at 25% F.L.')
-
-if strcmp(x_name,'Relative Tolerance')
-set(gca,'xscale','log')
-end
 make_text_big
+
+% figure(3)
+% plot(convergence_x, abs(P_LL_25 - P_LL_25_ref)./P_LL_25_ref, 'ks-')
+% set(gca,'yscale','log')
+% xlabel(x_name)
+% ylabel('Relative Error in P at 25% F.L.')
+
+% if strcmp(x_name,'Relative Tolerance')
+% set(gca,'xscale','log')
+% end
+% make_text_big
 
 
 figure(4)
-plot(convergence_x, error_int/int_ref, 'ks-')
+plot(convergence_x(1:end-1), error_int(1:end-1)/int_ref, 'ks-')
 set(gca,'yscale','log')
 xlabel(x_name)
 ylabel('Integrated Relative Error')
+
 
 if strcmp(x_name,'Relative Tolerance')
 set(gca,'xscale','log')

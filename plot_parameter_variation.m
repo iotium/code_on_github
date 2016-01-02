@@ -3,55 +3,72 @@
 close all
 clear all 
 
-ref_file = 2;
 
-% C_nuc_rate
-data_files = [27:31];
+ref_file = [20];
 
-% % C_qdot_lw
-% data_files = [18:21];
+% % C_nuc_rate
+% C_nuc_rate = [0.125 0.25    0.5 1 2   4   8]*1e-8;
+% data_files = [35 32 29 20 34 37 39];
+% param_name = 'Nucleation Rate';
+
+% C_coalescence
+% % C_coalescence = [0.125 0.25    0.5 1 2   4   8]*1e-1;
+% data_files =    [43 41 40 20 42 44 36];
+% param_name = 'Coalescence Efficiency';
 % 
-% % C_coalescence (collision eff. only)
-% % add in 9 to give one where C = 0
-% data_files = [9,22:25];
+% % C_qdot_lw
+% C_qdot_lw =  [0.125 0.25    0.5 1 2   4   8]*2e-5;
+data_files = [26 33 38 20 45 47 46];
+param_name = 'Liquid Wall Heat Transfer Rate';
 
+scaling_factor = [0.125 0.25 0.5 1 2 4 8];
 
-
-
-cd('/Users/jez/Desktop/stuff from nitro black/model_results');
+cd('/Users/jez/School/stanford/compiled research/tank modeling/data from server v6/parameter variation data files');
 
 data = load(['bubble_sim_data' num2str(ref_file)]);
 
 P_ref = data.P;
 t_ref = data.t;
-for i = 1:length(data_files)
+
+k = 1;
+plot_str = {'k', 'b', 'r', 'g', 'k--', 'b--', 'r--'};
+
+for i = (data_files)
     clear data
-    filename = ['bubble_sim_data' num2str(data_files(i))];
-    data = load(filename);
-    
+    filename = ['bubble_sim_data' num2str(i) '.mat'];
+        data = load(filename);
+        
         P_compare = interp1(data.t, data.P, t_ref);
 
     
+        legend_str{k} = sprintf('%0.3g',scaling_factor(k));
+        
     figure(1)
     hold on
-    plot(data.t, data.P/1e6, 'k')
+    plot(data.t, data.P/1e6, plot_str{k})
     
-        figure(2)
+    figure(2)
     hold on
-    plot(t_ref, (P_compare - P_ref), 'k')
+    plot(t_ref, (P_compare - P_ref)/1e6, plot_str{k})
 
-    
+  k = k + 1;  
 end
+
+
 
 figure(1)
 xlabel('Time [s]')
 ylabel('Pressure [MPa]')
+% title(param_name)
+legend(legend_str)
 make_text_big('shift_start')
 make_text_big
 
 figure(2)
 xlabel('Time [s]')
-ylabel('Pressure Difference [Pa]')
+ylabel('Pressure Difference [MPa]')
+% title(param_name)
+legend(legend_str)
 make_text_big('shift_start')
 make_text_big
 
