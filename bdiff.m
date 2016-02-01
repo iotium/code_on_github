@@ -1,3 +1,4 @@
+% compute a derivative using backwards differences
 
 function out = bdiff(in,j,n,t,adaptive)
 

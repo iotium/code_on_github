@@ -1,3 +1,5 @@
+% I took this function from matlab and edited it to remove T as an input
+
 function [dFdy,fac,g,nfevals,nfcalls] = ...
     numjac_no_t(F,y,Fty,i_empty,thresh_scal,fac,vectorized,S,g,varargin)
 %NUMJAC Numerically compute the Jacobian dF/dY of function F(T,Y).

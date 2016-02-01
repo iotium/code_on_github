@@ -763,7 +763,7 @@ while running == 1;
     % the time step accordingly
     if  n > 1 && adaptive == 1
         
-        % check if we're close to LRO
+        % --- check if we're close to LRO ---
         
         % slope of fill level curve
         LRO_slope = bdiff(fill_level,starti,n,t,adaptive);
@@ -831,8 +831,8 @@ while running == 1;
                 % slope of Pdot curve
                 k = 1;
                 clear Pdot2
-                for j = n-25:n
-                    Pdot2(k) = bdiff(P,j-3,j,t,adaptive);
+                for j = n-25:n % use last 25 points
+                    Pdot2(k) = bdiff(P,j-3,j,t,adaptive); % use backward difference, 3rd order
                     k = k + 1;
                 end
 
@@ -864,59 +864,72 @@ while running == 1;
         
         %         fy = f(t(i), y(:,i));
         
-        % set the constant
+        % set the constant for step number to 1
         constants.step = 1;
         
-        [fy, debug_data] = diffeqns(y_current, constants, guesses, PDT);
+        [fy, debug_data] = diffeqns(y_current, constants, guesses, PDT); % get the nominal value of the diff eqns
         
-        dfdy = zeros(N_dim,N_dim);
+        dfdy = zeros(N_dim,N_dim); % initialize the jacobian to zeros
         
+		% loop through and calculate partial derivative for each dimension
+		% computes one sided derivative (ie (y(x+dx) - y(x))/dx)
         for k = 1:N_dim
-            dy = 1e-5;
-            dy = dy*abs(y_current(k));
-            if dy == 0
+            dy = 1e-5; % relative change in the variable
+            dy = dy*abs(y_current(k)); % absolute change in the variable (make sure it's positive)
+            if dy == 0 % check if the derivative is zero, if so set it to a small number
                 dy = 1e-9;
             end
-            y_plus = y_current(:);
-            y_plus(k) = y_current(k) + dy;
+            y_plus = y_current(:); % initialize 
+            y_plus(k) = y_current(k) + dy; % increment the kth value
             
-            [fy_plus, debug_data] = diffeqns(y_plus, constants, guesses, PDT);
+            [fy_plus, debug_data] = diffeqns(y_plus, constants, guesses, PDT); % calculate new value of derivatives
             
-            dfdy(:,k) = ( fy_plus - fy )/dy;
+            dfdy(:,k) = ( fy_plus - fy )/dy; % insert column of jacobian
         end
         
         
         
     end
     
+	% while loop that keeps going until we've satisfied error requirements
+	% solves differential equations for a time step
     error_OK = 0;
     while error_OK == 0
         
+			% insert this pause only if on linux
+			% purpose: to allow pause button to work
             if ~strcmp(computer,'GLNXA64')
                 pause(1e-6)
              end  
+			 
         % solving differential equations
         
+		% total number of dimensions
+		% (this changes if I do adaptive mesh refinement)
         N_dim = 4 + 2*N_rw + N_mom*N_nodes;
         
-        constants.h = h;
+        constants.h = h; % set the constant to include current time step size
         
-        error_flag = 0;
+        error_flag = 0; % initialize error flag
         
-        
+        % clear this variable (if it exists)
+		% (important for adaptive mesh refinement -> size of variable changes)
         if exist('k_ode','var')
             clear k_ode
         end
         
+		% depending on the scheme we're using (implicit vs explicit), do different things
         if strcmp(ode_solver,'TRBDF2')
             % implicit method!
             
-            constants.step = 1;
+            constants.step = 1; % set the constant so the diff eqns think we're on the first step (of a time step)
             
             
+			% call diffeqns and compute current value
+			% use a try/catch here to deal with errors within diffeqns
             try
                 [fy, debug_data] = diffeqns(y_current, constants, guesses, PDT);
-                if debug_data.diff_eqns_error_flag
+                if debug_data.diff_eqns_error_flag % check for error flag within diffeqns
                     error_flag = 1;
                     disp('error_flag tripped in diffeqns')
                     
@@ -928,80 +941,90 @@ while running == 1;
             end
             
             % if necessary, compute jacobian
+			% it's computationally intensive so only do it if needed
             
-            new_jacobian_conditions = [ n == 1;
-                (n>1 && rejected_step) && ( n~=n_jac && reject_counter>2);
-                (n > 1) && ( (abs(h - h_jac)/h_jac > 10) || (h/h_jac < 0.1) );
-                (n > 1) && ( (n - n_jac) > 100 )];
+			% conditions that suggest we need a new jacobian
+			% the time step is important because we're actually computing a quantity that involves the jacobian and the time step, not just the jacobian
+            new_jacobian_conditions = [ n == 1; % it's the first time step
+                (n>1 && rejected_step) && ( n~=n_jac && reject_counter>2); % it's not the first step, we rejected the last step, we didn't already just compute it, and we've rejected the step more than 2x
+                (n > 1) && ( (abs(h - h_jac)/h_jac > 10) || (h/h_jac < 0.1) ); % it's not the first step, the time step has grown or shrunk by 10x since we computed it last
+                (n > 1) && ( (n - n_jac) > 100 )]; % it's not the first step and it's been 100 steps since we last calculated it
             
+			% if we've violated one of the above, compute new jacobian
             if sum(new_jacobian_conditions) > 0
                 disp('computing new jacobian')
                 
+				% store the time step and step size
                 h_jac = h;
                 n_jac = n;
                 
+				% if fac exists, clear it
+				% fac is used by Matlab's numjac routine to store some information about the jacobian
                 if ~exist('fac','var')
                     fac = [];
                 end
                 
-                    clear i_w_empty i_g_empty
+                    clear i_w_empty i_g_empty % clear variables
+					
+					% find the indices for weights and abscissas associated with empty nodes%
+					% don't want to bother computing jacobian at these points!
                     i_w_empty = (4+2*N_rw) + [(N_full(n)+2)*N_ab:N_nodes*N_ab];
                     i_g_empty = (4+2*N_rw) + N_nodes*N_ab + [(N_full(n)+2)*N_ab:N_nodes*N_ab];
                     i_empty = [i_w_empty(:); i_g_empty(:)];
                 
+					% if we're using matlab's numjac routine, use that to calculate df/dy
                     if constants.use_numjac
-                    
-                [dfdy, fac] = numjac_no_t(@(y) diffeqns(y, constants, guesses, PDT), y_current, fy, [], abs(y_current)*1e-8,fac,0);
-
-                else
-                dfdy = zeros(N_dim,N_dim);
+						% I had to modify it slightly (hence it's now numjac_no_t.m) to deal with the fact that it was expecting a time variable as well as y (f(t,y)).
+						[dfdy, fac] = numjac_no_t(@(y) diffeqns(y, constants, guesses, PDT), y_current, fy, [], abs(y_current)*1e-8,fac,0);
+					
+					% if we're not using numjac, just loop through and do a central difference
+					else
+						
+						dfdy = zeros(N_dim,N_dim); % initialize
                 
-                for k = 1:N_dim
-                    
-                    % only if k isn't a weight or abscissa of an empty
-                    % node!
-                    % have N_full(n) (last step) - go one above just in
-                    % case
-                    
-%                     (i-1)*N_ab + [1:N_ab];
-                    
-%                     N_empty = (N_full(n) + 2):N_nodes;
-        
-                    
-                    if sum(i_empty == k) > 0
-                        % it's empty
-                        dfdy(:,k) = zeros(N_dim,1);
-                    else
-                        
-                        % weights indices: i_j = (4 + 2*N_rw) + [1:(N_nodes*N_ab)];
-                        % abscissas: i_g = i_w(end) + [1:(N_nodes*N_ab)];
-                        
-                        dy = 1e-4;
-                        dy = dy*abs(y_current(k));
-                        if dy == 0
-                            dy = 1e-9;
-                        end
-                        y_plus = y_current(:);
-                        y_plus(k) = y_current(k) + dy;
-                        constants.step = 0;
-                        [fy_plus] = diffeqns(y_plus, constants, guesses, PDT);
-                        
-                        y_minus = y_current(:);
-                        y_minus(k) = y_current(k) - dy;
-                        constants.step = 0;
-                        [fy_minus] = diffeqns(y_minus, constants, guesses, PDT);
-                        
-                        
-                        
-                        dfdy(:,k) = (fy_plus - fy_minus)/(2*dy);
-                        %                     dfdy(:,k) = ( fy_plus - fy )/dy;
+						% calculate each column (1 for each dimension of y)
+						for k = 1:N_dim
+				
+							% check if current dimension is one of an empty node
+							% if so, just set it to zeros
+							if sum(i_empty == k) > 0
+								% it's empty
+								dfdy(:,k) = zeros(N_dim,1);
+							else
+								
+								dy = 1e-4; % set relative change in y
+								dy = dy*abs(y_current(k)); % absolute change in y
+								if dy == 0
+									dy = 1e-9; % if y is 0, just use a small number
+								end
+								y_plus = y_current(:); % initialize y + dy
+								y_plus(k) = y_current(k) + dy; % add in the incremented variable
+								constants.step = 0; % set this to 0 so diffeqns knows what's going on
+								[fy_plus] = diffeqns(y_plus, constants, guesses, PDT); % calculate f at y + dy
+								
+								% repeat for y - dy
+								y_minus = y_current(:);
+								y_minus(k) = y_current(k) - dy;
+								constants.step = 0;
+								[fy_minus] = diffeqns(y_minus, constants, guesses, PDT);
+								
+								
+								% compute central difference and add the column to the jacobian
+								dfdy(:,k) = (fy_plus - fy_minus)/(2*dy);
+							end
+						end
                     end
-                end
-                    end
+					
+				% identity matrix the right size
                 I = eye(N_dim);
                 
+				% see equation 5.89 in my thesis
+				% this is the jacobian for the numerical method
+				% (gamma_TB defines the relative size of the trapezoidal rule step and the 2nd order bacwards difference step, = 2-sqrt(2))
                 J = I - gamma_TB*h/2 * dfdy;
                 
+				% I played around with different methods for computing the inverse of J because it's often ill-conditioned
+				% but ended up sticking with inv(J) because it worked well enough
 %                 if rcond(J) < 1e-16
 %                     % poorly conditioned!
 %                     inv_J = pinv(J);
@@ -1012,15 +1035,19 @@ while running == 1;
             
             
             % initialize x, F, d for TR
-            u_n = y_current;
+			% I use somewhat different notation here because that's what was in the papers I was using for info on TRBDF2
+            % u_n is u^n in my thesis and is y at the current step
+			% x_k is a proxy for u -> it starts as equal to u_n, but then as I iterate to find u at n+gamma, I store the intermediate value as x (k is the counter for the iteration in Broyden's method)
+			u_n = y_current;
             x_k = y_current;
-            F_k = -gamma_TB * h * fy;
+            F_k = -gamma_TB * h * fy; % F_k = F(u_k)
             
-            d_k = -inv_J * F_k;
-            x_kp1 = x_k + d_k;
-            k = 1;
+            d_k = -inv_J * F_k; % delta x needed from k to k+1
+            x_kp1 = x_k + d_k; % x at k+1
+            k = 1; % initialize k
             
-            % trapezoid
+            % trapezoidal rule step
+			% keep iterating until converged or if we determine it's not converging
             not_converged = 1;
             while not_converged
                 
@@ -1039,32 +1066,43 @@ while running == 1;
                     break
                 end
                 
+				% F at k + 1
                 F_kp1 = x_kp1 - y_current - gamma_TB*h/2*( f_kp1 + fy );
                 
+				% new value of u
                 u_k = inv_J * F_kp1;
                 
+				% just storage to simplify next expression
                 c_k = d_k' * (d_k + u_k);
                 
+				% new inverse of J (eqn 5.93)
                 inv_J = inv_J - 1/c_k * ( u_k * d_k' ) * inv_J;
                 
+				% increment k
                 k = k + 1;
                 
+				% store old value of k+1 in k
                 x_k = x_kp1;
                 
                 F_k = F_kp1;
                 
                 d_k_old = d_k;
                 
+				% new delta x
                 d_k = -inv_J * F_k;
                 
+				% new x at k+1
                 x_kp1 = x_k + d_k;
                 
+				% relative change in r (eqn 5.95)
                 r = norm(d_k)/norm(d_k_old);
                 
+				% if r is small enough, we've converged (5.96)
                 if k > 1 && r/(1-r)*norm(d_k./u_n) < newton_tol*rel_tol
-                    not_converged = 0;
+                    not_converged = 0; % set flag to exit loop
                 end
                 
+				% if we've had too many itertions, set error flag and exit loop
                 if k > max_iter
                     disp('not converging in TR')
                     error_flag = 1;
@@ -1077,8 +1115,9 @@ while running == 1;
                 % don't bother if we already have an error
                 % initialize x, F, d for BDF2
                 
-                u_npg = x_kp1;
+                u_npg = x_kp1; % value of u at n + gamma
                 
+				% get f(u at n+gamma)
                 try
                     constants.step = 3;
                     [f_npg, debug_data] = diffeqns(x_kp1, constants, guesses, PDT);
@@ -1093,8 +1132,10 @@ while running == 1;
                     
                 end
                 
+				% rename variables
                 x_k = u_npg;
                 
+				% equation (5.90)
                 F_k = u_npg - (1 - gamma_TB)/(2-gamma_TB) * h * f_npg ...
                     - 1/(gamma_TB*(2-gamma_TB))*u_npg +...
                     (1-gamma_TB)^2/(gamma_TB*(2-gamma_TB)) * u_n;
@@ -1103,7 +1144,7 @@ while running == 1;
                 x_kp1 = x_k + d_k;
                 k = 1;
                 
-                % BDF2
+                % BDF2 (similar to above)
                 
                 not_converged = 1;
                 while not_converged
@@ -1159,30 +1200,34 @@ while running == 1;
                     
                 end
                 
+				% now have values at n + 1
                 u_np1 = x_kp1;
                 y_new = u_np1;
                 
+				% compute error estimate (5.9)
                 error_estimate = (bs(1) - b(1))*u_n + ...
                     (bs(2) - b(2))*u_npg + ...
                     (bs(3) - b(3))*u_np1;
                 
-                g_star = y_new - error_estimate;
+                g_star = y_new - error_estimate; % this is basically the value of y predicted by a lower order integrator
+				% it's needed because some of the later code was written to take the two different estimates and compare them to get the error, rather than taking the error directly. So this just maintains compatibility
                 
             else
                 % we threw an error
-%                 error_estimate = 1;
                 error_flag = 1;
                 g_star = y_new;
             end
             
         else
-            % NOT TR-BDF2 (implicit)
+            % NOT TR-BDF2 escheme
             
             if strcmp(ode_solver,'ROS3P')
+			% 3rd order rosenbrock scheme
+			% need to look in lab notebook for info on this to comment it
                 
-                I = eye(N_dim);
+                I = eye(N_dim); % identity matrix
                 
-                k_ode = zeros(N_dim,3);
+                k_ode = zeros(N_dim,3); % initialize
                 
                 E_mat = I/(h*gamma_ROS) - dfdy;
                 
@@ -1202,9 +1247,9 @@ while running == 1;
                     k_ode(:,i) = E_mat\RHS;
                 end
             else
-                % not ROS3P or TRBDF2 -> explicit
+                % not ROS3P or TRBDF2 -> we're using a traditional explicit scheme
                 
-                % what we're basically doing:
+                % what we're basically doing (doesn't have to be 6 stages)
                 %         k1 = h*diffeqns(y(:,n));
                 %         k2 = h*diffeqns(y(:,n) + a(2,1)*k1);
                 %         k3 = h*diffeqns(y(:,n) + a(3,1)*k1 + a(3,2)*k2);
@@ -1265,6 +1310,7 @@ while running == 1;
                             (T_l_new > (T_l(n) + 0.25)),  (T_l_new < (T_l(n) - 5)),...
                             (max(r_q_new(:)) > 0.2), (max(V_bubi_new) > 1)];
                         
+						% if there are errors, set error flag and break
                         if sum(error_conditions) > 0
                             disp('we''re taking a bad step')
                             f = ones(size(f));
@@ -1274,12 +1320,15 @@ while running == 1;
                             k_ode = ones(N_dim, s);
                             break
                         else
-                            
+                            % no errors
+							
+							% check for negative values in y
                             [ind_neg, min_val] = min(y_intermediate);
                             if min_val < 0
                                 fprintf('negative part of y. index: %0.d\n', ind_neg)
                             end
                             
+							% compute derivatives at y_intermediate
                             try
                                 [f, debug_data] = diffeqns(y_intermediate, ...
                                     constants, guesses, PDT);
@@ -1289,6 +1338,7 @@ while running == 1;
                                     
                                 end
                             catch ME
+								% if there was an error in diffeqns, report it to the screen and set error flag
                                 disp(['threw an error calling diffeqns, i = ' num2str(i)])
                                 disp( getReport(ME))
                                 error_flag = 1;
@@ -1297,7 +1347,7 @@ while running == 1;
                         end
                     end
                     
-                    
+                    % the new value of k (f is dy/dt)
                     k_ode(:,i) = f*h;
                     
                 end
@@ -1341,10 +1391,12 @@ while running == 1;
             else
                 % runge-kutta type method
                 
+				% error checking
                 if length(k_ode(1,:)) ~= length(b)
                     disp('dimensions are wrong')
                 end
                 
+				% update y_new
                 y_new = y_current + (k_ode*b);
                 
             end
@@ -1392,7 +1444,8 @@ while running == 1;
             end
             
             
-            
+            % calculate the relative error in each variable
+			% the commented out code is from different methods I've used to calculate this
             for j = 1:N_dim
 %                 if exist('i_empty','var') && ~any(j == i_empty)
                     rel_err(j) = abs( err(j) /( mean([y_current(j) y_new(j)])  + 1e-8) );  % relative error
@@ -1410,6 +1463,7 @@ while running == 1;
             
             [~, ind_max_rel_err(n+1)] = max(rel_err);  % fix rel_err to the maximum finite value of rel_err
             
+			% calculate relative error (scalar) based on the desired norm
             switch constants.error_norm
                 case 'L-infinity'
                     rel_err = max(rel_err);  % fix rel_err to the maximum finite value of rel_err
@@ -1422,7 +1476,7 @@ while running == 1;
             end
             
             
-            abs_err = abs(err);
+            abs_err = abs(err); % absolute error
             
             abs_err = max(abs_err(isfinite(abs_err)));  % do the same for abs_err
             
@@ -1454,17 +1508,27 @@ while running == 1;
             
             error_estimate = rel_err;
             
+			% if it's the first step or it's been a long time,
+			% reset the error terms for step size control (ie delete history)
             if n == 1 || (n > n_reset + 50)
-                h_past = h;
-                error_estimate_past = error_estimate;
-                sh_max = constants.sh_max;
-                n_reset = n;
+                h_past = h; % previous step size
+                error_estimate_past = error_estimate; % previous step error estimate
+                sh_max = constants.sh_max; % max possible factor to increase step size by
+                n_reset = n; % time step we last reset
             end
             
-            %             sh = 0.7 * (rel_tol/rel_err).^(1/(p_tilde + 1));
+			% sh is the factor by which the time step is increased/decreased
+			% eg: h (new) = h (old) * sh
+			% it's basically picked to keep the error close to the tolerance (but smaller than)
+			
+			% previous way of calculating it
+            % sh = 0.7 * (rel_tol/rel_err).^(1/(p_tilde + 1));
             
+			% new way
             sh = (rel_tol/error_estimate)^( 1/p_tilde );
             
+			% if it's not the first step and we haven't rejected the step
+			% compare to previous value of sh and pick minimum of the 2
             if n > 1 && rejected_step ~= 1
                 
                 sh_past = (error_estimate_past/rel_tol)^(1/p_tilde) * sh^p_tilde * (h / h_past);
@@ -1473,34 +1537,48 @@ while running == 1;
                 
             end
             
+			% this makes sure sh isn't too small or too big
+			% and also multiplies it by 0.8
             sh = min( sh_max, max( 0.1, 0.8 * sh) );
-%             fprintf('rel err = %0.3g\n',rel_err)
+			
+			
+			% if error is acceptable or if the step size is below the min,
+			% accept the step
             if ( rel_err < rel_tol && abs_err < abs_tol) || (h < h_min)
-                % meeting the error requirement or step size is too
-                % small already
+
+				% error is OK!
                 error_OK = 1;
                 
+				% we didn't reject the step
                 rejected_step = 0;
                 reject_counter = 0;
                 
-                %                 sh = min( sh_max, max( sh_min, sh) );
-                
+                % reset the max allowable sh
                 sh_max = constants.sh_max;
+				
+xxxxx				% if the last step was rejected, keep sh from being > 1
+				% this doesn't make sense because rejected_step is set to 0 a few lines above
                 if rejected_step == 1
                     % we rejected the last step
                     sh = min(sh, 1);
                 end
                 
+				% store h as past h
                 h_past = h;
+				
+				% store error estimate as past error estimate
                 error_estimate_past = error_estimate;
                 
-                
+                % if it's not the first step and we're close to running out of liquid,
+				% stop the train because we want to get off now (we're done!)
                 if ((n > 1) && ((h_LRO < LRO_tol) && (h_LRO > 0))) && (fill_level(n) < 0.01)
                     % distance to LRO is less than LRO_tol
                     running = 0;
-                    %                                             disp('reached LRO')
                 end
                 
+				% if step size is too small,
+				% alert the user, reset sh, and increment a counter
+				% if we've had too many steps with time step small, stop the program
                 if h < h_min
                     fprintf('h got too small. exceeded tolerance by %6.4g%%\n',100*rel_err/rel_tol);
                     h_min_error_count = h_min_error_count + 1;
@@ -1512,41 +1590,48 @@ while running == 1;
                 end
                 
             else
+				% current step not meeting error requirements
+				
+				% we're rejecting the step
                 rejected_step = 1;
+				
+				% increment a counter for how many times we've rejected THIS step
                 reject_counter = reject_counter + 1;
-                % not meeting error tolerance
                 
-                % figure out where error is (not really unpacking y)
+                % figure out where error is (not really unpacking y, just a poor function name)
                 unpack_y(y_new, constants, ind_max_rel_err(n+1), rel_err);
                 
+				% print error info to screen for debugging
                 %                 fprintf(['max rel err = %6.4g, ind of max rel err = %6.4g\n'...
                 %                     'err(ind_max_rel_err) = %8.6g, y(ind_max_rel_err,n+1) = '...
                 %                     '%8.6g, y(ind_max_rel_err,n) = %8.6g\n'], ...
                 %                     rel_err, ind_max_rel_err, err(ind_max_rel_err), ...
                 %                     y(ind_max_rel_err, (n+1):-1:n))
                 
-                % not meeting error requirements
-                % sh is used to update h, h = sh*h
                 
-                
+                % if for some reason my error terms are exactly 0,
+				% it means something weird happened and we should reduce step size
                 if rel_err == 0 || abs_err == 0
                     % something odd happened, so reduce step size a lot
                     disp('something weird happened. reducing step size')
                     sh = sh_min;
                     
-                else
+                else % otherwise, check for other weird things
                     if rel_err == 1
                         % error flag was probably tripped, or one of the
                         % other error conditions
                         sh = sh_min;
                     end
                     
+					% no weird things -> decrease sh appropriately
                     sh = max([0.8 * sh, sh_min]);
+					
+					% reset sh_max so we don't increase step size too much right after rejecting a step
                     sh_max = 1;
                     
                     disp('rejected step')
                     
-                    
+                    % commented out code below is from my old method of updating the time step
                     
                     %                     if rel_err/rel_tol > abs_err/abs_tol
                     %                         % if relative error is a bigger problem than
@@ -1588,11 +1673,13 @@ while running == 1;
                 
             end
             
+			% update time step
             h = h*sh;
             
+			% deal with adaptive mesh refinement if it's turned on
             if constants.adaptive_mesh_refinement
                 
-                % refine in space
+                % initialize error control flag
                 spatial_error_OK = 1;
                 
                 if error_OK == 1
@@ -1612,26 +1699,35 @@ while running == 1;
                     % then if the diff is too high, tag for refinement
                     for k = 1:N_full(n)
                         
+						% change in w and g
                         dw = w_q_new(k+1,:) - w_q_new(k,:);
                         dg = g_q_new(k+1,:) - g_q_new(k,:);
                         
+						% mean value of w
                         w_bar = w_q_new(k,:) + (w_q_new(k+1,:) - w_q_new(k,:))/...
                             (L_node(k+1) + L_node(k)) * L_node(k);
                         
+						% mean value of g
                         g_bar = g_q_new(k,:) + (g_q_new(k+1,:) - g_q_new(k,:))/...
                             (L_node(k+1) + L_node(k)) * L_node(k);
                         
+						% relative change in w and g
                         rel_dw = dw./w_bar;
                         rel_dg = dg./g_bar;
                         
+						% max change in relative w and g
                         max_delta_rel = max( abs([ rel_dw(:) rel_dg(:)]) );
                         
+						% if the largest difference exceeds the tolerance
+						% and we haven't already tagged this point for refinement
+						% then tag the point for refinement
                         if max_delta_rel > max_spatial_rel_delta_tol
                             if points_to_refine(end) ~= k
                                 points_to_refine = [points_to_refine; k];
                             end
                         end
                         
+						% I think this is old code for coarsening the mesh (current code only refines)
                         %                     if n > n_coarsened + 3
                         %                         if max_delta_rel < min_spatial_rel_delta_tol
                         %                             if length(points_to_coarsen) < 2 && L_node(k) < max_L
@@ -1643,9 +1739,13 @@ while running == 1;
                         %                     end
                     end
                     
+					% if we tagged points for refinement, create the new point and update appropriate variables
                     if length(points_to_refine) > 1
-                        % remove the zero
+                        
+						% remove the zero
                         points_to_refine = points_to_refine(2:end);
+						
+						% initialize error flags
                         spatial_error_OK = 0;
                         error_OK = 0;
                         
@@ -1797,6 +1897,7 @@ while running == 1;
                         plot(log10(g_q_new))
                     end
                     
+					%  remove mesh points if error is too small in order to coarsen mesh
                     
                     %                 if length(points_to_coarsen) > 1
                     %                     % remove the zero
@@ -1895,15 +1996,10 @@ while running == 1;
     
     
     
-    %     catch
-    %         y_new = y_current;
-    %         ind_max_rel_err(n+1) = 1;
-    %         stop_reason = 'error in calling differential eqns';
-    %         running = 0;
-    %     end
+	% compute derivative at new value of y
+	% also extract all the variables I want to store that are normally only found within the differential equations
     
-    
-    constants.step = 1;
+	constants.step = 1;
     
     try
         
@@ -2417,17 +2513,19 @@ N_mom = 2*N_ab;
 hesson_fit = constants.hesson_fit;
 % bubble_rise_velocity_fit = constants.bubble_rise_velocity_fit;
 
-p = constants.ADQMOM_p;
-Ru = 8314.4;
+p = constants.ADQMOM_p;	% parameter for ADQMOM (not really supported right now)
+Ru = 8314.4;	% universal gas constant
 
-
+% extract the velocity of the liquid level
 u_LL = guesses.dLL_dt;
 
+% check for nan's and set to 0 if it is nan
 if isnan(u_LL)
     u_LL = 0;
 end
 
 % retrieve derivatives calculated with backwards differencing
+% not currently in use
 % Pdot = derivatives(1);
 % rhodot_l = derivatives(2);
 % rhodot_tg = derivatives(3);
@@ -2435,6 +2533,7 @@ end
 % Vdot_tg = derivatives(5);
 
 % check for negative values
+% if we find any, just multiply them by -1, store the indices, and print something to screen
 if min(y) < 0
     ind_negative = find(y < 0);
     y(ind_negative) = -y(ind_negative);
@@ -2451,19 +2550,20 @@ else
     ind_negative = [];
 end
 
+% unpack all the variables from the "y" vector
 variables = unpack_y(y, constants);
 
+m_tg = variables.m_tg;	% ullage mass
+U_tg = variables.U_tg;	% ullage internal energy (not specific)
+T_gw = variables.T_gw;  % temperatures in the wall for ullage
+m_l = variables.m_l;	% mass of liquid
+T_l = variables.T_l;	% liquid temperature
+T_lw = variables.T_lw;	% temperatures in the wall for liquid
 
-m_tg = variables.m_tg;
-U_tg = variables.U_tg;
-T_gw = variables.T_gw;
-m_l = variables.m_l;
-T_l = variables.T_l;
-T_lw = variables.T_lw;
+g_q = variables.g_q;	% weighted abscissas
+w_q = variables.w_q;	% weights
 
-g_q = variables.g_q;
-w_q = variables.w_q;
-
+% error checking for imaginary or nans
 if isnan(sum(y)) || ~isreal(sum(y))
     disp('problem: nans or imaginary y')
 end
@@ -2471,6 +2571,7 @@ end
 % get the abscissas from the weighted abscissas
 r_q = g_q./w_q;
 
+% error check for negative abscissas
 if min(r_q) < 0
     disp('negative abscissa')
 end
@@ -2480,24 +2581,30 @@ for i = 1:2*N_ab
     mom(:, i) = sum( r_q.^((i-1)/p) .* w_q, 2 );
 end
 
-mom(mom<0) = 0;
+mom(mom<0) = 0; % if moments are negative anywhere, set to 0
 
-N_bubi = mom(:,1);
+N_bubi = mom(:,1); % the number density of bubbles (0th moment)
 
+% error check for imaginary moments
 if ~isreal(mom)
     disp('imaginary moments')
 end
 
+% index of the moment for r^3 (what is used to calculate volume)
 V_moment_index = constants.V_moment_index;
 
 % bubble volume per unit volume of liquid/bubble mixture (hence the i)
-% (can also view this as the vapor volume fraction aka gas holdup)
+% (can also view this as the vapor volume fraction aka gas holdup aka void fraction)
 V_bubi = 4/3*pi*mom(:,V_moment_index);
 
+% error checking for imaginary values of the void fraction
 if sum(imag(V_bubi)) > 0
     disp('V_bubi went imaginary')
 end
 
+% see if the void fraction is greater than 1 anywhere
+% if so, set an error flag and set the 
+% void fraction to 0.99
 if max(V_bubi) > 1
     ind_V_bubi_gt1 = find(V_bubi > 1);
     V_bubi(V_bubi>1) = 0.99;
@@ -2510,6 +2617,8 @@ end
 % (assumes pressure is same throughout tank, with no gravity head)
 P = get_P_from_mU_mT(m_tg, U_tg, m_l, T_l, V_bubi, PDT, constants, guesses);
 
+% check to see if there was an error in the function that calculated P
+% (pi is an error flag)
 if (P == pi) || isnan(P)
     disp('P error')
     constants.error_detected = 1;
@@ -2517,6 +2626,7 @@ if (P == pi) || isnan(P)
 end
 
 
+% error checking for supercritical pressure
 if P > constants.P_cr
     disp('P greater than critical')
     constants.error_detected = 1;
@@ -2524,10 +2634,12 @@ if P > constants.P_cr
 end
 
 % get density of liquid and ullage based on temperature and pressure
-
+% get it either from interpolation of a table or by calling refprop
 
 if strcmp(constants.property_source,'PDT')
-    
+    % interpolating a table
+	
+	% liquid density
     rho_l = qinterp2(PDT.T, PDT.P, PDT.D_liq, T_l, P/1e3);
     
     % if rho_l is NaN, it means we went outside the bounds of PDT, so
@@ -2536,38 +2648,43 @@ if strcmp(constants.property_source,'PDT')
         rho_l = interp2(PDT.T, PDT.P, PDT.D_liq, T_l, P/1e3, 'spline');
     end
     
+	% get other properties from a fit based on P
     [rho_tg_l, rho_tg_v, u_tg_l, u_tg_v] = fits_for_getting_P(P, fluid);
     
     
 elseif strcmp(constants.property_source,'refprop')
+	% calling refprop
     
+	% liquid density (have to solve nonlinear equation for it)
     rho_l = get_D_from_TP(T_l, P, guesses, constants, fluid);
     
+	% get other properties from refprop
     [rho_tg_l, rho_tg_v, u_tg_v] = refpropm('+-U','P',P/1e3,'Q',1,fluid);
     u_tg_l = refpropm('U','P',P/1e3,'Q',0,fluid);
-    
     
 end
 
 
-% rho_tg = qqinterp2(PDT.T, PDT.P, PDT.D_vap, T_tg, P, 'linear');
-
-% [rho_tg, T_tg] = refpropm('DT', 'P', P/1e3, 'U', U_tg/m_tg, fluid);
-
 % get saturation properties for ullage
-% at some point should include a switch here to take into account times
-% when the ullage is just superheated vapor (not saturated, not metastable)
-% [rho_tg_l, rho_tg_v, u_tg_l, u_tg_v] = fits_for_getting_P(P, fluid);
 
+% internal energy (specific)
 u_tg = U_tg/m_tg;
+
+% vapor mass fraction
 x_tg = (u_tg - u_tg_l)/(u_tg_v - u_tg_l);
+
+% void fraction (vapor volume fraction)
 alpha = 1/( 1 + rho_tg_v/rho_tg_l * (1 - x_tg)/x_tg );
+
+% density (mixture)
 rho_tg = alpha*rho_tg_v + (1 - alpha)*rho_tg_l;
 
+% just used for debugging
 % if constants.step == 1
 %     fprintf('1 - x_tg = %0.3g\n',1 - x_tg)
 % end
 
+% error checking for x_tg > 1 (means that it's now superheated vapor)
 % if x_tg > 1
 %     disp('x_tg > 1')
 %     x_tg = 1;
@@ -2576,26 +2693,29 @@ rho_tg = alpha*rho_tg_v + (1 - alpha)*rho_tg_l;
 % total liquid volume (not including bubbles)
 V_l = m_l./rho_l;
 
+% how full each node is. will be 1 for all nodes below liquid level, 0 for
+% all nodes above, and [0,1] for the node in which the liquid level
+% currently sits
+node_level = get_node_levels(V_l, V_bubi, V_node);%, guesses.node_level);
+
+% total bubble volume
+V_bub = sum_over_nodes(V_bubi, node_level, V_node);
+
+% total volume of liquid + bubbles
+V_l_star = V_l + V_bub;
+
+% for reference:
 % V_l_star = volume of liquid and bubbles
 % = V_l + V_bub
 % V_bub = V_bubi*(V_l + V_bub)
 % V_l_star = V_l./(1 - V_bubi);
 
-% I've kind of changed the meaning so that V_l_star is in fact the TOTAL
-% volume of the liquid+bubbles
-
-% how full each node is. will be 1 for all nodes below liquid level, 0 for
-% all nodes above, and [0,1] for the node in which the liquid level
-% currently sits
-node_level = get_node_levels(V_l, V_bubi, V_node);%, guesses.node_level);
-% V_bub = sum(node_level.*V_bubi*V_node);
-V_bub = sum_over_nodes(V_bubi, node_level, V_node);
-
-V_l_star = V_l + V_bub;
-
-% number of nodes still in the liquid (completely)
+% number of full nodes still in the liquid
 N_full = sum(node_level == 1);
 
+% check if an error was thrown earlier b/c void fraction > 1
+% if it happened at a node with no liquid in it, set it to 0
+% otherwise, leave as is (it was set to 0.99 earlier)
 if V_bubi_error_flag
     if min(ind_V_bubi_gt1) < N_full + 1
         %V_bubi is > 1 at a node we care about
@@ -2604,144 +2724,186 @@ if V_bubi_error_flag
     end
 end
 
+% volume of ullage
 V_tg = m_tg/rho_tg;
 
 % liquid properties
 
+% metastable liquid properties (at current P and T_l)
 [h_l, dh_drho_l, drho_dP_l, u_l, Cv_l, dP_dT_l, ...
     k_l, Cp_l, s_l, MW, mu_l] = ...
     refpropm('H!RUO#LCSMV','T',T_l,'D&',rho_l,fluid);
 
 
-
+% get properties of liquid saturated at current liquid temperature
 [P_sat, s_liq_sat, h_liq_sat] = refpropm('PSH', 'T', T_l, 'Q', 0, fluid);
 
-dP_drho_l = 1e3./drho_dP_l;
-dP_dT_l = dP_dT_l*1e3;
-alpha_l = k_l./(rho_l .* Cp_l);
-P_sat = 1e3*P_sat;
+dP_drho_l = 1e3./drho_dP_l; % partial derivative of P wrt rho (don't know what's being held constant -> look at refprop.m)
+dP_dT_l = dP_dT_l*1e3; % partial derivative of P wrt T (not sure what's being held constant -> look at refprop.m)
+alpha_l = k_l./(rho_l .* Cp_l); % thermal diffusivity
+P_sat = 1e3*P_sat; % saturation pressure (kPa->Pa)
 
-nu_l = mu_l/rho_l;
+nu_l = mu_l/rho_l; % liquid viscosity (dynamic I think, although I always get dynamic/kinematic confused)
 
-Pr_l = nu_l/alpha_l;
-
-% a lot of these properties aren't needed until later, but by calculating
-% them here I can reduce the number of refprop calls. Note that the next
-% two refprop calls are for ullage properties (liquid and vapor parts)
+Pr_l = nu_l/alpha_l; % Prandtl number of the liquid
 
 
+% need to calculate a bunch of partial derivatives for the Vdot function.
+% to do so, need to get a bunch of stuff out of refprop. To sove time I also
+% get other properties that will be needed elsewhere (refprop = slow)
+
+% refprop is first called to get saturated liquid properties, then for saturated vapor
+% (saturated at the current pressure)
+
+% first call
 % properties needed for Vdot calculation (liquid)
 [u_tg_l_sat, rho_tg_l, dP_dT_tg_sat, drho_dP_T, drho_dT_P, dh_dT_P, dh_dP_T...
     ,sigma, h_l_sat, T_tg] = refpropm('UDERW(*IHT', 'P', P/1e3, 'Q', 0, fluid);
+	
+% partial derivative of P wrt T along saturation (convert kPa to Pa)
 dP_dT_tg_sat = dP_dT_tg_sat * 1e3;
+
+% partial derivative of rho wrt P at constant T (convert kPa to Pa)
 drho_dP_T = drho_dP_T * 1e-3;
+
+% partial derivative of h wrt P at constant T (convert kPa to Pa)
 dh_dP_T = dh_dP_T * 1e-3;
 
+% partial derivative of u wrt T at constant P
 du_dT_P = dh_dT_P + P/rho_tg_l^2 * drho_dT_P;
+
+% partial derivative of u wrt P at constant T
 du_dP_T = dh_dP_T + 1/rho_tg_l + P/rho_tg_l^2 * drho_dP_T;
 
+% partial derivative of u wrt T along saturation (liquid)
 du_dT_sat_tg_l = du_dT_P + du_dP_T * dP_dT_tg_sat;
+
+% partial derivative of rho wrt T along saturation (liquid)
 drho_dT_l_sat = drho_dT_P + drho_dP_T * dP_dT_tg_sat;
-% drho_dP_sat = drho_dP_T + drho_dT_P / dP_dT_sat;
+
+% partial derivative of rho wrt P along saturation (liquid)
+% drho_dP_sat = drho_dP_T + drho_dT_P / dP_dT_sat; % don't need this anymore with new Vdot fn
 
 
-% need to calculate a bunch of partial derivatives for the Vdot function
-% extras are needed for the saturated ullage because the 2 phases adds more
-% terms.
-
+% second call
 % properties needed for Vdot calculation (vapor)
 [u_tg_v_sat, rho_tg_v, drho_dP_T, drho_dT_P, dh_dT_P, dh_dP_T,...
     T_s, h_tg_sat, s_tg_sat, Cp_tg, mu_tg] = ...
     refpropm('UDRW(*THSCV', 'P', P/1e3, 'Q', 1, fluid);
+	
+% partial rho / partial P at constant T (convert units, refprop does kPa)
 drho_dP_T = drho_dP_T * 1e-3;
+
+% partial h / partial P at constant T (convert units, refprop does kPa)
 dh_dP_T = dh_dP_T * 1e-3;
 
+% partial u / partial T at constant P
 du_dT_P = dh_dT_P + P/rho_tg_v^2 * drho_dT_P;
+
+% partial u / partial P at constant T
 du_dP_T = dh_dP_T + 1/rho_tg_v + P/rho_tg_v^2 * drho_dP_T;
 
+% partial u / partial T along saturation line (vapor)
 du_dT_sat_tg_v = du_dT_P + du_dP_T * dP_dT_tg_sat;
-drho_dT_v_sat = drho_dT_P + drho_dP_T * dP_dT_tg_sat;
-% drho_dP_sat_tg = drho_dP_T + drho_dT_P / dP_dT_sat;
 
+% partial rho / partial T along saturation line (vapor)
+drho_dT_v_sat = drho_dT_P + drho_dP_T * dP_dT_tg_sat;
+
+% partial rho / partial P along saturation line (vapor)
+% drho_dP_sat_tg = drho_dP_T + drho_dT_P / dP_dT_sat; % don't need this anymore with new Vdot fn
+
+% partial rho / partial x at constant P
 drho_dx_P_tg = -rho_tg^2 *(1/rho_tg_v - 1/rho_tg_l);
+
+% partial rho / partial P at constant x
 drho_dP_x_tg = (1/dP_dT_tg_sat) * rho_tg^2 * ( x_tg/rho_tg_v^2 * drho_dT_v_sat + ...
     (1-x_tg)/rho_tg_l^2 * drho_dT_l_sat );
 
-rho_tg_sat = rho_tg_v;
-% % temp of saturated surface based on pressure (and h of sat. vapor)
-% [T_s, h_tg_sat, rho_tg_sat] = refpropm('THD','P',P/1e3,'Q',1,fluid);
-%
-% % saturated liquid enthalpy at P
-% [sigma, h_l_sat] = refpropm('IH','P',P/1e3,'Q',0,fluid);
+rho_tg_sat = rho_tg_v; % density of saturated vapor (single phase)
 
 % heat of vaporization (at saturation based on P)
 h_lv = h_tg_sat - h_l_sat;
 
-% bubble calculations
-
-% superheat = T - T_sat
+% liquid superheat
 deltaT_sup = T_l - T_s;
 
-% mass flow rate out via injector
-
-% passing 2-phase properties
-% x = rho_tg_sat/rho_l / (1/V_bubi(1) + rho_tg_sat/rho_l - 1);
+% vapor mass fration going out the injector
 x_out = constants.C_x_inj * V_bubi(1)/(V_bubi(1) + rho_l/rho_tg_sat*(1 - V_bubi(1)));
 
+% density, entropy, and enthalpy of the flow going out the injector
 rho_liq_mix = rho_l*(1-V_bubi(1)) + rho_tg_sat*V_bubi(1);
 s_liq_mix = s_l * (1-x_out) + s_tg_sat * x_out;
 h_liq_mix = h_l * (1-x_out) + h_tg_sat * x_out;
 
+% mass flow rate out through the injector
 mdot_out_mix = A_inj*Cd*injector_flow(x_out, P, hesson_fit, rho_liq_mix, h_liq_mix, fluid, constants);
+
+% the liquid and vapor flow rates
 mdot_out_liq = (1 - x_out)*mdot_out_mix;
 mdot_out_vap = x_out*mdot_out_mix;
 
 % bulk flow velocity out the bottom
+% I was using a constant that I set as an input parameter, but I commented that out when I started picking and choosing various terms to include u_bulk, not just as an all-or-nothing thing
 % if constants.include_u_bulk
 u_bulk = mdot_out_mix / rho_l / (0.25 * pi * D_tank^2);
 % else
 %     u_bulk = 0;
 % end
 
+% Morton number
 Mo = g*mu_l^4*(rho_l - rho_tg_sat)/(rho_l^2*sigma^3);
 
 % parameters for fan-tsuchiya rise velocity expression
-
+% (not in use currently)
 % n_FT = 1.6;
 % c_FT = 1.2;
 % Kbo_FT = 10.2;
 % Kb_FT = max([ Kbo_FT*Mo^-0.038, 12]);
 
+% initialize u_rise
 u_rise = zeros(size(r_q));
 
+% difference between liquid and vapor density (used frequently)
 delta_rho = rho_l - rho_tg_sat;
 
+% loop through the nodes and calculate rise velocity using ishii & zuber, 1979
 for i = 1:N_full+1
     
+	% check if the void fraction is high enough to be churn-turbulent
     if V_bubi(i) > constants.CD_churn_turb_boundary
+		% if it is, use this simple expression
         Eprime = (1 - V_bubi(i)).^2;
         Cd = 8*Eprime/3;
         u_rise(i,:) = sqrt(8/3 * delta_rho * g * r_q(i,:)./(rho_l * Cd));
     else
+        % not churn turbulent based on void fraction (could still be based on other criteria)
+		
+		% need to check my thesis/the ishii and zuber paper to remember the regime names
         
-        % only use ishii and zuber
+        alpha_IZ = V_bubi(i)*ones(1,N_ab); % turn void fraction into vector spanning each abscissa/weight
         
-        alpha_IZ = V_bubi(i)*ones(1,N_ab);
-        
+		% mixture viscosity
         mu_mix = mu_l*(1 - alpha_IZ).^(-2.5*(mu_tg + 0.4*mu_l)/(mu_tg + mu_l));
         
         % a guess at u, found from assuming C_D = 24/Re
-        %         u_guess = 1/9 * r_q(i,:).^2 * (rho_l - rho_v) * g/mu_mix;
+        % u_guess = 1/9 * r_q(i,:).^2 * (rho_l - rho_v) * g/mu_mix;
         
+		% viscosity number used by ishii and zuber
         N_mu = Mo^(1/4);
         
+		% non-dimensional radius
         r_d_star = r_q(i,:) * (rho_l * g * delta_rho/mu_l^2)^(1/3);
+		
+		% empirical function of the non-dim. radius
         psi = 0.55*( (1 + 0.08 * r_d_star.^3).^(4/7) - 1).^(3/4);
+		
+		% rise velocity
         u_rise(i,:) = 10.8*mu_l./(rho_l * r_q(i,:)) .* mu_l./mu_mix .*(1-alpha_IZ).^2 ...
             .* psi.^(4/3) .* (1 + psi) ./ ...
             (1 + psi.*( mu_l./mu_mix .*(1 - alpha_IZ).^0.5).^(6/7) );
         
         
+		% alternative:
         % fit from fan and tsuchiya to get the single particle rise u
         % then use ishii and zuber to get the mixture result
         
@@ -2768,26 +2930,41 @@ for i = 1:N_full+1
         %
         %
         %         N_mu = Mo^(1/4);
-        %
+        
+		
+		% now loop through each weight/abscissa
         for j = 1:N_ab
             
+			% non-dimensional radius
             r_d_star = r_q(i,j) * (rho_l * g * delta_rho/mu_l^2)^(1/3);
+			
+			% empirical function of the non-dim. radius
             psi = 0.55*( (1 + 0.08 * r_d_star^3)^(4/7) - 1)^(3/4);
             
-            
+            % compare psi to N_mu to see if we're in a different regime (if not, use already calculated value for u_rise)
             if N_mu > 0.11 * (1 + psi)/psi^(8/3)
                 
+				% function of the void fraction that's useful
                 f_alpha = sqrt(1 - V_bubi(i)) * mu_l/mu_mix(j);
+				
+				% 
                 E = ( (1 + 17.67*f_alpha.^(6/7) )./(18.67*f_alpha)).^2;
+				
+				% Eotvos number
                 Eo = g*delta_rho*4*r_q(i,j).^2/sigma;
+				
+				% drag coefficient
                 Cd = 2/3*E*sqrt(Eo);
                 
+				% Cd maxes out (spherical cap bubble I think)
                 if Cd > 8/3  * (1 - V_bubi(i))^2
                     Cd = 8/3  * (1 - V_bubi(i))^2;
                 end
                 
+				% rise velocity
                 u_rise(i,j) = sqrt(8/3 * delta_rho * g * r_q(i,j)./(rho_l * Cd));
                 
+				% alternative method: use fzero to solve a different ishii and zuber expression
                 %             else
                 %                         u_guess = 1/9 * r_q(i,j).^2 * delta_rho * g/mu_mix(j);
                 %
@@ -2802,14 +2979,17 @@ for i = 1:N_full+1
 end
 
 
+% set u_rise for nodes with nothing in them to 0
 u_rise(N_full+2:end,:) = 0;
 
+% add in a constant that multiplies u_rise (usually = 1)
 u_rise = constants.C_u_rise*u_rise;
 
+% subtract off the bulk velocity
 % u_rise = u_rise - u_bulk;
 
+% compute the CFL and check if it's too big
 if constants.step == 1
-    
     %     u_max = max(u_rise(:));
     CFL = max(constants.h*u_rise./(L_node*ones(1,N_ab)));
     if CFL > 0.5
@@ -2817,36 +2997,49 @@ if constants.step == 1
     end
 end
 
+% min and max Reynolds numbers (for debugging)
 Re_max = max(max(r_q(1:N_full+1,:).*u_rise(1:N_full+1,:)))*rho_l/mu_l;
 Re_min = min(min(r_q(1:N_full+1,:).*u_rise(1:N_full+1,:)))*rho_l/mu_l;
 
+
+% Eotvos number and the min and max values in the tank (for debugging)
 Eo = g*(rho_l - rho_tg_sat)*r_q.^2*4/sigma;
 
 Eo_max = max(max(Eo(1:N_full+1,:)));
 Eo_min = min(min(Eo(1:N_full+1,:)));
 
+
+% this is handy for debugging
 % if constants.step == 1 && constants.t > 0.001
 %     fprintf('Re: %0.2g - %0.2g, Eo: %0.2g - %0.2g, Mo: %0.2g, Ja: %0.2g\n', Re_min, Re_max, Eo_min, Eo_max, Mo, Ja)
 % end
 
 % u_rise(r_q < 1e-6) = 0;
 
-
+% some error checking
 if sum(sum(isnan(u_rise(1:N_full+1,:)))) > 0
     disp('nans in u_rise')
 end
 
+% compute superficial gas velocity
+% needed for computing the bubble diffusivity
 for i = 1:N_full + 1
     u_superficial(i) = 4/3 * pi * sum(r_q(i,:).^(3) .* w_q(i,:) .* (u_rise(i,:)) );
 end
+
+
 % axial diffusivity (Hikita and Kikukawa, 1974)
+% (zz is supposed to mean along the length of the tank, even though I use x elsewhere...)
 D_zz = (0.15 + 0.69*abs(u_superficial).^0.77)*D_tank^1.25 * mu_l^-0.12;
 % other expressions - page 185, #6
 
 
+% initialize the spatial derivatives
+
 duw_dx = zeros(size(w_q));
 dug_dx = duw_dx;
 
+% create some vectors that will be handy later on
 u_vec = u_rise;
 uw_vec = (u_rise).*w_q;
 ug_vec = (u_rise).*g_q;
@@ -2857,41 +3050,56 @@ ug_vec = (u_rise).*g_q;
 
 % fourier_number = mean(D_zz) * constants.h / mean(L_node)^2;
 
+
+% compute spatial derivative terms
+% 1st order derivative for convection
+% 2nd order derivative for diffusion
+
 for i = 1:N_full + 1
     
     % diffusion terms
     if N_full >= 1
-        % if there's at least 1 full node (so I can use i + 1)
+		% if there's at least 1 full node (so I can use i + 1)
+		
+		% interior points
         if i > 1 && i < N_full + 1
             
+			% diffusion constant (D) at i + 1/2
             D_ip2 = 0.5*( D_zz(i+1) + D_zz(i) );
+			
+			% now at i-1/2
             D_im2 = 0.5*( D_zz(i) + D_zz(i-1) );
+			
+			% and at i
             D_i = D_zz(i);
             
+			% d/dx( D * (dw/dx) )
             dDdw_dx2(i,:) = ( D_ip2 * ( w_q(i+1,:) - w_q(i,:) ) - ...
                 D_im2 * ( w_q(i,:) - w_q(i-1,:) ) )/L_node(i)^2;
             
+			% d/dx( D * (dg/dx) )
             dDdg_dx2(i,:) = ( D_ip2 * ( g_q(i+1,:) - g_q(i,:) ) - ...
                 D_im2 * ( g_q(i,:) - g_q(i-1,:) ) )/L_node(i)^2;
             
+			% dr/dx (used in the diffusion term)
             dr_dx = ( r_q(i+1,:) - r_q(i-1,:) )/(2 * L_node(i));
             
+			% C is the diffusion term needed later
             C(i,:) = w_q(i,:) .* D_i .* dr_dx.^2;
             
-        else
+        else % boundary points at top and bottom (i = 1, i = N_full +1)
+		
             if i == 1
                 % bottom
-                % use one-sided differences
-                %             dDdw_dx2(i,:) = zeros(1,N_ab);
-                %             dDdg_dx2(i,:) = zeros(1,N_ab);
-                %             C(i,:) = zeros(1,N_ab);
-                
+				% use same expression as above, but define w and g at i-1 to be zero
+				% this approximates the wall -> no diffusion can go through it
+               
                 w_q_bottom = zeros(size(w_q(i,:)));
                 g_q_bottom = zeros(size(w_q(i,:)));
                 
-                D_ip2 = 0.5*( D_zz(i+1) + D_zz(i) );
-                D_im2 = D_zz(i);
-                D_i = D_zz(i);
+                D_ip2 = 0.5*( D_zz(i+1) + D_zz(i) ); 
+                D_im2 = D_zz(i); % just take the value at i
+                D_i = D_zz(i); % ditto
                 
                 dDdw_dx2(i,:) = ( D_ip2 * ( w_q(i+1,:) - w_q(i,:) ) - ...
                     D_im2 * ( w_q(i,:) - w_q_bottom ) ) /L_node(i)^2;
@@ -2899,25 +3107,20 @@ for i = 1:N_full + 1
                 dDdg_dx2(i,:) = ( D_ip2 * ( g_q(i+1,:) - g_q(i,:) ) - ...
                     D_im2 * ( g_q(i,:) - g_q_bottom ) )/L_node(i)^2;
                 
-                dr_dx = ( r_q(i+1,:) - r_q(i,:) )/( L_node(i));
+                dr_dx = ( r_q(i+1,:) - r_q(i,:) )/( L_node(i)); % use one sided difference here (was central above)
                 
                 C(i,:) = w_q(i,:) .* D_i .* dr_dx.^2;
                 
-                
+                % an alternative expression I tried out (one sided differences)
                 %             D_i = D_zz(i);
                 %             dDdw_dx2(i,:) = D_i * (w_q(i,:) - 2*w_q(i+1,:) + w_q(i+2,:) )/(L_node(i)^2);
                 %             dDdg_dx2(i,:) = D_i * (g_q(i,:) - 2*g_q(i+1,:) + g_q(i+2,:) )/(L_node(i)^2);
                 %             dr_dx = (r_q(i+1,:) - r_q(i,:) )/L_node(i);
                 %             C(i,:) = w_q(i,:) .* D_i .* dr_dx.^2;
             else
-                % top points (N_full, N_full + 1)
-                %             use one-sided differences
-                %             dDdw_dx2(i,:) = zeros(1,N_ab);
-                %             dDdg_dx2(i,:) = zeros(1,N_ab);
-                %             C(i,:) = zeros(1,N_ab);
-                %
+                % top point (N_full + 1)
                 if i >= 3
-                    % can use one sided differences
+                    % enough points that I can use one sided differences
                     D_i = D_zz(i);
                     dDdw_dx2(i,:) = D_i * (w_q(i,:) - 2*w_q(i-1,:) + w_q(i-2,:) )/(L_node(i)^2);
                     dDdg_dx2(i,:) = D_i * (g_q(i,:) - 2*g_q(i-1,:) + g_q(i-2,:) )/(L_node(i)^2);
@@ -2925,7 +3128,7 @@ for i = 1:N_full + 1
                     C(i,:) = w_q(i,:) .* D_i .* dr_dx.^2;
                     
                 else
-                    % not enough points
+                    % not enough points -> give up and set to 0. Means that there's only 2 points left in the tank -> can't really compute diffusion in that case
                     dDdw_dx2(i,:) = zeros(1,N_ab);
                     dDdg_dx2(i,:) = zeros(1,N_ab);
                     C(i,:) = zeros(1,N_ab);
@@ -2942,12 +3145,19 @@ for i = 1:N_full + 1
     end
     
     
-    
+	
+    % 1st order derivatives for convection terms
+	
+	
+	
     % MUSCL
+	% uses minmod flux limiter
+	% L refers to the left (bottom) side of a node boundary, R is the right (top)
+	% see thesis for more details
     if i > 2 && i < N_full
         % interior grid points
         % have to be able to do i+2 and i-2
-        % i >= 3 and N_full >= 4
+        % therefore requires: i >= 3 and N_full >= 4
         
         for j = 1:N_ab
             
@@ -2957,7 +3167,7 @@ for i = 1:N_full + 1
             % flow velocity
             u = u_vec(:,j)';
             
-            % flux limiters
+            % flux limiters at i
             r_U = (U(:,i) - U(:,i-1))./(U(:,i+1) - U(:,i));
             r_u = (u(i) - u(i-1))/(u(i+1) - u(i));
             
@@ -2965,6 +3175,7 @@ for i = 1:N_full + 1
             flux_limiter_Ui(1) = max([0, min(1, r_U(1))]);
             flux_limiter_Ui(2) = max([0, min(1, r_U(2))]);
             
+			% flux limiters at i + 1
             r_U = (U(:,i+1) - U(:,i))./(U(:,i+2) - U(:,i+1));
             r_u = (u(i+1) - u(i))/(u(i+2) - u(i+1));
             
@@ -2972,6 +3183,7 @@ for i = 1:N_full + 1
             flux_limiter_Uip1(1) = max([0, min(1, r_U(1))]);
             flux_limiter_Uip1(2) = max([0, min(1, r_U(2))]);
             
+			% flux limiters at i - 1
             r_U = (U(:,i-1) - U(:,i-2))./(U(:,i) - U(:,i-1));
             r_u = (u(i-1) - u(i-2))/(u(i) - u(i-1));
             
@@ -3006,6 +3218,8 @@ for i = 1:N_full + 1
             FL = uL*UL;
             
             F_star_bot = 0.5*( (FR + FL) - a*(UR - UL) );
+			
+			% flux gradient
             
             dF_dx = (F_star_top - F_star_bot)/L_node(i);
             
@@ -3014,54 +3228,68 @@ for i = 1:N_full + 1
             
         end
         
-    else
+    else % top and bottom boundary points
         
         if i == 1
             % bottom point
             % there's flux out the top and nothing out the bottom
-            % (assuming no u bulk)
+			% use a 0 at the bottom, and just use upwinding at the top
+            % (assuming no u bulk!!)
             
+			% deal with w first
             flux_bot = 0;
-            % flux_bot = -w_q(i,:) * u_bulk;
+            % flux_bot = -w_q(i,:) * u_bulk; % if there were a u_bulk
             flux_top = w_q(i,:).*0.5.*(u_vec(i+1,:) + u_vec(i,:));
             duw_dx(i,:) = (flux_top - flux_bot)/L_node(i);
             
+			% now deal with g
             flux_bot = 0;
-            % flux_bot = -g_q(i,:) * u_bulk;
+            % flux_bot = -g_q(i,:) * u_bulk; % if there were a u_bulk
             flux_top = g_q(i,:).*0.5.*(u_vec(i+1,:) + u_vec(i,:));
             dug_dx(i,:) = (flux_top - flux_bot)/L_node(i);
             
             
+			% alternative expression: one sided differences
             %             duw_dx(i,:) = (uw_vec(i+1,:) - uw_vec(i,:))/L_node;
             %             dug_dx(i,:) = (ug_vec(i+1,:) - ug_vec(i,:))/L_node;
         else
             if i == N_full + 1
-                % top point -> backwards difference
+                % top point
+				% now use upwinding for bottom flux (assumes velocity is upward)
+				% and use values at i for top flux
+				% alternative expression: backwards difference
                 %                 duw_dx(i,:) = ( uw_vec(i,:) - uw_vec(i-1,:) )/(L_node);
                 %                 dug_dx(i,:) = ( ug_vec(i,:) - ug_vec(i-1,:) )/(L_node);
                 
+				% w first
                 flux_bot = w_q(i-1,:).*0.5.*(u_vec(i,:) + u_vec(i-1,:));
                 flux_top = w_q(i,:).*u_vec(i,:);
                 duw_dx(i,:) = (flux_top - flux_bot)/L_node(i);
                 
+				% now g
                 flux_bot = g_q(i-1,:).*0.5.*(u_vec(i,:) + u_vec(i-1,:));
                 flux_top = g_q(i,:).*u_vec(i,:);
                 dug_dx(i,:) = (flux_top - flux_bot)/L_node(i);
-            else
+				
+            else 
                 % i = 2, 3 when N_full >= 3
                 % i = 2, when N_full = 2
                 
                 % 1st order upwind
                 
                 % %      rising: flux in is from -x
+				
+				% w first
                 flux_bot = w_q(i-1,:).*0.5.*(u_vec(i,:) + u_vec(i-1,:));
                 flux_top = w_q(i,:).*0.5.*(u_vec(i+1,:) + u_vec(i,:));
                 duw_dx(i,:) = (flux_top - flux_bot)/L_node(i);
                 
+				% now g
                 flux_bot = g_q(i-1,:).*0.5.*(u_vec(i,:) + u_vec(i-1,:));
                 flux_top = g_q(i,:).*0.5.*(u_vec(i+1,:) + u_vec(i,:));
                 dug_dx(i,:) = (flux_top - flux_bot)/L_node(i);
                 
+				% alternative expressions: backwards differences
                 %             if i == 2
                 %                 duw_dx(i,:) = (uw_vec(i,:) - uw_vec(i-1,:))/L_node;
                 %                 dug_dx(i,:) = (ug_vec(i,:) - ug_vec(i-1,:))/L_node;
@@ -3078,46 +3306,60 @@ for i = 1:N_full + 1
     
 end
 
+
+% check if it's become subcooled (usually a bad sign, so warn user)
 if constants.step == 1 && (deltaT_sup < 0 && constants.t > 0.1)
     disp('subcooled')
 end
 
 
+% loop through each node with any liquid in it
 for i = 1:N_full + 1
-    
-    % if superheated, then calculate bubble stuff
-    
-    
+        
+    % a little error checking
     if sum(abs(imag([r_q(i,:); w_q(i,:)]))) > 0
         fprintf('imaginary abscissas or weights. moments:')
         fprintf('%0.6g\t',mom)
         fprintf('\n')
         
     end
+	
+	
+	
+	
     
-    %         T_sat = 19.6426*(P/1e3)^0.2499 + 122.3663;
+	% compute superheat at current node, taking into account the effect of gravity superheat
     
     % depth from surface
     depth = sum(node_level(i:N_full+1).*L_node(i:N_full+1));
     
+	% gravity head
     dP_depth = rho_l*g*depth;
     
+	% use curve fit I made of Tsat vs P to get effect of gravity head on superheat
+	% Here's the fit: (T_sat = 19.6426*(P/1e3)^0.2499 + 122.3663) (P in kPa)
     dT_sat_depth = 19.6426*( ((P + dP_depth)/1e3)^0.2499 - (P/1e3)^0.2499 );
     
+	% superheat at the current node
     deltaT_sup_node = deltaT_sup - dT_sat_depth;
+	
+	
+	
+	
+	
     
-    
+    % for boiling/bubble growth, only compute if there's a decent superheat
     if deltaT_sup_node > 1e-4
-        % jakob number
+	
+        % Jakob number
         Ja_T = Cp_l * rho_l * C_dTs * deltaT_sup_node/(rho_tg_v * h_lv);
-        
         
         % bubble radius rate of change
         
         % growth rate for a bubble at rest in an infinite fluid
         % simplified model: plesset & zwick
         % more complicated: scriven
-        %         rdot_rest_plesset = C_rdot * Ja_T^2 * alpha_l ./ r_q(i,:); % bubble at rest
+        % rdot_rest = C_rdot * Ja_T^2 * alpha_l ./ r_q(i,:); % bubble at rest
         
         % equation 47 from scriven
         beta_47 = sqrt(0.5*Ja_T./(1 + (Cp_l - Cp_tg)/Cp_l * rho_tg_v/rho_l * Ja_T));
@@ -3125,55 +3367,61 @@ for i = 1:N_full + 1
         % eq 47 + eq 49 from scriven
         beta_rdot = 0.85*(beta_47 + sqrt(12/pi)*beta_47.^2);
         
-        % use r_nuc as a crude approx of r when the bubble first nucleated
-        rdot_rest_scriven = 2*beta_rdot.^2*alpha_l./(r_q(i,:));
-        
-        rdot_rest = rdot_rest_scriven;
-        
+		% growth rate based on scriven's beta
+        % use r_nuc (current value) as a crude approx of r when the bubble first nucleated
+        rdot_rest = 2*beta_rdot.^2*alpha_l./(r_q(i,:));
+                
         % bubble rising in the fluid. from legendre 1998
         rdot_rise = Ja_T * sqrt( 2 * alpha_l * (u_rise(i,:) + 1e-6)./...
             (pi * r_q(i,:) ) ); % rising in the liquid
         
-        %                 rdot = max(rdot_rest, rdot_rise);
+		% sum growth rates for stationary and moving bubble
         rdot = rdot_rest + rdot_rise;
         
-        
-        
         % length of liquid node volume [m]
-        %         L_l = V_l_star(i) / (pi * 0.25 * D_tank^2);
         L_l = node_level(i)*L_node(i);
-        %         if i == 1 || i == N_nodes
-        %             L_l = L_l/2;
-        %         end
         
-        % surface area of node[m^2]
-        A_l = pi * D_tank * L_l;% + pi * 0.25 * D_tank^2;
+        % surface area of node[m^2] (assumes cylindrical tank)
+        A_l = pi * D_tank * L_l;
         
+		% If at the bottom of the tank, include the area of the base (assume cylindrical tank)
+		% Not sure why this is commented out!
         %         if i == 1
         %             A_l = A_l + 0.25*pi*D_tank^2;
         %         end
         
+		% switch for different nucleation models
+		% SJ: Shin & Jones (also includes other submodels within it)
+		% AL: Alamgir & Lienhard (no submodels)
         switch constants.nuc_model
             
-            case 'SJ'
+            case 'SJ' 
                 
                 
                 % departure diameter [m]
                 % correlation from Jensen & Memmel, 1986
                 % gives values on the order of 10-20 microns
+				% they gave 2 different correlations: one for times when you know wall superheat, one for when you don't
                 switch constants.r_dep_expression
                     case 'without superheat'
                         
+						% departure radius
                         r_dep = 0.5 * 2.97e4 * (P/P_cr)^-1.09 * ( K_b * T_cr / (P_cr * MW) )^(1/3);
                         
                     case 'with superheat'
                         
-                        %                         Ja_wall = (T_lw(1) - (T_s + dT_sat_depth)) * rho_l * Cp_l/(rho_tg_v*h_lv);
+						% Jakob number of the wall - ambiguous in my case if it should be defined based on wall superheat, or liquid superheat
+						% I ended up going with the liquid superheat.
+                        %  Ja_wall = (T_lw(1) - (T_s + dT_sat_depth)) * rho_l * Cp_l/(rho_tg_v*h_lv);
                         Ja_wall = Ja_T;
+						
+						% constant. In my lab notebook I documented how a lot of people use different expressions for this
                         K_1 = (Ja_wall/Pr_l)^2*( g*rho_l*(rho_l-rho_tg_v)/mu_l^2 * (sigma/(g*(rho_l-rho_tg_v)))^(3/2) )^(-1);
                         
+						% Eotvos number at departure
                         Eo_dep = ( 0.19*( 1.8 + 1e5*K_1)^(2/3) )^2;
-                        
+						
+                        % radius at departure
                         r_dep = 0.5 * (Eo_dep*sigma /(g*(rho_l - rho_tg_v)) )^0.5;
                         
                     otherwise
@@ -3211,7 +3459,7 @@ for i = 1:N_full + 1
                     end
                 end
                 
-                
+                % nucleation site density
                 switch constants.nuc_density_expression
                     
                     case 'shin and jones'
@@ -3246,27 +3494,27 @@ for i = 1:N_full + 1
                         % depends on the contact angle - I found a paper where
                         % they measured contact angle of CO2 on SS316 and made a
                         % curve fit from their results
-                        N_nbar = 4.72e5;
-                        mu_HI = 0.722;
-                        lambda_prime = 2.5e-6;
+                        N_nbar = 4.72e5; % constant
+                        mu_HI = 0.722; % constant
+                        lambda_prime = 2.5e-6; % constant
                         % advancing and receding contact angles (in degrees)
                         ACA = -0.003417*(T_s - 273.15)^2 - 0.2873*(T_s - 273.15) + 29.83;
                         RCA = -0.004171*(T_s - 273.15)^2 - 0.3386*(T_s - 273.15) + 16.38;
-                        theta_HI = deg2rad(mean([ACA RCA]));
+                        theta_HI = deg2rad(mean([ACA RCA])); % take contact angle as mean of advancing and receding
                         
-                        R_c = r_nuc;
+                        R_c = r_nuc; % just matching their notation
                         
-                        rho_plus = log10(delta_rho/rho_tg_sat);
+                        rho_plus = log10(delta_rho/rho_tg_sat); % non-dimensional delta rho
                         
-                        f_rho_plus = -0.01064 + 0.48246*rho_plus - 0.22712*rho_plus^2 + 0.05468*rho_plus^3;
+                        f_rho_plus = -0.01064 + 0.48246*rho_plus - 0.22712*rho_plus^2 + 0.05468*rho_plus^3; % empirical fit
                         
                         nuc_density = N_nbar *( 1 - exp( - theta_HI^2/(8*mu_HI^2) ) )...
-                            *(exp( f_rho_plus*lambda_prime/R_c) - 1);
+                            *(exp( f_rho_plus*lambda_prime/R_c) - 1); % nucleation rate (#/m^2)
                     otherwise
                         error('invalid constants.nuc_density_expression. try ''shin and jones'' or ''hibiki and ishii''')
                 end
                 
-                
+                % nucleation frequency
                 switch constants.nuc_frequency_expression
                     case 'shin and jones'
                         
@@ -3276,6 +3524,7 @@ for i = 1:N_full + 1
                         nuc_freq = 1e4 * C_dTs * deltaT_sup_node^n_nuc_freq;
                         
                     case 'saddy and jameson'
+					% it's really just proportional to r^2, but I have other constants that can take care of that
                         nuc_freq = r_dep^2;
                     otherwise
                         error('invalid constants.nuc_frequency expression. try ''shin and jones'' or ''saddy and jameson''')
@@ -3283,18 +3532,19 @@ for i = 1:N_full + 1
                 
                 % nucleation rate [Hz]
                 nuc_rate = C_nuc_rate * nuc_density * nuc_freq * A_l;
+				
             case 'AL'
                 
                 % alamgir and lienhard, 1981:
+				% more similar to a homogeneous nucleation model
                 
                 B = K_b * T_l / h_planck;
                 
-                %             phi = 1e-2;
-                v_g = 1/rho_tg;
-                v_f = 1/rho_l;
+                v_g = 1/rho_tg; % specific volume of gas
+                v_f = 1/rho_l; % specific volume of liquid
                 
                 J = ( N_A/( 1/rho_l * MW) )^(2/3) * B * ...
-                    exp( -16*pi*sigma^3*phi / ( 3*K_b*T_s*(1 - v_f/v_g)^2 * (P_sat - P)^2 ) );
+                    exp( -16*pi*sigma^3*phi / ( 3*K_b*T_s*(1 - v_f/v_g)^2 * (P_sat - P)^2 ) ); % nucleation rate per area
                 
                 nuc_rate = J * A_l;
                 
@@ -3350,19 +3600,16 @@ for i = 1:N_full + 1
         growth_int_s(k) = ((k-1)/p)*sum( (1/r_m) * r_s.^((k-1)/p - 1) .* w_q(i,:) .* (rdot + rdot_rhodot));
     end
     
-    % nucleation rate per volume
+    % nucleation rate per volume (specific nucleation rate)
     
     % think this maybe shouldn't have the node level term in it, and
     % maybe not the V node either -> maybe V_l_star?
     % changed my mind -> nuc_rate is based on V_node
-    
     spec_nuc_rate = nuc_rate / ( (node_level(i) + 1e-3) * V_node(i) );
+	% add the 1e-3 just in case node_level is very low and creates a huge value when inverted
     
-    %     % top and bottom cells are half the size
-    %     if i == 1 || i == N_nodes
-    %         spec_nuc_rate = spec_nuc_rate/(0.5);
-    %     end
-    
+
+	% some printing to screen for debugging
     %     if (i == 1 && constants.step == 1)
     %         fprintf('spec nuc rate = %0.4g\n growth_int = %0.4g\n',spec_nuc_rate,growth_int_s(V_moment_index)*r_m^3)
     %     end
@@ -3371,27 +3618,30 @@ for i = 1:N_full + 1
     % preallocate
     birth_int_s = zeros(1,N_ab*2);
     
+	% if we have a decent superheat, calculate birth integral term
     if deltaT_sup_node > 1e-4
         
         for k = 1:N_ab*2
-            % if nucleation happens only at r_nuc
+		% the commented code here is for different birth distributions
+		
+            % if nucleation happens only at r_nuc (delta fn distribution)
             birth_int_s_delta = (r_nuc/r_m).^((k-1)/p) * spec_nuc_rate;
             
-            %                             % exponential distribution
-            %                             r_a = 10*r_nuc;
+            %      % exponential distribution
+            %      r_a = 10*r_nuc;
             %
-            %                             birth_int_s_exp = (r_a/r_m)^((k-1)/p) * spec_nuc_rate * exp( r_nuc/r_a ) ...
-            %                                 * gamma(1+((k-1)/p)) * gammainc(r_nuc/r_a, 1+((k-1)/p), 'upper');
+            %      birth_int_s_exp = (r_a/r_m)^((k-1)/p) * spec_nuc_rate * exp( r_nuc/r_a ) ...
+            %        * gamma(1+((k-1)/p)) * gammainc(r_nuc/r_a, 1+((k-1)/p), 'upper');
             %                     %
             %         uniform distribution
-            %                 dr = 100*r_nuc;
-            %                 birth_int_s_uni = (1/r_m)^((k-1)/p) * spec_nuc_rate/dr * 1/( (k-1)/p + 1)*...
+            %         dr = 100*r_nuc;
+            %         birth_int_s_uni = (1/r_m)^((k-1)/p) * spec_nuc_rate/dr * 1/( (k-1)/p + 1)*...
             %                     ( (r_nuc + dr)^( (k-1)/p + 1) - r_nuc^( (k-1)/p + 1) );
             
             
             birth_int_s(k) = birth_int_s_delta;
             
-            % now if it's spread out a bit (gaussian)
+            % now if it's spread out a bit (gaussian distribution)
             %         s_nuc = r_nuc;
             % %         birth_int_s(k) = spec_nuc_rate * r_m*integral(@(rs) rs.^k .* ...
             % %             (1/(s_nuc*sqrt(2*pi))).*exp( - ((r_m*rs) - r_nuc).^2./(2*s_nuc^2)), 0, 25*r_nuc/r_m);
@@ -3414,20 +3664,21 @@ for i = 1:N_full + 1
         % most of this is from prince and blanch (1990)
         % buoyancy and turbulence driven
         
-        nu_t = 0.0536*D_tank^1.77/rho_l;
-        U_max = ( (1 - 0.75*V_bubi(i))/(1 - V_bubi(i)) )*V_bubi(i) * D_tank^2/(48*nu_t);
-        mean_shear = 0.53*U_max/(0.5*D_tank);
+        nu_t = 0.0536*D_tank^1.77/rho_l; % turbulent viscosity
+        U_max = ( (1 - 0.75*V_bubi(i))/(1 - V_bubi(i)) )*V_bubi(i) * D_tank^2/(48*nu_t); % max of mean velocity expected in centerline
+        mean_shear = 0.53*U_max/(0.5*D_tank); % mean shear from mean velocity
         
-        P2 = P;
+        P2 = P; % used for calculating pressure difference
         
-        liquid_height = V_l_star/(pi*D_tank^2/4);
+        liquid_height = V_l_star/(pi*D_tank^2/4); % height of liquid level
         
-        P1 = P2 + rho_l*g*liquid_height;
+        P1 = P2 + rho_l*g*liquid_height; % gravity head (there's something fishy here -> should probably be rho of mixture)
         
         Q = V_tank/8; % volumetric gas flow rate. just assumed a constant value here
         
-        turb_diss = Q*g * P2*log(P1/P2) / ( pi * (0.5*D_tank)^2 * (P1 - P2) );
+        turb_diss = Q*g * P2*log(P1/P2) / ( pi * (0.5*D_tank)^2 * (P1 - P2) ); % turbulent dissipation rate
         
+		% loop through and calculate coalescence rates for each combination of bubble size
         for k = 1:N_ab*2
             for l = 1:N_ab
                 
@@ -3484,7 +3735,7 @@ for i = 1:N_full + 1
                 % coalescence kernel
                 beta = C_coalescence(1)*(qT + qB + qLS).*exp( - t_coal ./ t_cont);
                 
-                
+                % add to net coalescence rates
                 coal_birth_s(k) = coal_birth_s(k) + sum( 0.5 * w_q(i,l) * w_q(i,:) .* ( abs(r_s(l))^3 + abs(r_s).^3 ).^((k-1)/(3*p)) .* beta );
                 coal_death_s(k) = coal_death_s(k) + sum( r_s(l)^((k-1)/p) * w_q(i,l) * w_q(i,:) .* beta );
                 
@@ -3494,25 +3745,35 @@ for i = 1:N_full + 1
         
     end
     
+	% check to make sure that coalescence is conserving mass
     if abs(coal_birth_s(V_moment_index) - coal_death_s(V_moment_index))/coal_birth_s(V_moment_index) > 1e-6
         disp('coalescence isn''t conserving mass')
     end
     
+	% rate of change of the moments (scaled)
     dmom_dt_s = birth_int_s(:) + growth_int_s(:) + coal_birth_s(:) - coal_death_s(:);
+	
+	% switch to notation that I found in marchisio paper
     beta_q = dmom_dt_s;
     
+	% initialize several things
     not_converging = 1;
     linear_eqn_counter = 0;
     r_sp = r_s;
     
-    C_star = C(i,:)'/r_m^2;
+    C_star = C(i,:)'/r_m^2; % scale
     
+	% iterate to converge on the Ax = b solution
+	% (here x = alpha, b = d)
+	% when it has problems, I will jiggle the abscissas a little bit
     while not_converging
         
-        % pre allocate
+        % pre allocate the parts of A
         A1 = zeros(2*N_ab, N_ab);
         A2 = A1;
         A3 = A1;
+		
+		% define A
         for j = 0:(2*N_ab - 1)
             
             if j == 0
@@ -3537,18 +3798,25 @@ for i = 1:N_full + 1
         A = [A1 A2];
         
         d = A3*C_star + beta_q;
-        %         d = beta_q;
         
+		% solve for alpha
         [alpha_q, error_flag] = linear_equation_solver(A,d);
         
+		% calculate the relative spacing between the abscissas
+		% if it's too small, can cause problems (this is only used for printing to screen)
         dr = diff(r_s);
         for k = 1:length(dr)
             rbar = mean([r_s(k) r_s(k+1)]);
         end
+		
+		% if there was a problem in the linear equation solver, try jiggling the abscissas a little bit
         if error_flag == 1
-            %             disp('jiggling the abscissas')
+		
             r_sp = r_s + (rand(size(r_s)) - 0.5).*abs(r_s)*1e-6;
+			
             linear_eqn_counter = linear_eqn_counter + 1;
+			
+			% if we've jiggled a bunch of times and it's not working, just use "\" and give up
             if linear_eqn_counter >= 25
                 fprintf('linear equation solver not converging, rcond = %0.4g, min dr/r = %0.4g\n',rcond(A), min(abs(dr./rbar)) )
                 alpha_q = A\d;
@@ -3556,15 +3824,18 @@ for i = 1:N_full + 1
             end
             
         else
+			% no errors, we've converged
             not_converging = 0;
             
         end
         
     end
+	
+	% extract a and b* from alpha
     a_q = alpha_q(1:N_ab);
     b_q_s = alpha_q(N_ab+1:end);
-    %     b_q = b_q_s.*r_q(i,:)'; % go from scaled b (ie b*) back to the real thing
-    b_q = b_q_s * r_m;
+	
+    b_q = b_q_s * r_m; % go from scaled b (ie b*) back to the real thing
     
     % have to put this in the right place
     % for i = 1, it should be 1, 2, ... N_ab
@@ -3573,32 +3844,38 @@ for i = 1:N_full + 1
     ind_node = (i-1)*N_ab + [1:N_ab];
     
     
+	% rate of change of the weights and weighted abscissas
+	
     % only include birth/death/growth (ie 0D)
     %         dw_dt(ind_node) = a_q;
     %         dg_dt(ind_node) = b_q;
     
-    % include flux of bubbles in physical space
+    % include flux of bubbles in physical space (including diffusion)
     dw_dt(ind_node) = a_q - duw_dx(i,:)' + dDdw_dx2(i,:)';
     dg_dt(ind_node) = b_q - dug_dx(i,:)' + dDdg_dx2(i,:)';
     
+	% birth and growth terms
+	% extract from the moments and undo the scaling
     % these have units of (m^3/(m^3*s)) ie (volume/time)/(volume of mix)
     birth_term(i) = birth_int_s(V_moment_index)*r_m^(3);
     growth_term = growth_int_s(V_moment_index)*r_m^(3);
-    %     death_term = death_int_s(4)*r_m^3;
     
+	% bubbles leaving the free surface and entering the ullage
+	% only if we're at the node with the liquid surface in it
+	% note units of the death term: m^3/(m^2 * s)
     if i == N_full + 1
-        %         bubbles leaving from free surface (m^3/(m^2 * s))
-        
-        %         if we're looking at the bottom node, just take its value
+    
+        %  if we're looking at the bottom node, just take its value
         if i == 1
             death_term = 4/3 * pi * sum(r_q(i,:).^(3) .* w_q(i,:) .* (u_rise(i,:) - u_LL) );
         else
-            % %             if i == 2
+		
             % above the bottom node, linearly interpolate/extrapolate to
             % get the value wherever the free surface is
+			% the commented code is from other schemes I tried out
             death_term_i = 4/3 * pi * sum(r_q(i,:).^(3) .* w_q(i,:) .* (u_rise(i,:) - u_LL) );
             death_term_im1 = 4/3 * pi * sum(r_q(i-1,:).^(3) .* w_q(i-1,:) .* (u_rise(i-1,:) - u_LL) );
-            % %             if node_level(i) < 0.5
+            % %             if node_level(i) < 0.5 % only interpolate if the liquid level is below 50% in a node
             % %                 death_term = (0.5 + node_level(i))*death_term_i + (0.5 - node_level(i))*death_term_im1;
             % %             else
             %             death_term_slope = (death_term_i - death_term_im1)/1;
@@ -3606,7 +3883,7 @@ for i = 1:N_full + 1
             death_term_slope = (death_term_i - death_term_im1)/(L_node(i)/2 + L_node(i-1)/2);
             death_term = death_term_im1 + (L_node(i-1)/2 + node_level(i)*L_node(i)) * death_term_slope;
             % %             end
-            % %             else
+            % %             else % use a parabola for fitting instead of a line
             % %                death_term_i = 4/3 * pi * sum(r_q(i,:).^(3) .* w_q(i,:) .* (u_rise(i,:) - u_bulk) );
             % %                death_term_im1 = 4/3 * pi * sum(r_q(i-1,:).^(3) .* w_q(i-1,:) .* (u_rise(i-1,:) - u_bulk) );
             % %                death_term_im2 = 4/3 * pi * sum(r_q(i-2,:).^(3) .* w_q(i-2,:) .* (u_rise(i-2,:) - u_bulk) );
@@ -3614,11 +3891,13 @@ for i = 1:N_full + 1
             % %             end
         end
     else
+	% if not at the top, there's no bubble death
         death_term = 0;
     end
     
+	% at the bottom of the tank, have to worry about bubbles being convected out of the tank
+	% I zeroed this out because I decided this should only be used if the bubbles were leaving at a different rate than the liquid (ie composition changing)
     if i == 1
-        %         % bubbles being convected out the bottom of the tank
         %         death_term_injector = 4/3 * pi * sum(r_q(i,:).^(3) .* w_q(i,:) .* (-u_rise(i,:) + u_bulk) );
         %         if death_term_injector < 0
         death_term_injector = 0;
@@ -3626,39 +3905,38 @@ for i = 1:N_full + 1
     end
     
     % mdot into bubbles from liquid
-    %     mdot_bub_l(i) = V_l_star(i) * 4/3*pi * rho_tg_sat * (birth_term + growth_term);
     mdot_bub_l(i) = node_level(i) * V_node(i) * 4/3 * pi * rho_tg_sat * (birth_term(i) + growth_term - (death_term/(4/3*pi)));
     
-    %     if i == 1 || i == N_nodes
-    %         mdot_bub_l(i) = mdot_bub_l(i)/2;
-    %     end
-    %
     % mdot into bubbles from tg (really from bubbles into tg, but have to
     % keep sign convention for mdot)
-    
     mdot_bub_tg(i) = - pi/4*D_tank^2 * rho_tg_sat * death_term;
     
     % mdot into the bubbles
     mdot_bub(i) = mdot_bub_l(i) + mdot_bub_tg(i);
     
+	% error checking
     if isinf(mdot_bub)
         disp('inf problem')
     end
     
 end
 
+% in the empty nodes, there should be no mass going in/out of bubbles
+% (because there aren't any bubbles there)
 mdot_bub_tg(N_full+2:N_nodes) = 0;
 mdot_bub_l(N_full+2:N_nodes) = 0;
 
+% mass flow rate of bubbles out the injector
 mdot_bub_injector = pi/4*D_tank^2 * rho_tg_sat * death_term_injector;
 
 % need to deal with dw_dt and dg_dt for the nodes that have left the liquid
 % set them equal to the top node in case the fill level rises
+% (don't want a discontinuity in that case)
 for i = N_full+2:N_nodes
     
     ind_node = (i-1)*N_ab + [1:N_ab];
     
-    ind_Nfp1 = ((N_full + 1) -1)*N_ab + [1:N_ab];
+    ind_Nfp1 = ((N_full + 1) -1)*N_ab + [1:N_ab]; % index of N_full + 1
     
     dw_dt(ind_node) = dw_dt(ind_Nfp1);
     dg_dt(ind_node) = dg_dt(ind_Nfp1);
@@ -3671,16 +3949,18 @@ mdot_tg = sum( -mdot_bub_tg );
 % net rate of change of liquid mass
 mdot_l = - sum(mdot_bub_l) - mdot_out_liq;
 
-% HT from wall to liquid
+% HT from wall to liquid (natural convection correlation)
 % Qdot_lw = Qdot('lw',T_l,T_lw(1),rho_l,m_l,D_tank);
 
 % boiling heat transfer model from Gorenflo and Kotthoff, 2005
-Pr = P/P_cr;
-h_20_lw = 1e3 * exp( 0.3092*log(Pr)^3 + 1.649*log(Pr)^2 + 3.641*log(Pr) + 5.272);
-n_lw = 1 - 0.3*Pr^0.3;
+Pr = P/P_cr; % reduced pressure
+h_20_lw = 1e3 * exp( 0.3092*log(Pr)^3 + 1.649*log(Pr)^2 + 3.641*log(Pr) + 5.272); % heat transfer coeff. at 20 kW/m^2
+n_lw = 1 - 0.3*Pr^0.3; % exponent used
 
+% reference heat flux (20 kW/m^2)
 q_20 = 20e3;
 
+% if the wall is above saturation temperature, calculate heat flux based on boiling correlation
 if T_lw(1) > T_s
     q_lw = ( ( (T_lw(1) - T_s)*h_20_lw )^(1/n_lw) / q_20 ) ^(n_lw/(1 - n_lw));
 else
@@ -3690,32 +3970,36 @@ end
 % wetted tank wall area
 A_l = 4*V_l/D_tank + pi/4*D_tank^2;
 
+% HT from liquid wall into liquid
 Qdot_lw = C_qdot_lw * q_lw*A_l;
 
-% Qdot_lw = 0;
 % net HT into liquid
 Qdot_l = Qdot_lw;
 
 % HT into gas from wall
 Qdot_gw = Qdot('gw',T_tg,T_gw(1),rho_tg,m_tg,D_tank);
-% Qdot_gw = 0;
+
 % net HT into gas
 Qdot_tg = Qdot_gw;
 
-% not sure if this is correct... should it include a rhodot term?
-% probably!!!
+% rate of change of total bubble volume
+% I was never sure if this should include a term to account for the changing density
 Vdot_bub = (sum( mdot_bub ) - mdot_out_vap)/ rho_tg_sat;
 
+% rate of change of internal energy for liquid and ullage
 % this isn't actually Udot, but Udot without the P*Vdot term (hence the i)
-
 Udot_li = - mdot_out_liq*h_l - sum( mdot_bub_l )*((h_tg_sat - h_l) + h_l) + Qdot_l - P*Vdot_bub;
 
 Udot_tgi = Qdot_tg - sum( mdot_bub_tg )*(h_tg_sat) ;
 
+% partial derivative of specific internal energy w.r.t. density for liquid
+% (used to need this)
 % du_drho_tg = dh_drho_tg + P/rho_tg^2  - 1/rho_tg * dP_drho_tg;
 
+% partial derivative of specific internal energy w.r.t. density for liquid
 du_drho_l = dh_drho_l + P/rho_l^2  - 1/rho_l * dP_drho_l;
 
+% compute the rate of change of the liquid volume
 Vdot_l = solve_for_Vdot(Udot_tgi, mdot_tg, m_tg, ...
     Udot_li, u_l, mdot_l, m_l, du_drho_l, Cv_l, dP_drho_l, V_l, ...
     dP_dT_l, V_tg, P, drho_dx_P_tg, drho_dP_x_tg, u_tg_v_sat, ...
@@ -3724,14 +4008,19 @@ Vdot_l = solve_for_Vdot(Udot_tgi, mdot_tg, m_tg, ...
     rho_tg_v, u_tg, guesses, Vdot_bub);
 
 
+% rate of change of ullage volume
 Vdot_tg = - Vdot_l - Vdot_bub;
 
+% rate of change of ullage internal energy
 Udot_tg = Udot_tgi - P*Vdot_tg;
 
+% rate of change of liquid internal energy
 Udot_l = Udot_li - P*Vdot_l;
 
+% rate of change of liquid density
 rhodot_l = mdot_l/V_l - m_l/V_l^2 * Vdot_l;
 
+% rate of change of temperature of the liquid
 Tdot_l = ( ( Udot_l - u_l*mdot_l )/m_l - du_drho_l*rhodot_l )/Cv_l;
 
 % mass of wall exposed to liquid
@@ -3746,31 +4035,37 @@ Qdot_agw = Qdot('agw',T_air,T_gw(end),rho_tg,m_tg,D_tank);
 % HT from air to liquid wall
 Qdot_alw = Qdot('alw',T_air,T_lw(end),rho_l,m_l,D_tank);
 
-% conduction from liquid wall to gas wall
+% conduction from liquid wall to gas wall (this isn't actually used right now!)
 L_tank = 4*V_tank/(pi*D_tank^2);
-L_wc = L_tank/2;
+L_wc = L_tank/2; % length scale for wall conduction 
 Qdot_wc = k_w*(T_lw - T_gw)*pi*D_tank*t_w/L_wc;
 
 % rate of change of mass of gass wall
 mdot_gw = 4*Vdot_tg*t_w*rho_w/D_tank;
 
+% wall conduction
+
+% first some older simple expressions for lumped model of wall
 % rate of change of temperature of gas wall
 % Tdot_gw = (Qdot_agw - Qdot_gw + Qdot_wc + cv_w*mdot_gw*(T_lw - T_gw))/(m_gw*cv_w);
 
 % rate of change of temperature of liquid wall
 % Tdot_lw = (Qdot_alw - Qdot_lw - Qdot_wc)/(m_lw*cv_w);
 
+% or instead can solve transient conduction equation in wall
 Tdot_lw = wall_conduction(T_lw, Qdot_lw, Qdot_alw, constants);
 Tdot_gw = wall_conduction(T_gw, Qdot_gw, Qdot_agw, constants);
 
-alpha_w = k_w/(rho_w * cv_w);
+alpha_w = k_w/(rho_w * cv_w); % thermal diffusivity of wall
 
+% compute fourier number for wall conduction (see if it's going unstable!)
 fourier_number = alpha_w*constants.h/(t_w/constants.N_rw)^2;
 % 
 % if fourier_number < 0.3
 %     disp('fourier number is less than 0.3')
 % end
 
+% output dy/dt
 dy = [mdot_tg;
     Udot_tg;
     Tdot_gw;
@@ -3780,6 +4075,10 @@ dy = [mdot_tg;
     dw_dt';
     dg_dt'];
 
+
+% compute simple prediction of y at new time step
+% if it looks like it's going negative, warn the user
+% (don't want negatives in any part of y)
 y_predictions = y + dy * constants.h;
 
 if min(y_predictions) < 0
@@ -3826,6 +4125,8 @@ if V_bubi_error_flag ==1 && error_flag == 0
     error_flag = 1;
 end
 
+% if only 1 output, it's just dy
+% if 2, also pass lots of variables
 if nargout == 1
     
     varargout{1} = dy;
@@ -3840,6 +4141,7 @@ else
     gas_holdup = V_bub/V_l_star;
     U_liq = u_l*m_l;
     
+	% store lots of variables in the debug_data structure
     debug_data.m_tg = m_tg;
     debug_data.U_tg = U_tg;
     debug_data.m_l = m_l;

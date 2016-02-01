@@ -1,4 +1,7 @@
-% initialized ODE solver
+% function with some of the parameters that define an ODE integration scheme
+% a big part of this is the "butcher tableau"
+% i got a little creative with the weirder integration schemes that have other parameters
+
 
 function [adaptive, a, b, c, bs, s, p_tilde] = butcher_tableau(varargin)
 

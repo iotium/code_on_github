@@ -1,3 +1,5 @@
+% function returns the node levels [0,1] based on the current liquid and bubble volumes
+
 function node_level = get_node_levels(V_l, V_bubi, V_node)%, node_level_guess)
 % version for adaptive mesh refinement
 % gets the node levels (0-1) based on current liquid and bubble volumes

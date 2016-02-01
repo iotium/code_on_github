@@ -1,3 +1,7 @@
+% function that computes the rate of change of temperature within the tank wall
+% uses a discretization of the transient conduction equation
+% computes the spatial derivatives so only the time derivatives are returned
+
 function Tdot = wall_conduction(T, q_in, q_out, constants)
 % T comes in without ghost points
 % q_in is heat flux from inner wall into the tank

@@ -1,3 +1,6 @@
+% function that is used to converge on correct initial conditions given the temperature and volumes
+% basically just have to solve a nonlinear equation (uses get_P_from_mU_mT.m)
+
 function Pi = converge_on_IC(Ti, V_tg, V_l, V_bubi, ...
     PDT, guesses, constants)
 
@@ -12,6 +15,7 @@ P_guess = 1e3*refpropm('P','T',Ti,'Q',0.5,fluid);
 
 guesses.P = P_guess;
 
+% use fzero to solve nonlinear equation
 Pi = fzero(@equations_to_solve, P_guess, constants.fsolve_options);
 
     function E = equations_to_solve(P1)

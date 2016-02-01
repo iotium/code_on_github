@@ -1,3 +1,6 @@
+% function returns initial conditions for a given "specified case"
+% a number is passed that corresponds to a specific set of experimental data
+
 function [Ti, fill_level, V_tank, L_tank, ...
     A_inj, Cd, Po, T_air, rho_w, cv_w, t_w, D, k_w, fluid] = initial_conditions(specified_case)
 

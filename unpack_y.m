@@ -1,3 +1,7 @@
+% function with 2 capabilities
+% 1 - take the "y" variable and extract all the individual variables and return them in a structure
+% 2 - figure out where the max error is and print to screen 
+
 function varargout = unpack_y(varargin)
 
 y = varargin{1};
